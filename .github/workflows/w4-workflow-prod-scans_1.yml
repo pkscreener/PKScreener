@@ -111,7 +111,7 @@ jobs:
       shell: cmd
       run: |
         cd pkscreener/
-        python3 pkscreenercli.py -a Y -p -o X:N -e
+        python3 pkscreenercli.py -a Y -l -o X:N -e
         cd ..
 
   # Delete_Workflow_Run:
