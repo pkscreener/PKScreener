@@ -35,7 +35,10 @@ on:
         required: false
         type: string
         default: '3.11'
-
+      runson:
+        description: 'Runner OS. e.g: ubuntu-20.04, windows-latest or macos-latest'
+        required: false
+        default: 'ubuntu-20.04'
   schedule:
   - cron: '55 9 * * 0-6'
 
@@ -43,7 +46,7 @@ jobs:
 
   NIFTY_Prediction_Alert:
 
-    runs-on: windows-latest
+    runs-on: ${{ inputs.runson || 'ubuntu-20.04' }} #ubuntu-20.04 #windows-latest
 
     steps:
     - uses: actions/checkout@v4
@@ -70,10 +73,36 @@ jobs:
         restore-keys: |
           ${{ runner.os }}-pip-
 
-    - name: Install TA-Lib
+    - name: Load Cache for Linux Dependencies
+      uses: actions/cache@v2
+      if: startsWith(runner.os, 'Linux')
+      with:
+        path: |
+          /usr/include/ta-lib
+          /usr/bin/ta-lib-config
+          /usr/lib/libta_lib.la
+          /usr/lib/libta_lib.a
+        key: ${{ runner.os }}-talib
+        restore-keys: |
+          ${{ runner.os }}-talib
+          
+    - name: Restore Dependencies from Ubuntu Cache
+      if: startsWith(runner.os, 'Linux')
+      uses: actions/cache@v2
+      id: cache-venv  # name for referring later
+      with:
+        path: ./.venv/  # what we cache: the virtualenv
+        # The cache key depends on requirements.txt
+        key: ${{ runner.os }}-venv-${{ hashFiles('**/requirements*.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-venv-
+
+    - name: Install TA-Lib for Windows
+      if: ${{ startsWith(runner.os, 'Windows') }}
       shell: bash
       run: |
         python3 -m pip install --upgrade pip
+        pip3 install requests
         cd .github/dependencies/
         if [[ "${{ inputs.targetPythonVersion }}" == "" ]] ;then
           pip3 install TA_Lib-0.4.28-cp311-cp311-win_amd64.whl
@@ -85,6 +114,19 @@ jobs:
           pip3 install TA_Lib-0.4.28-cp312-cp312-win_amd64.whl
         fi
 
+    - name: Install TA-Lib for Linux
+      if: ${{ startsWith(runner.os, 'Linux') }}
+      run: |
+        cd .github/dependencies/
+        pwd
+        tar -xzf ta-lib-0.4.0-src.tar.gz
+        cd ta-lib/
+        ./configure --prefix=/usr
+        make
+        sudo make install
+        cd /home/runner/work/PKScreener/PKScreener/
+        pip3 install ta-lib==0.4.28
+          
     - name: Install Python Dependencies
       run: |
         pip3 install -r requirements.txt
@@ -108,7 +150,7 @@ jobs:
 
     - name: 1. Next day Nifty/Market AI prediction
       if : ${{ steps.marketsetter.outputs.MARKET_STATUS == 'Open' || steps.marketsetter.outputs.MARKET_TRADED_TODAY == '1' }}
-      shell: cmd
+      shell: bash
       run: |
         cd pkscreener/
         python3 pkscreenercli.py -a Y -l -o X:N -e
