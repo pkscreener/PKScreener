@@ -78,13 +78,13 @@ jobs:
         ref: ${{ inputs.ref }}
 
     - name: Set up Python
-      uses: actions/setup-python@v2
+      uses: actions/setup-python@v5
       with:
         python-version: ${{ inputs.targetPythonVersion || 3.11 }}
 
     - name: Restore Dependencies from Windows Cache
       if: startsWith(runner.os, 'Windows')
-      uses: actions/cache@v2
+      uses: actions/cache@v4
       with:
         path: ~\AppData\Local\pip\Cache
         key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
@@ -92,7 +92,7 @@ jobs:
           ${{ runner.os }}-pip-
 
     - name: Load Cache for Linux Dependencies
-      uses: actions/cache@v2
+      uses: actions/cache@v4
       if: startsWith(runner.os, 'Linux')
       with:
         path: |
@@ -106,7 +106,7 @@ jobs:
         
     - name: Restore Dependencies from Ubuntu Cache
       if: startsWith(runner.os, 'Linux')
-      uses: actions/cache@v2
+      uses: actions/cache@v4
       id: cache-venv  # name for referring later
       with:
         path: ./.venv/  # what we cache: the virtualenv
