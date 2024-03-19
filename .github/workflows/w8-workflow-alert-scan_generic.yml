@@ -73,7 +73,7 @@ jobs:
     runs-on: ${{ inputs.runson || 'ubuntu-20.04' }} #ubuntu-20.04 #windows-latest
 
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v4
       with:
         ref: ${{ inputs.ref }}
 
@@ -207,7 +207,7 @@ jobs:
   #   needs: [Generic_Workflow_Runner]
   #   name: Delete workflow run
   #   steps:
-  #     - uses: actions/checkout@v2
+  #     - uses: actions/checkout@v4
   #       with:
   #         ref: main
           

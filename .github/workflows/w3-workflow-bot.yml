@@ -61,7 +61,7 @@ jobs:
     runs-on: windows-latest
 
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v4
       with:
         ref: ${{ inputs.branch-name }}
 
@@ -139,7 +139,7 @@ jobs:
   #   needs: [Prod_Telegram_Bot]
   #   name: Delete workflow run
   #   steps:
-  #     - uses: actions/checkout@v2
+  #     - uses: actions/checkout@v4
   #       with:
   #         ref: main
           
