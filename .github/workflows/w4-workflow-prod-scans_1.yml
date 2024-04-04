@@ -136,7 +136,7 @@ jobs:
       shell: bash
       id: marketsetter
       run: |
-        python3 .github/workflows/workflowtriggers.py --updateholidays
+        python3 .github/workflows/workflowtriggers.py
 
     - name: Configure env.dev file
       if : ${{ steps.marketsetter.outputs.MARKET_STATUS == 'Open' || steps.marketsetter.outputs.MARKET_TRADED_TODAY == '1' }}
@@ -156,6 +156,11 @@ jobs:
         python3 pkscreenercli.py -a Y -l -o X:N -e
         cd ..
 
+    - name: Update holidays
+      shell: bash
+      run: |
+        python3 .github/workflows/workflowtriggers.py --updateholidays
+        
   # Delete_Workflow_Run:
   #   runs-on: ubuntu-20.04
   #   needs: [NIFTY_Prediction_Alert]
