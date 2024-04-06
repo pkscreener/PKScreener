@@ -58,6 +58,10 @@ on:
         description: 'Is TA-Lib install required? (Y/N)'
         required: false
         default: 'N'
+      alertTrigger:
+        description: 'Is this triggered by scheduled scan alerts (Y/N)'
+        required: false
+        default: 'N'
       targetPythonVersion:
         description: 'Target Python version: 3.9 , 3.10, 3.11 ?'
         required: false
@@ -197,6 +201,7 @@ jobs:
         RUNNER : "GitHub_Actions"
         GSHEET_SERVICE_ACCOUNT_DEV: ${{secrets.GSHEET_SERVICE_ACCOUNT_DEV}}
         GSHEET_VIEWONLY_LINK: ${{secrets.GSHEET_VIEWONLY_LINK}}
+        ALERT_TRIGGER: ${{ inputs.alertTrigger || 'N' }}
       run: |
         ${{ inputs.prerequisites }}
         /home/runner/work/PKScreener/PKScreener/pkscreenercli.bin ${{ inputs.params }} --maxdisplayresults 100
