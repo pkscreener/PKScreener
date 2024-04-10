@@ -525,6 +525,9 @@ def triggerScanWorkflowActions(launchLocal=False, scanDaysInPast=0):
                 daysInPast -=1
             tryCommitOutcomes(options)
         else:
+            # If the job got triggered before, let's wait until 9:37AM (3 min for job setup, so effectively it will be 9:40am)
+            while (PKDateUtilities.currentDateTime() < PKDateUtilities.currentDateTime(simulate=True,hour=9,minute=37)):
+                sleep(60)
             resp = triggerRemoteScanAlertWorkflow(scanOptions, branch)
             if resp.status_code == 204:
                 sleep(5)
