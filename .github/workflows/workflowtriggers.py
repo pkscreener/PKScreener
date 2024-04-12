@@ -501,7 +501,6 @@ def triggerScanWorkflowActions(launchLocal=False, scanDaysInPast=0):
     # original_stdout = sys.stdout
     # original__stdout = sys.__stdout__
     commitFrequency = [21,34,55,89,144,200]
-    intradayAnalysisTriggered = False
     for key in objectDictionary.keys():
         scanOptions = f'{objectDictionary[key]["td3"]}_D_D_D_D_D'
         branch = "main"
@@ -532,12 +531,10 @@ def triggerScanWorkflowActions(launchLocal=False, scanDaysInPast=0):
             resp = triggerRemoteScanAlertWorkflow(scanOptions, branch)
             if resp.status_code == 204:
                 sleep(5)
-                if not intradayAnalysisTriggered:
-                    intradayAnalysisTriggered = True
-                    if PKDateUtilities.currentDateTime() >= PKDateUtilities.currentDateTime(simulate=True,hour=15,minute=30):
-                        triggerRemoteScanAlertWorkflow("C:12 --runintradayanalysis -u -1001785195297", branch)
             else:
                 break
+    if PKDateUtilities.currentDateTime() >= PKDateUtilities.currentDateTime(simulate=True,hour=16,minute=00):
+        triggerRemoteScanAlertWorkflow("C:12 --runintradayanalysis -u -1001785195297", branch)
 
 def triggerRemoteScanAlertWorkflow(scanOptions, branch):
     cmd_options = scanOptions.replace("_",":")
