@@ -534,7 +534,8 @@ def triggerScanWorkflowActions(launchLocal=False, scanDaysInPast=0):
                 sleep(5)
                 if not intradayAnalysisTriggered:
                     intradayAnalysisTriggered = True
-                    triggerRemoteScanAlertWorkflow("C:12 --runintradayanalysis -u -1001785195297", branch)
+                    if PKDateUtilities.currentDateTime() >= PKDateUtilities.currentDateTime(simulate=True,hour=15,minute=30):
+                        triggerRemoteScanAlertWorkflow("C:12 --runintradayanalysis -u -1001785195297", branch)
             else:
                 break
 
