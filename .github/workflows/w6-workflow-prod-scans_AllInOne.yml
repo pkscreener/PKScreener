@@ -108,14 +108,14 @@ jobs:
     - name: Barometer
       shell: cmd
       run: |
-        python3 pkscreener/pkscreenercli.py -a Y -p --barometer
+        python3 pkscreener/pkscreenercli.py -a Y -p -e --barometer
       env:
           RUNNER : "GitHub_Actions"
 
     - name: Morning vs evening square off
       shell: cmd
       run: |
-        python3 pkscreener/pkscreenercli.py -a Y -p -o C:12 --runintradayanalysis
+        python3 pkscreener/pkscreenercli.py -a Y -p -e -o C:12 --runintradayanalysis
       env:
           RUNNER : "GitHub_Actions"
 
