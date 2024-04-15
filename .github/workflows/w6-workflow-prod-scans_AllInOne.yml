@@ -96,90 +96,117 @@ jobs:
         
     - name: Configure env.dev file
       run: |
-        python3 -c "import os; file = open('pkscreener/.env.dev', 'w'); file.write('CHAT_ID='+os.environ['CHAT_ID_DEV']+'\n'); file.write('TOKEN='+os.environ['TOKEN_DEV']+'\n'); file.write('chat_idADMIN='+os.environ['CHAT_IDADMIN_DEV']+'\n'); file.close()"
+        python3 -c "import os; file = open('.env.dev', 'w'); file.write('CHAT_ID='+os.environ['CHAT_ID_DEV']+'\n'); file.write('TOKEN='+os.environ['TOKEN_DEV']+'\n'); file.write('chat_idADMIN='+os.environ['CHAT_IDADMIN_DEV']+'\n'); file.close()"
       shell: bash
       env:
         CHAT_ID_DEV : ${{secrets.CHAT_ID_DEV}}
         TOKEN_DEV : ${{secrets.TOKEN_DEV}}
         CHAT_IDADMIN_DEV : ${{secrets.CHAT_IDADMIN_DEV}}
 
+    - name: Barometer
+      shell: cmd
+      run: |
+        python3 pkscreener/pkscreenercli.py -a Y -p --barometer
+      env:
+          RUNNER : "GitHub_Actions"
+
+    - name: Morning vs evening square off
+      shell: cmd
+      run: |
+        python3 pkscreener/pkscreenercli.py -a Y -p -o C:12 --runintradayanalysis
+      env:
+          RUNNER : "GitHub_Actions"
+
     - name: 2.10 Momentum gainers (Rising bullish momentum)
       shell: cmd
       run: |
-        cd pkscreener/
-        python3 pkscreenercli.py -a Y -p -o X:12:6:3 -e
+        python3 pkscreener/pkscreenercli.py -a Y -p -o X:12:6:3 -e
+      env:
+          RUNNER : "GitHub_Actions"
 
     - name: 2.1 All relevant technical indicators
       shell: cmd
       run: |
-        cd pkscreener/
-        python3 pkscreenercli.py -a Y -p -o X:12:0 -e
+        python3 pkscreener/pkscreenercli.py -a Y -p -o X:12:0 -e
+      env:
+          RUNNER : "GitHub_Actions"
 
     - name: 2.2 Probable breakouts
       shell: cmd
       run: |
-        cd pkscreener/
-        python3 pkscreenercli.py -a Y -p -o X:12:1 -e
+        python3 pkscreener/pkscreenercli.py -a Y -p -o X:12:1 -e
+      env:
+          RUNNER : "GitHub_Actions"
 
     - name: 2.3 Recent breakouts and volumes
       shell: cmd
       run: |
-        cd pkscreener/
-        python3 pkscreenercli.py -a Y -p -o X:12:2 -e
+        python3 pkscreener/pkscreenercli.py -a Y -p -o X:12:2 -e
+      env:
+          RUNNER : "GitHub_Actions"
 
     - name: 2.4 Volume gainers/shockers
       shell: cmd
       run: |
-        cd pkscreener/
-        python3 pkscreenercli.py -a Y -p -o X:12:9:2.5 -e
+        python3 pkscreener/pkscreenercli.py -a Y -p -o X:12:9:2.5 -e
+      env:
+          RUNNER : "GitHub_Actions"
   
     - name: 2.5 Stocks gaining at least 2% since last 3 sessions
       shell: cmd
       run: |
-        cd pkscreener/
-        python3 pkscreenercli.py -a Y -p -o X:12:10 -e
+        python3 pkscreener/pkscreenercli.py -a Y -p -o X:12:10 -e
+      env:
+          RUNNER : "GitHub_Actions"
 
     - name: 2.6 Short term bullish stocks
       shell: cmd
       run: |
-        cd pkscreener/
-        python3 pkscreenercli.py -a Y -p -o X:12:11 -e
+        python3 pkscreener/pkscreenercli.py -a Y -p -o X:12:11 -e
+      env:
+          RUNNER : "GitHub_Actions"
 
     - name: 2.7 CCI outside the -100,+150 range
       shell: cmd
       run: |
-        cd pkscreener/
-        python3 pkscreenercli.py -a Y -p -o X:12:8:-100:150 -e
+        python3 pkscreener/pkscreenercli.py -a Y -p -o X:12:8:-100:150 -e
+      env:
+          RUNNER : "GitHub_Actions"
 
     - name: 2.8 Buy signals(Bullish reversals)
       shell: cmd
       run: |
-        cd pkscreener/
-        python3 pkscreenercli.py -a Y -p -o X:12:6:1 -e
+        python3 pkscreener/pkscreenercli.py -a Y -p -o X:12:6:1 -e
+      env:
+          RUNNER : "GitHub_Actions"
 
     - name: 2.9 Sell signals(bearish reversals)
       shell: cmd
       run: |
-        cd pkscreener/
-        python3 pkscreenercli.py -a Y -p -o X:12:6:2 -e
+        python3 pkscreener/pkscreenercli.py -a Y -p -o X:12:6:2 -e
+      env:
+          RUNNER : "GitHub_Actions"
   
     - name: 2.11 NR4 daily
       shell: cmd
       run: |
-        cd pkscreener/
-        python3 pkscreenercli.py -a Y -p -o X:12:14 -e
+        python3 pkscreener/pkscreenercli.py -a Y -p -o X:12:14 -e
+      env:
+          RUNNER : "GitHub_Actions"
 
     - name: 21. Most Popular stocks by change of shares
       shell: cmd
       run: |
-        cd pkscreener/
-        python3 pkscreenercli.py -a Y -p -o X:12:21:1 -e
+        python3 pkscreener/pkscreenercli.py -a Y -p -o X:12:21:1 -e
+      env:
+          RUNNER : "GitHub_Actions"
 
     - name: 1. Next day Nifty/Market AI prediction
       shell: cmd
       run: |
-        cd pkscreener/
-        python3 pkscreenercli.py -a Y -p -o X:N -e
+        python3 pkscreener/pkscreenercli.py -a Y -p -o X:N -e
+      env:
+          RUNNER : "GitHub_Actions"
 
   # Delete_Workflow_Run:
   #   runs-on: ubuntu-20.04

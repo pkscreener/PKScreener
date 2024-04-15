@@ -41,7 +41,7 @@ on:
         default: '3.11'
 
   schedule:
-    - cron: '31 3 * * 0-6'
+    - cron: '15 3 * * 0-6'
     - cron: '55 9 * * 0-6'
 
 jobs:
