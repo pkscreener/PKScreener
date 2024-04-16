@@ -539,11 +539,13 @@ def triggerScanWorkflowActions(launchLocal=False, scanDaysInPast=0):
                 sleep(5)
             else:
                 break
+    # Trigger the intraday analysis only in the 2nd half after it gets trigerred anytime after 3 PM IST
     if PKDateUtilities.currentDateTime() >= PKDateUtilities.currentDateTime(simulate=True,hour=15,minute=00):
-        while (PKDateUtilities.currentDateTime() < PKDateUtilities.currentDateTime(simulate=True,hour=17,minute=00)):
-            sleep(300) # Wait for 5PM IST because the download data will take time and we need the downloaded data
-            # to be uploaded to actions-data-download folder on github
-            triggerRemoteScanAlertWorkflow("C:12 --runintradayanalysis -u -1001785195297", branch)
+        while (PKDateUtilities.currentDateTime() < PKDateUtilities.currentDateTime(simulate=True,hour=16,minute=15)):
+            print("Waiting for 4:15 PM IST...")
+            sleep(300) # Wait for 4:15 PM IST because the download data will take time and we need the downloaded data
+            # to be uploaded to actions-data-download folder on github before the intraday analysis can be run.
+        triggerRemoteScanAlertWorkflow("C:12 --runintradayanalysis -u -1001785195297", branch)
 
 def triggerRemoteScanAlertWorkflow(scanOptions, branch):
     cmd_options = scanOptions.replace("_",":")
