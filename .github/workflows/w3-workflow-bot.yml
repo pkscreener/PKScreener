@@ -33,12 +33,16 @@ on:
       installtalib:
         description: 'Is TA-Lib install required? (Y/N)'
         required: false
-        default: 'Y'
+        default: 'N'
       targetPythonVersion:
         description: 'Target Python version: 3.9 , 3.10, 3.11 ?'
         required: false
         type: string
         default: '3.11'
+      runson:
+          description: 'Runner OS. e.g: ubuntu-20.04, windows-latest or macos-latest'
+          required: false
+          default: 'ubuntu-20.04'
   push:
     branches: [ main ]
     # workflow_run:
@@ -58,31 +62,59 @@ jobs:
 
   Prod_Telegram_Bot:
 
-    runs-on: windows-latest
+    runs-on: ${{ inputs.runson || 'ubuntu-20.04' }} #ubuntu-20.04 #windows-latest
 
     steps:
     - uses: actions/checkout@v4
       with:
         ref: ${{ inputs.branch-name }}
+        repository: pkjmesra/PKScreener
+        token: ${{secrets.PK_GITHUB_TOKEN}}
 
     - name: Set up Python
       uses: actions/setup-python@v5
       with:
         python-version: ${{ inputs.targetPythonVersion || 3.11 }}
 
-    - name: Restore Dependencies from Cache
+    - name: Restore Dependencies from Windows Cache
+      if: startsWith(runner.os, 'Windows')
       uses: actions/cache@v4
       with:
         path: ~\AppData\Local\pip\Cache
         key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
         restore-keys: |
           ${{ runner.os }}-pip-
+  
+    - name: Load Cache for Linux Dependencies
+      uses: actions/cache@v4
+      if: startsWith(runner.os, 'Linux')
+      with:
+        path: |
+          /usr/include/ta-lib
+          /usr/bin/ta-lib-config
+          /usr/lib/libta_lib.la
+          /usr/lib/libta_lib.a
+        key: ${{ runner.os }}-talib
+        restore-keys: |
+          ${{ runner.os }}-talib
+        
+    - name: Restore Dependencies from Ubuntu Cache
+      if: startsWith(runner.os, 'Linux')
+      uses: actions/cache@v4
+      id: cache-venv  # name for referring later
+      with:
+        path: ./.venv/  # what we cache: the virtualenv
+        # The cache key depends on requirements.txt
+        key: ${{ runner.os }}-venv-${{ hashFiles('**/requirements*.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-venv-
 
-    - name: Install TA-Lib on windows
+    - name: Install TA-Lib for Windows
       if: ${{ inputs.installtalib != 'N' && startsWith(runner.os, 'Windows') }}
       shell: bash
       run: |
         python3 -m pip install --upgrade pip
+        pip3 install requests
         cd .github/dependencies/
         if [[ "${{ inputs.targetPythonVersion }}" == "" ]] ;then
           pip3 install TA_Lib-0.4.28-cp311-cp311-win_amd64.whl
@@ -94,15 +126,46 @@ jobs:
           pip3 install TA_Lib-0.4.28-cp312-cp312-win_amd64.whl
         fi
 
-    - name: Install Python Dependencies
-      shell: bash
+    - name: Install TA-Lib for Linux
+      if: ${{ inputs.installtalib != 'N' && startsWith(runner.os, 'Linux') }}
       run: |
-        pip3 install -r requirements.txt
-        pip3 install .
+        cd .github/dependencies/
+        pwd
+        tar -xzf ta-lib-0.4.0-src.tar.gz
+        cd ta-lib/
+        ./configure --prefix=/usr
+        make
+        sudo make install
+        cd /home/runner/work/PKScreener/PKScreener/
+        pip3 install ta-lib==0.4.28
+
+    - name: Environment setup to get latest EXE
+      shell: bash
+      id: releaseurlsetter
+      run: |
+        pip3 install requests
+        python3 .github/workflows/githubutilities.py -d
+
+    - name: Download latest executable on Windows
+      shell: cmd
+      if: startsWith(runner.os, 'Windows')
+      env:
+        exe_path: ${{ steps.releaseurlsetter.outputs.DOWNLOAD_URL }}
+      run: |
+        curl -o pkscreenercli.exe -JL %exe_path%
+
+    - name: Download latest executable on Ubuntu
+      shell: bash
+      if: startsWith(runner.os, 'Linux')
+      env:
+        exe_path: ${{ steps.releaseurlsetter.outputs.DOWNLOAD_URL }}
+      run: |
+        curl -o /home/runner/work/PKScreener/PKScreener/pkscreenercli.bin -JL $exe_path
+        chmod +x /home/runner/work/PKScreener/PKScreener/pkscreenercli.bin
         
     - name: Configure env.dev file
       run: |
-        python3 -c "import os; file = open('pkscreener/.env.dev', 'w'); file.write('CHAT_ID='+os.environ['CHAT_ID_DEV']+'\n'); file.write('TOKEN='+os.environ['TOKEN_DEV']+'\n'); file.write('chat_idADMIN='+os.environ['CHAT_IDADMIN_DEV']+'\n'); file.write('GITHUB_TOKEN='+os.environ['GITHUB_TOKEN']+'\n'); file.close()"
+        python3 -c "import os; file = open('.env.dev', 'w'); file.write('CHAT_ID='+os.environ['CHAT_ID_DEV']+'\n'); file.write('TOKEN='+os.environ['TOKEN_DEV']+'\n'); file.write('chat_idADMIN='+os.environ['CHAT_IDADMIN_DEV']+'\n'); file.write('GITHUB_TOKEN='+os.environ['GITHUB_TOKEN']+'\n'); file.close()"
       shell: bash
       env:
         CHAT_ID_DEV : ${{secrets.CHAT_ID_DEV}}
@@ -110,13 +173,25 @@ jobs:
         CHAT_IDADMIN_DEV : ${{secrets.CHAT_IDADMIN_DEV}}
         GITHUB_TOKEN : ${{secrets.GITHUB_TOKEN}}
 
-    - name: Telegram Bot
+    - name: Run Telegram bot on Windows
+      shell: cmd
       timeout-minutes: 350
       continue-on-error: true
-      shell: cmd
+      if: startsWith(runner.os, 'Windows')
+      env:
+        RUNNER : "GitHub_Actions"
       run: |
-        cd pkscreener/
-        python3 pkscreenerbot.py
+        pkscreenercli.exe --bot
+
+    - name: Telegram Bot on Ubuntu
+      timeout-minutes: 350
+      continue-on-error: true
+      shell: bash
+      if: startsWith(runner.os, 'Linux')
+      env:
+        RUNNER : "GitHub_Actions"
+      run: |
+        /home/runner/work/PKScreener/PKScreener/pkscreenercli.bin --bot
 
     - name: Delete this repo workflow run
       shell: bash
