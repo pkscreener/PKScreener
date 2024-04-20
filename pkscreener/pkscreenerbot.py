@@ -829,7 +829,7 @@ async def command_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         cmds = m1.renderForMenu(
             selectedMenu=selectedMenu,
             skip=(
-                ["W", "E", "M", "Z"] if cmd in ["x"] else ["W", "E", "M", "Z", "N", "0"]
+                ["W", "E", "M", "Z"] if cmd in ["x"] else ["W", "E", "M", "Z", "N", "0", "15"]
             ),
             asList=True,
             renderStyle=MenuRenderStyle.STANDALONE,
@@ -1183,7 +1183,7 @@ def addCommandsForMenuItems(application):
                         )
 
 
-def main() -> None:
+def runpkscreenerbot() -> None:
     """Run the bot."""
     # Create the Application and pass it your bot's token.
     global chat_idADMIN, Channel_Id
@@ -1231,4 +1231,4 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    runpkscreenerbot()
