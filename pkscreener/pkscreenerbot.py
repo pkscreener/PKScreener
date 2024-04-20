@@ -125,7 +125,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     reply_markup = InlineKeyboardMarkup(keyboard)
     cmds = m0.renderForMenu(
         selectedMenu=None,
-        skip=["S", "T", "E", "U", "Z","C"],
+        skip=["S", "T", "E", "U", "Z", "C", "G"],
         asList=True,
         renderStyle=MenuRenderStyle.STANDALONE,
     )
@@ -703,7 +703,7 @@ async def BBacktests(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     keyboard = [
         [
             InlineKeyboardButton("Try Scanners", callback_data=str("CX")),
-            InlineKeyboardButton("Growth of 10k", callback_data=str("CG")),
+            # InlineKeyboardButton("Growth of 10k", callback_data=str("CG")),
         ]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
@@ -821,7 +821,7 @@ async def command_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         await shareUpdateWithChannel(update=update, context=context)
         m0.renderForMenu(
             selectedMenu=None,
-            skip=["S", "T", "E", "U"],
+            skip=["S", "T", "E", "U", "Z", "C", "G"],
             renderStyle=MenuRenderStyle.STANDALONE,
         )
         selectedMenu = m0.find(cmd.upper())
@@ -884,7 +884,7 @@ async def command_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         if len(selection) == 2:
             m0.renderForMenu(
                 selectedMenu=None,
-                skip=["S", "T", "E", "U", "Z", "C"],
+                skip=["S", "T", "E", "U", "Z", "C", "G"],
                 renderStyle=MenuRenderStyle.STANDALONE,
             )
             selectedMenu = m0.find(selection[0].upper())
@@ -942,7 +942,7 @@ async def command_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         elif len(selection) == 3:
             m0.renderForMenu(
                 selectedMenu=None,
-                skip=["S", "T", "E", "U", "Z","C"],
+                skip=["S", "T", "E", "U", "Z", "C", "G"],
                 renderStyle=MenuRenderStyle.STANDALONE,
             )
             selectedMenu = m0.find(selection[0].upper())
@@ -1068,7 +1068,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
     cmds = m0.renderForMenu(
         selectedMenu=None,
-        skip=["S", "T", "E", "U", "Z","C"],
+        skip=["S", "T", "E", "U", "Z", "C", "G"],
         asList=True,
         renderStyle=MenuRenderStyle.STANDALONE,
     )
@@ -1122,7 +1122,7 @@ def _shouldAvoidResponse(update):
 def addCommandsForMenuItems(application):
     cmds0 = m0.renderForMenu(
         selectedMenu=None,
-        skip=["S", "T", "E", "U", "Z","C"],
+        skip=["S", "T", "E", "U", "Z", "C", "G"],
         asList=True,
         renderStyle=MenuRenderStyle.STANDALONE,
     )
@@ -1203,10 +1203,10 @@ def main() -> None:
             START_ROUTES: [
                 CallbackQueryHandler(XScanners, pattern="^" + str("CX") + "$"),
                 CallbackQueryHandler(XScanners, pattern="^" + str("CB") + "$"),
-                CallbackQueryHandler(XScanners, pattern="^" + str("CG") + "$"),
+                # CallbackQueryHandler(XScanners, pattern="^" + str("CG") + "$"),
                 CallbackQueryHandler(Level2, pattern="^" + str("CX_")),
                 CallbackQueryHandler(Level2, pattern="^" + str("CB_")),
-                CallbackQueryHandler(Level2, pattern="^" + str("CG_")),
+                # CallbackQueryHandler(Level2, pattern="^" + str("CG_")),
                 CallbackQueryHandler(end, pattern="^" + str("CZ") + "$"),
                 CallbackQueryHandler(start, pattern="^"),
             ],

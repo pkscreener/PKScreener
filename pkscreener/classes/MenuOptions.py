@@ -35,7 +35,7 @@ level0MenuDict = {
     "X": "Scanners",
     "S": "Strategies",
     "B": "Backtests",
-    "G": "Growth of 10k",
+    # "G": "Growth of 10k",
     "T": "~",
     "E": "Edit user configuration",
     "Y": "View your user configuration",
