@@ -43,6 +43,10 @@ on:
           description: 'Runner OS. e.g: ubuntu-20.04, windows-latest or macos-latest'
           required: false
           default: 'ubuntu-20.04'
+      logsEnabled:
+        description: 'Enable Logging in the target app'
+        required: false
+        default: '-l'
   push:
     branches: [ main ]
     # workflow_run:
@@ -180,8 +184,9 @@ jobs:
       if: startsWith(runner.os, 'Windows')
       env:
         RUNNER : "GitHub_Actions"
+        MONITORING_BOT_RUNNER: "MONITORING_BOT_RUNNER"
       run: |
-        pkscreenercli.exe --bot
+        pkscreenercli.exe --bot ${{ inputs.logsEnabled || '' }}
 
     - name: Telegram Bot on Ubuntu
       timeout-minutes: 350
@@ -190,8 +195,9 @@ jobs:
       if: startsWith(runner.os, 'Linux')
       env:
         RUNNER : "GitHub_Actions"
+        MONITORING_BOT_RUNNER: "MONITORING_BOT_RUNNER"
       run: |
-        /home/runner/work/PKScreener/PKScreener/pkscreenercli.bin --bot
+        /home/runner/work/PKScreener/PKScreener/pkscreenercli.bin --bot ${{ inputs.logsEnabled || '' }}
 
     - name: Delete this repo workflow run
       shell: bash
