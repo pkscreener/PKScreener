@@ -46,7 +46,7 @@ on:
       logsEnabled:
         description: 'Enable Logging in the target app'
         required: false
-        default: '-l'
+        default: '-a Y -l'
   push:
     branches: [ main ]
     # workflow_run:
