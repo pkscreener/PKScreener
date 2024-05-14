@@ -172,7 +172,7 @@ original__stdout = sys.__stdout__
 # args.scanDaysInPast = 7
 # args.reScanForZeroSize = True
 # args.user = "-1001785195297"
-# args.skiplistlevel0 = "S,T,E,U,Z,H,Y,B,G,C"
+# args.skiplistlevel0 = "S,T,E,U,Z,H,Y,B,G,C,M,D,I,L,P"
 # args.skiplistlevel1 = "W,N,E,M,Z,0,2,3,4,6,7,9,10,13,15"
 # args.skiplistlevel2 = "0,22,29,30,31,42,M,Z"
 # args.skiplistlevel3 = "0"
@@ -617,7 +617,7 @@ def triggerHistoricalScanWorkflowActions(scanDaysInPast=0):
                                 '{"ref":"'
                                 + branch
                                 + '","inputs":{"installtalib":"N","skipDownload":"Y","scanOptions":"'
-                                + f'--scanDaysInPast {scanDaysInPast} -s2 {skip2ListStr} -s1 {skip1ListStr} -s0 S,T,E,U,Z,H,Y,B,G,C -s3 {str(0)} -s4 {str(0)} --branchname actions-data-download --scans --local -f","name":"X_{index}_{option}"'
+                                + f'--scanDaysInPast {scanDaysInPast} -s2 {skip2ListStr} -s1 {skip1ListStr} -s0 S,T,E,U,Z,H,Y,B,G,C,M,D,I,L,P -s3 {str(0)} -s4 {str(0)} --branchname actions-data-download --scans --local -f","name":"X_{index}_{option}"'
                                 + ',"cleanuphistoricalscans":"N"}'
                                 + '}'
                                 )
@@ -631,7 +631,7 @@ def triggerHistoricalScanWorkflowActions(scanDaysInPast=0):
         '{"ref":"'
         + branch
         + '","inputs":{"installtalib":"N","skipDownload":"Y","scanOptions":"'
-        + '--scanDaysInPast 251 -s0 S,T,E,U,Z,H,Y,B,G,C -s1 W,N,E,M,Z,0,2,3,4,6,7,9,10,13,15 -s2 0,22,29,30,42,M,Z -s3 0 -s4 0 --branchname actions-data-download","name":"X_Cleanup"'
+        + '--scanDaysInPast 251 -s0 S,T,E,U,Z,H,Y,B,G,C,M,D,I,L,P -s1 W,N,E,M,Z,0,2,3,4,6,7,9,10,13,15 -s2 0,22,29,30,42,M,Z -s3 0 -s4 0 --branchname actions-data-download","name":"X_Cleanup"'
         + (',"cleanuphistoricalscans":"Y"}')
         + '}'
         )
