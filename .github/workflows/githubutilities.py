@@ -112,6 +112,7 @@ def dget_latest_release_url():
             url = asset["browser_download_url"]
             if url.endswith(exe_name):
                 aset_output("DOWNLOAD_URL", url)
+                break
         rel_version = url.split("/")[-2]
     except:
         if args.lastReleasedVersion is not None:
