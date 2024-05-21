@@ -104,16 +104,14 @@ def dget_latest_release_url():
         url = ""
         if "Windows" in platform.system():
             exe_name = "pkscreenercli.exe"
-            url = resp.json()["assets"][1]["browser_download_url"]
-            aset_output("DOWNLOAD_URL", url)
         elif "Darwin" in platform.system():
             exe_name = "pkscreenercli.run"
-            url = resp.json()["assets"][2]["browser_download_url"]
-            aset_output("DOWNLOAD_URL", url)
         else:
             exe_name = "pkscreenercli.bin"
-            url = resp.json()["assets"][0]["browser_download_url"]
-            aset_output("DOWNLOAD_URL", url)
+        for asset in resp.json()["assets"]:
+            url = asset["browser_download_url"]
+            if url.endswith(exe_name):
+                aset_output("DOWNLOAD_URL", url)
         rel_version = url.split("/")[-2]
     except:
         if args.lastReleasedVersion is not None:
