@@ -47,8 +47,8 @@ on:
         description: 'Enable Logging in the target app or pass any args to bot'
         required: false
         default: '-a Y -l'
-  # push:
-  #   branches: [ main ]
+  push:
+    branches: [ main ]
     # workflow_run:
     #   workflows: ["0. New Features - Tests"]
     #   types:
