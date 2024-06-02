@@ -142,6 +142,7 @@ jobs:
         sudo make install
         cd /home/runner/work/PKScreener/PKScreener/
         pip3 install ta-lib==0.4.28
+        pip3 install python-telegram-bot
 
     - name: Environment setup to get latest EXE
       shell: bash
