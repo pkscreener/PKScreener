@@ -158,6 +158,7 @@ jobs:
 
     - name: Update holidays
       shell: bash
+      timeout-minutes: 3
       run: |
         python3 .github/workflows/workflowtriggers.py --updateholidays
         
