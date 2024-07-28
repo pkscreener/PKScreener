@@ -33,8 +33,11 @@ import pytz
 import requests
 from PKDevTools.classes.PKDateUtilities import PKDateUtilities
 from PKDevTools.classes.Committer import Committer
+from PKDevTools.classes.MarketHours import MarketHours
 from PKNSETools.PKNSEStockDataFetcher import nseStockDataFetcher
 
+MORNING_ALERT_HOUR = 9
+MORNING_ALERT_MINUTE = 27
 argParser = argparse.ArgumentParser()
 required = False
 argParser.add_argument(
@@ -88,6 +91,12 @@ argParser.add_argument(
     "--report",
     action="store_true",
     help="Generate backtest-report main page if true",
+    required=required,
+)
+argParser.add_argument(
+    "--runintradayanalysis",
+    action="store_true",
+    help="Generate intraday morning vs close scan results",
     required=required,
 )
 argParser.add_argument(
@@ -277,7 +286,7 @@ if __name__ == '__main__':
                     p2 = mnu2.menuKey.upper()
                     if p2 == "0":
                         continue
-                    if p2 in ["6", "7", "21"]:
+                    if p2 in ["6", "7", "21","22","30"]:
                         selectedMenu = m2.find(p2)
                         # Find the 3rd level menus, skipping those in the provided list
                         cmds3 = m3.renderForMenu(
@@ -291,7 +300,7 @@ if __name__ == '__main__':
                                 p3 = mnu3.menuKey.upper()
                                 if p3 == "0":
                                     continue
-                                if p3 in [ "7", "6"] and p2 not in ["21"]:
+                                if (p3 in [ "7","10"] and p2 in ["6"]) or (p3 in [ "3","6","9"] and p2 in ["7"]):
                                     selectedMenu = m3.find(p3)
                                     # Find the 2nd level menus, skipping those in the provided list
                                     cmds4 = m4.renderForMenu(
@@ -346,7 +355,11 @@ if __name__ == '__main__':
                         counter += 1
             except:
                 continue
-
+    # Let's list down what all are we going to go through for menus
+    print("Scan Options in Collection:\n")
+    for key in objectDictionary.keys():
+        scanOptions = f'{objectDictionary[key]["td3"]}_D_D_D'
+        print(scanOptions)
 
 def generateBacktestReportMainPage():
     generated_date = f"Auto-generated as of {PKDateUtilities.currentDateTime().strftime('%d-%m-%y %H:%M:%S IST')}"
@@ -542,32 +555,34 @@ def triggerScanWorkflowActions(launchLocal=False, scanDaysInPast=0):
                 daysInPast -=1
             tryCommitOutcomes(options)
         else:
-            if not barometerTriggered and (PKDateUtilities.currentDateTime() < PKDateUtilities.currentDateTime(simulate=True,hour=9,minute=37)):
+            if not barometerTriggered and (PKDateUtilities.currentDateTime() < PKDateUtilities.currentDateTime(simulate=True,hour=MORNING_ALERT_HOUR,minute=MORNING_ALERT_MINUTE)):
                 # Send the global market barometer trigger
                 barometerTriggered = True
                 resp = triggerRemoteScanAlertWorkflow("X:12 --barometer", branch)
 
-            # If the job got triggered before, let's wait until 9:37AM (3 min for job setup, so effectively it will be 9:40am)
-            while (PKDateUtilities.currentDateTime() < PKDateUtilities.currentDateTime(simulate=True,hour=9,minute=37)):
-                sleep(60) # Wait for 9:37AM
+            # If the job got triggered before, let's wait until alert time (3 min for job setup, so effectively it will be 9:40am)
+            while (PKDateUtilities.currentDateTime() < PKDateUtilities.currentDateTime(simulate=True,hour=MORNING_ALERT_HOUR,minute=MORNING_ALERT_MINUTE)):
+                sleep(60) # Wait for alert time
             resp = triggerRemoteScanAlertWorkflow(scanOptions, branch)
             if resp.status_code == 204:
                 sleep(5)
             else:
                 break
     # Trigger intraday bid/ask build-up scanner only based on the volume source
-    if PKDateUtilities.currentDateTime() <= PKDateUtilities.currentDateTime(simulate=True,hour=15,minute=30):
+    if PKDateUtilities.currentDateTime() <= PKDateUtilities.currentDateTime(simulate=True,hour=MarketHours().closeHour,minute=MarketHours().closeMinute):
         triggerRemoteScanAlertWorkflow("'X:12:9:2.5:>|X:0:29:'", branch)
         triggerRemoteScanAlertWorkflow("'X:12:31:>|X:0:27:'", branch)
 
+    runIntradayAnalysisScans(branch=branch)
+
+def runIntradayAnalysisScans(branch="main"):
     # Trigger the intraday analysis only in the 2nd half after it gets trigerred anytime after 3 PM IST
-    if PKDateUtilities.currentDateTime() >= PKDateUtilities.currentDateTime(simulate=True,hour=15,minute=00):
-        while (PKDateUtilities.currentDateTime() < PKDateUtilities.currentDateTime(simulate=True,hour=16,minute=15)):
-            print("Waiting for 4:15 PM IST...")
+    if PKDateUtilities.currentDateTime() >= PKDateUtilities.currentDateTime(simulate=True,hour=MarketHours().closeHour,minute=MarketHours().closeMinute-30):
+        while (PKDateUtilities.currentDateTime() < PKDateUtilities.currentDateTime(simulate=True,hour=MarketHours().closeHour+1,minute=MarketHours().closeMinute-15)):
+            print(f"Waiting for {(MarketHours().closeHour+1):02}:{(MarketHours().closeMinute):02} PM IST...")
             sleep(300) # Wait for 4:15 PM IST because the download data will take time and we need the downloaded data
             # to be uploaded to actions-data-download folder on github before the intraday analysis can be run.
         triggerRemoteScanAlertWorkflow("C:12: --runintradayanalysis -u -1001785195297", branch)
-
 
 def triggerRemoteScanAlertWorkflow(scanOptions, branch):
     cmd_options = scanOptions.replace("_",":")
@@ -876,6 +891,9 @@ if __name__ == '__main__':
         cleanuphistoricalscans(daysInPast)
     if args.updateholidays:
         updateHolidays()
+    if args.runintradayanalysis:
+        triggerRemoteScanAlertWorkflow("C:12: --runintradayanalysis -u -1001785195297", branch="main")
+
 
     print(f"{datetime.datetime.now(pytz.timezone('Asia/Kolkata'))}: All done!")
     sys.exit(0)
