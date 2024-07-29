@@ -570,8 +570,14 @@ def triggerScanWorkflowActions(launchLocal=False, scanDaysInPast=0):
                 break
     # Trigger intraday bid/ask build-up scanner only based on the volume source
     if PKDateUtilities.currentDateTime() <= PKDateUtilities.currentDateTime(simulate=True,hour=MarketHours().closeHour,minute=MarketHours().closeMinute):
-        triggerRemoteScanAlertWorkflow("'X:12:9:2.5:>|X:0:29:'", branch)
-        triggerRemoteScanAlertWorkflow("'X:12:31:>|X:0:27:'", branch)
+        triggerRemoteScanAlertWorkflow("P:1:1:", branch)
+        triggerRemoteScanAlertWorkflow("P:1:5:", branch)
+        triggerRemoteScanAlertWorkflow("P:1:6:", branch)
+        triggerRemoteScanAlertWorkflow("P:1:8:", branch)
+        triggerRemoteScanAlertWorkflow("P:1:9:", branch)
+        triggerRemoteScanAlertWorkflow("P:1:10:", branch)
+        triggerRemoteScanAlertWorkflow("P:1:15:", branch)
+        triggerRemoteScanAlertWorkflow("P:1:21:", branch)
 
     runIntradayAnalysisScans(branch=branch)
 
