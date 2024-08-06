@@ -48,6 +48,12 @@ argParser.add_argument(
     required=required,
 )
 argParser.add_argument(
+    "--barometer",
+    action="store_true",
+    help="Trigger barometer",
+    required=required,
+)
+argParser.add_argument(
     "--branchname",
     help="branch name for check-in, check-out",
     required=required,
@@ -530,7 +536,14 @@ def triggerScanWorkflowActions(launchLocal=False, scanDaysInPast=0):
     # original_stdout = sys.stdout
     # original__stdout = sys.__stdout__
     commitFrequency = [21,34,55,89,144,200]
-    barometerTriggered = False
+        # Trigger intraday pre-defined piped scanners
+    if PKDateUtilities.currentDateTime() <= PKDateUtilities.currentDateTime(simulate=True,hour=MarketHours().closeHour,minute=MarketHours().closeMinute):
+        scanIndex = 1
+        MAX_INDEX = 21
+        while scanIndex <= MAX_INDEX:
+            triggerRemoteScanAlertWorkflow(f"P:1:{scanIndex}:", branch)
+            scanIndex += 1
+
     for key in objectDictionary.keys():
         scanOptions = f'{objectDictionary[key]["td3"]}_D_D_D_D_D'
         branch = "main"
@@ -555,11 +568,6 @@ def triggerScanWorkflowActions(launchLocal=False, scanDaysInPast=0):
                 daysInPast -=1
             tryCommitOutcomes(options)
         else:
-            if not barometerTriggered and (PKDateUtilities.currentDateTime() < PKDateUtilities.currentDateTime(simulate=True,hour=MORNING_ALERT_HOUR,minute=MORNING_ALERT_MINUTE)):
-                # Send the global market barometer trigger
-                barometerTriggered = True
-                resp = triggerRemoteScanAlertWorkflow("X:12 --barometer", branch)
-
             # If the job got triggered before, let's wait until alert time (3 min for job setup, so effectively it will be 9:40am)
             while (PKDateUtilities.currentDateTime() < PKDateUtilities.currentDateTime(simulate=True,hour=MORNING_ALERT_HOUR,minute=MORNING_ALERT_MINUTE)):
                 sleep(60) # Wait for alert time
@@ -568,17 +576,6 @@ def triggerScanWorkflowActions(launchLocal=False, scanDaysInPast=0):
                 sleep(5)
             else:
                 break
-    # Trigger intraday bid/ask build-up scanner only based on the volume source
-    if PKDateUtilities.currentDateTime() <= PKDateUtilities.currentDateTime(simulate=True,hour=MarketHours().closeHour,minute=MarketHours().closeMinute):
-        triggerRemoteScanAlertWorkflow("P:1:1:", branch)
-        triggerRemoteScanAlertWorkflow("P:1:5:", branch)
-        triggerRemoteScanAlertWorkflow("P:1:6:", branch)
-        triggerRemoteScanAlertWorkflow("P:1:8:", branch)
-        triggerRemoteScanAlertWorkflow("P:1:9:", branch)
-        triggerRemoteScanAlertWorkflow("P:1:10:", branch)
-        triggerRemoteScanAlertWorkflow("P:1:15:", branch)
-        triggerRemoteScanAlertWorkflow("P:1:21:", branch)
-
     runIntradayAnalysisScans(branch=branch)
 
 def runIntradayAnalysisScans(branch="main"):
@@ -873,6 +870,8 @@ def triggerMiscellaneousTasks():
                 sleep(5)
 
 if __name__ == '__main__':
+    if args.barometer:
+        triggerRemoteScanAlertWorkflow("X:12: --barometer", "main")
     if args.report:
         generateBacktestReportMainPage()
     if args.backtests:
