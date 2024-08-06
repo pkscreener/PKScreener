@@ -539,7 +539,7 @@ def triggerScanWorkflowActions(launchLocal=False, scanDaysInPast=0):
         # Trigger intraday pre-defined piped scanners
     if PKDateUtilities.currentDateTime() <= PKDateUtilities.currentDateTime(simulate=True,hour=MarketHours().closeHour,minute=MarketHours().closeMinute):
         scanIndex = 1
-        MAX_INDEX = 21
+        MAX_INDEX = 23
         while scanIndex <= MAX_INDEX:
             triggerRemoteScanAlertWorkflow(f"P:1:{scanIndex}:", branch)
             scanIndex += 1
