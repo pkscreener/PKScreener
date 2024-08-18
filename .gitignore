@@ -1,4 +1,5 @@
 venv/
+.venv/
 build/
 dist/
 test/*.ini
@@ -37,4 +38,6 @@ results/*_cookies.pkl
 results/*_html.pkl
 results/*DB.pkl
 results/*.pkl.lck
+results/*.csv
 *.txt
+*.whl

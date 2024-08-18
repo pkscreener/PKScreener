@@ -14,14 +14,25 @@ Pillow==9.5.0 # Keep at this version because getsize_multiline is deprecated/rem
 PKDevTools
 PKNSETools
 Pyarrow
+pyppeteer
 pytz
+python-telegram-bot>=13.4,<20.0
 requests_cache
 rich
 scikit-learn
-scipy>=1.7.3
+scipy<=1.12.0 # cdflib removed from >=1.13.0 which breaks the build
 # ta-lib # Install this separately. See README.
 tabulate
 tensorflow
+# torch
+# torchvision
 urllib3
 xlsxwriter
 yfinance #==0.1.87
+windows-curses; "windows" in sys.platform
+vectorbt
+# https://github.com/pkjmesra/PKScreener/blob/main/.github/dependencies/TA_Lib-0.4.28-cp311-cp311-win_amd64.whl; "windows" in sys.platform
+
+# torch
+# torchvision
+# -f https://download.pytorch.org/whl/torch_stable.html

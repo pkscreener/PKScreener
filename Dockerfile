@@ -22,19 +22,30 @@
 #     SOFTWARE.
 
 # """
-FROM pkjmesra/ta-lib-debian_gnu_linux:latest as base-image
-ENV PYTHONUNBUFFERED 1
+# docker buildx build --push --platform linux/arm/v7,linux/arm64/v8,linux/amd64 --tag pkjmesra/pkscreener:latest .
+# docker buildx build --load --platform linux/arm64/v8,linux/amd64 --tag pkjmesra/pkscreener:latest . --no-cache
+# docker buildx build --push --platform linux/arm64/v8,linux/amd64 --tag pkjmesra/pkscreener:latest . --no-cache
 
-RUN wget https://github.com/pkjmesra/PKScreener/archive/refs/heads/main.zip && \
-  unzip main.zip
+FROM pkjmesra/pkscreener:base as base
+ENV PYTHONUNBUFFERED 1
+WORKDIR /
+RUN rm -rf /PKScreener-main main.zip* && \
+    curl -JL https://github.com/pkjmesra/PKScreener/archive/refs/heads/main.zip -o main.zip && \
+    unzip main.zip && \
+    rm -rf main.zip*
 WORKDIR /PKScreener-main
-RUN pip3 install -r "requirements.txt"
-RUN pip3 install .
-RUN pip3 install --no-deps advanced-ta
-RUN pip3 install pkscreener
-RUN wget https://raw.githubusercontent.com/pkjmesra/PKScreener/main/pkscreener/courbd.ttf && \
-  cp courbd.ttf /usr/local/share/fonts/courbd.ttf
-RUN export TERM=xterm
-ENTRYPOINT ["pkscreener"]
+COPY requirements.txt .
+RUN pip3 install --upgrade pip && \
+    pip3 uninstall pkscreener PKNSETools PKDevTools -y && \
+    pip3 install --no-cache-dir -r requirements.txt && \
+    pip3 install . && \
+    mv /PKScreener-main/pkscreener/pkscreenercli.py /pkscreenercli.py && \
+    rm -rf /PKScreener-main && \
+    mkdir -p /PKScreener-main/pkscreener/ && \
+    mv /pkscreenercli.py /PKScreener-main/pkscreener/pkscreenercli.py
+
+ENV TERM=xterm
+ENV PKSCREENER_DOCKER=1
+ENTRYPOINT ["python3","pkscreener/pkscreenercli.py"]
 # Run with 
 # docker run -it pkjmesra/pkscreener:latest

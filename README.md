@@ -1,44 +1,42 @@
-![Title](https://raw.githubusercontent.com/pkjmesra/PKScreener/main/screenshots/title.png)
+![Title](https://raw.githubusercontent.com/pkjmesra/PKScreener/main/screenshots/logos/Logo8_1.png)
 
-# PKScreener
-
-[![MADE-IN-INDIA][MADE-IN-INDIA-badge]][MADE-IN-INDIA] [![Windows][Windows-badge]][Windows] [![Linux][Linux-badge]][Linux] [![Mac OS][Mac OS-badge]][Mac OS] [![GitHub release (latest by date)][GitHub release (latest by date)-badge]][GitHub release (latest by date)] [![CodeFactor][Codefactor-badge]][Codefactor] [![Downloads][Downloads-badge]][Downloads] ![latest download][Latest-Downloads-badge] ![github license][github-license] [![PyPI][pypi-badge]][pypi] [![is wheel][wheel-badge]][pypi] [![Coverage Status][Coverage-Status-badge]][Coverage-Status] [![codecov][codecov-badge]][codecov] [![Docker Status][Docker Status-badge]][Docker Status]
-[![Docker Pulls][Docker Pulls-badge]][Docker Status] 
+# PKScreener (# 1 Stock screener/scanner for NSE India)
+| [![MADE-IN-INDIA][MADE-IN-INDIA-badge]][MADE-IN-INDIA] | [![GitHub release (latest by date)][GitHub release (latest by date)-badge]][GitHub release (latest by date)] | [![Downloads][Downloads-badge]][Downloads] | ![latest download][Latest-Downloads-badge]  | [![Docker Pulls][Docker Pulls-badge]][Docker Status] |
+| :-------------: | :-----------------: | :-----------------: | :-----------------: | :-----------------: |
+| Platforms | [![Windows][Windows-badge]][Windows] | [![Linux][Linux-badge]][Linux] | [![Mac OS][Mac OS-badge]][Mac OS] | [![Docker Status][Docker Status-badge]][Docker Status] |
+| Package / Docs | [![Documentation][Documentation-badge]][Documentation] | [![PyPI][pypi-badge]][pypi] | [![is wheel][wheel-badge]][pypi] | ![github license][github-license] |
+| Tests | [![CodeFactor][Codefactor-badge]][Codefactor] | [![Coverage Status][Coverage-Status-badge]][Coverage-Status] | [![codecov][codecov-badge]][codecov] | [![After Market][After Market-badge]][After Market] |
 
 ## What is PKScreener?
 | Telegram Alerts | Nifty AI Prediction | Scheduling Cron Jobs | On-Demand Telegram Bot | Backtesting / Growth of 10k|
-| :-------------: | :-----------------: | :------------------: | :--------------------: | ----------- |
-
+| :-------------: | :-----------------: | :------------------: | :--------------------: | :-----------: |
 | Nifty screening | Volume scanners | Breakout detection | Consolidating stocks | Reversal Signals |
-| :-------------: | :-------------: | :----------------: | :------------------: | ---------------- |
-
-| Chart Patterns | CCI scanners | 2% scanners | Short-term bulls | NR4 / NR7 | Weekly Releases |
-| :------------: | :----------: | :---------: | :--------------: | :-------: | --------------- |
-
+| Chart Patterns | CCI scanners | 2% scanners | Short-term bulls | NR4 / NR7 | Daily Releases |
 | Fair Value | Mutual funds, FII data | TTM Squeeze | Golden Crossover | Death Crossover|
-| :-----------: | :-----------: | :--------: | :--------------: | ------------------- |
-
 | RSI screening | MACD scanners | IPO Stocks | Momentum Gainers | Watchlist screening |
-| :-----------: | :-----------: | :--------: | :--------------: | ------------------- |
-
-| Stock Performance | 52Wk H/L Breakouts | 10 days low breakouts | Aroon Crossover | Next Day Bullish Stocks|
-| :-----------: | :-----------: | :--------: | :--------------: | ------------------- |
-
+| Stock Performance | 52Wk-H/L Breakouts | 10 days low breakouts | Aroon Crossover | Next Day Bullish Stocks|
 | Today's Breakouts | Breaking out now | Popular stocks by Mutual Funds / FIIs | Higher Highs | Lower Lows|
-| :-----------: | :-----------: | :--------: | :--------------: | ------------------- |
-
 | F&O Stocks screening | Live 5-EMA Index Scan | Logging | Telegram Channel | Early Breakouts |
-| :------------------: | :-------------------: | :-----: | :--------------: | --------------- |
+| ATR Cross | ATR Trailing Stops | Intraday Bid/Ask Build-up | Quick Backtest | Morning vs Day-close profit analysis |
+| Multiple period/duration support | Daily OHLCV | Intraday OHLCV | Auomated Software Updates| NASDAQ Index Support |
+| Nifty 50 | Nifty Next 50 | Nifty 100 | Nifty 200| Nifty 500 |
+| Nifty Smallcap 50 | Nifty Smallcap 250 | Nifty Midcap 50 | Nifty Midcap 100| Nifty Midcap 150 |
+| Nifty All 2000 | Nifty Newly Listed (IPOs in last 2 Year) | Nifty F&O Stocks | View Stock Performance| High Momentum(RSI,MFI,CCI) |
+| Intraday Monitor | Scanner pinning | Stock list Pinning | VCP (Volatility Contraction Pattern)| VCP  (Mark Minervini) |
+| Moving Average Signals | Candle-stick Patterns | Trendline Support Stocks | Bullish/Bearish Inside Bar | Volume Spread Analysis |
+| Narrow Range (NRx) Reversal | Lorentzian Classifier | PSAR and RSI reversal | Rising RSI | RSI MA Reversal |
+| Upcoming CA stocks | High Dividend Stocks | Fair Value Buy Opportunities | Shareholding by number of Mutual Funds/FIIs | Bullish for next day |
+
 ### A Python-based stock screener for NSE, India.
 
 **pkscreener** is an advanced stock screener to find potential breakout stocks from NSE and tell it's possible breakout values. It also helps to find the stocks which are consolidating and may breakout, or the particular chart patterns that you're looking specifically to make your decisions.
 pkscreener is totally customizable and it can screen stocks with the settings that you have provided.
 
 You can get daily scan results/alerts at scheduled times by subscribing to the following Telegram channel:
-|    Purpose     |                                                                                                                   Description/link                                                                                                                    | QR Code                                                                                                                                          |                                                                                                                                            |     |
-| :------------: | :---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------: | ------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------ | --- |
-| Alerts Channel | https://t.me/PKScreener > You wil receive all the major alerts on this telegram channel. These alerts are sent for all major strategy scans daily around 9:30am-10:15am and then around 4pm. You will also receive the next day's market predictions. | <img src="https://raw.githubusercontent.com/pkjmesra/PKScreener/main/screenshots/Telegram_Channel_Prod.jpg" alt="Telegram Channel" width="100"/> |                                                                                                                                            |     |
-|      |
+|    Purpose     |                                                                                                                   Description/link                                                                                                                    | QR Code                                                                                                                                          |
+| :------------: | :---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------: | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Alerts Channel | https://t.me/PKScreener > You wil receive all the major alerts on this telegram channel. These alerts are sent for all major strategy scans daily around 9:30am-10:15am and then around 4pm. You will also receive the next day's market predictions. | <img src="https://raw.githubusercontent.com/pkjmesra/PKScreener/main/screenshots/Telegram_Channel_Prod.jpg" alt="Telegram Channel" width="500"/> |
+| Discussion Channel | https://t.me/PKScreeners > You can discuss with other traders and community members. | <img src="https://raw.githubusercontent.com/pkjmesra/PKScreener/main/screenshots/PKScreeners_Group.jpg" alt="Telegram Discussion Channel" width="500"/> |
 
 ![telegram](https://raw.githubusercontent.com/pkjmesra/PKScreener/main/screenshots/telegram.png)
 
@@ -58,52 +56,127 @@ You can now run the `pkscreenerbot` on your local machine or if it's running on 
 ## Scanners
 
 Screening options to choose from:
-* Artificial Intelligence v2 for Nifty 50 Prediction
-* Live Index Scan : 5 EMA for Intraday
-* Screen stocks by the stock names (NSE Stock Code)
-* Nifty 50
-* Nifty Next 50
-* Nifty 100
-* Nifty 200
-* Nifty 500
-* Nifty Smallcap 50
-* Nifty Smallcap 100
-* Nifty Smallcap 250
-* Nifty Midcap 50
-* Nifty Midcap 100
-* Nifty Midcap 150
-* Nifty (All Stocks)
-* Newly Listed (IPOs in last 2 Year)
-* F&O Stocks Only
-* NASDAQ
 
-Followin scanners are already implemented. Others are `In Progress`
 ```
-0 > Full Screening (Shows Technical Parameters without any criterion)
-     1 > Probable Breakouts              	2 > Today's Breakouts
-     3 > Consolidating stocks            	4 > Lowest Volume in last 'N'-days (Early Breakout Detection)
+     X > Scanners
+     M > Monitor Intraday
+     S > Strategies
+     B > Backtests
+     G > Growth of 10k
+     C > Analyse morning vs close outcomes
+
+     P > Piped Scanners
+
+     T > Toggle between long-term (Default) [Current (1y, 1d)] and Intraday user configuration
+
+
+     D > Download Daily OHLC Data for the Past Year
+     I > Download Intraday OHLC Data for the Last Trading Day
+
+     E > Edit user configuration
+     Y > View your user configuration
+
+     U > Check for software update
+
+     L > Collect Logs for Debugging
+     H > Help / About Developer
+```
+
+Multiple Indices to choose from:
+
+```
+     W > Screen stocks from my own Watchlist
+     N > Nifty Prediction using Artifical Intelligence (Use for Gap-Up/Gap-Down/BTST/STBT)
+     E > Live Index Scan : 5 EMA for Intraday
+
+     S > Sectoral Indices
+
+     0 > Screen stocks by the stock names
+     1 > Nifty 50          	2 > Nifty Next 50     	3 > Nifty 100         
+     4 > Nifty 200         	5 > Nifty 500         	6 > Nifty Smallcap 50 
+     7 > Nifty Smallcap 100	8 > Nifty Smallcap 250	9 > Nifty Midcap 50   
+    10 > Nifty Midcap 100	11 > Nifty Midcap 150 	12 > Nifty (All Stocks)
+    13 > Newly Listed (IPOs in last 2 Year)           	14 > F&O Stocks Only
+
+     15 > NASDAQ
+
+```
+
+Followin scanners are already implemented. 
+```
+     0 > Full Screening (Shows Technical Parameters without any criterion)
+     1 > Probable Breakouts/Breakdowns   	2 > Today's Breakouts/Breakdowns
+     3 > Consolidating stocks            	4 > Lowest Volume in last N-days (Early Breakout Detection)
      5 > RSI screening                   	6 > Reversal Signals
      7 > Stocks making Chart Patterns    	8 > CCI outside of the given range
      9 > Volume gainers                  	10 > Closing at least 2% up since last 3 days
-    11 > Short term bullish stocks(Intraday)	12 > 15 Minute Price & Volume breakout(Intraday)
-    13 > Bullish RSI & MACD(Intraday)       	14 > NR4 Daily Today
-    15 > 52 week low breakout(today/1 wk)	16 > 10 days low breakout
-    17 > 52 week high breakout(today/1 wk)	18 > Bullish Aroon(14) Crossover
-    19 > MACD Histogram x below 0       	20 > Bullish for next day
-    21 > Most Popular Stocks            	22 > View Stock Performance         
-    23 > Breaking out now               	24 > Higher Highs,Lows & Close      
-    25 > Lower Highs,Lows (Watch for Reversal)            	
+    11 > Short term bullish (Ichimoku)  	12 > N-Minute Price & Volume breakout(Intraday)
+    13 > Bullish RSI & MACD             	14 > NR4 Daily Today
+    15 > 52 week low breakout(today)(Sell)	16 > 10 days low breakout(Sell)
+    17 > 52 week high breakout(today)     	18 > Bullish Aroon(14) Crossover
+    19 > MACD Histogram x below 0 (Sell) 	20 > Bullish for next day
+    21 > MF/FIIs Popular Stocks         	22 > View Stock Performance         
+    23 > Breaking out now               	24 > Higher Highs,Lows & Close (SuperTrend)
+    25 > Lower Highs,Lows (Watch for Rev.)	26 > Stocks with stock-split/bonus/dividends
+    27 > ATR Cross                      	28 > Bullish Higher Opens           
+    29 > Intraday Bid/Ask Build-up      	30 > ATR Trailing Stops(Swing Paper Trading)
+    31 > High Momentum(RSI,MFI,CCI)     	32 > Intraday Breakout/Breakdown setup     
+    33 > Potential Profitable setups
+
+     42 > Show Last Screened Results   
+           	
 ```
+## Running Piped Scanners
+
+https://github.com/pkjmesra/PKScreener/assets/1358101/9e579371-1035-400a-9f65-139d8407f6c7
+
+## Running Intraday analysis of Piped Scanners
+
+https://github.com/user-attachments/assets/5f6e2774-a8e5-4a99-9f7c-aa5850f9707d
+
+
+Multiple pre-defined piped scanners
+
+```
+     1 > Volume Scanners | High Momentum | Breaking Out Now | ATR Cross     	2 > Volume Scanners | High Momentum | ATR Cross
+     3 > Volume Scanners | High Momentum                                    	4 > Volume Scanners | ATR Cross
+     5 > Volume Scanners | High Bid/Ask Build Up                            	6 > Volume Scanners | ATR Cross | ATR Trailing Stops
+     7 > Volume Scanners | ATR Trailing Stops                               	8 > High Momentum | ATR Cross
+     9 > High Momentum | ATR Trailing Stop                                  	10 > ATR Cross | ATR Trailing Stop
+    11 > TTM Sqeeze Buy | Intraday RSI b/w 0 to 54                          	12 > Volume Scanners | High Momentum | Breaking Out Now | ATR Cross | Intraday RSI b/w 0 to 54
+    13 > Volume Scanners | ATR Cross | Intraday RSI b/w 0 to 54             	14 > VCP (Mark Minervini) | Chart Patterns | MA Support
+    15 > VCP | Chart Patterns | MA Support                                  	16 > Already Breaking out | VCP (Minervini) | Chart Patterns | MA Support
+    17 > ATR Trailing Stops | VCP (Minervini)                               	18 > VCP | ATR Trailing Stops
+    19 > Nifty 50,Nifty Bank | VCP | ATR Trailing Stops                     	20 > Volume Scanners | High Momentum | Breaking Out Now | ATR Cross | VCP | ATR Trailing Stops
+    21 > BullCross-MA | Fair Value Buy Opportunities                    
+
+```
+
 ## How to use on your own local Windows/Linux/Macbook laptop?
 
 # Using docker, running within docker container
 * Download and install docker desktop: https://docs.docker.com/get-docker/
 * After installation, launch/run docker desktop and if it asks, login using your docker credentials.
-* Launch any command line (for example, cmd on windows or terminal on Mac) and type `docker pull pkjmesra/pkscreener:latest`. Then type `docker run -it pkjmesra/pkscreener:latest`.  
+* Launch any command line (for example, cmd on windows or terminal on Mac) and type 
+```
+docker pull pkjmesra/pkscreener:latest
+```
+Then type 
+```
+docker run -it pkjmesra/pkscreener:latest
+```
 The option `-i` will open the `pkscreener` in interactive mode within docker. `-t` will allocate a pseudo terminal for you so you can begin to use `pkscreener`
 
+# Special notes on vulnerabilities shown in the docker image/container
+Please keep in mind that only because the container/image shows a vulnerability, it does not mean that it exists in this particular image.
+1. If you see a critical vulnerability being shown for git, it's ONLY IF we use git with v2.13 or below AND we use git submodule. In case of PKScreener, both are false. We use git >= 2.45 and we DO NOT use git submodules. See https://nvd.nist.gov/vuln/detail/CVE-2024-32002
+2. If you see high severity vulnerability for pip, it's ONLY IF we use a private indexed repository. In our case, we only use PyPi - a public python library repository. See https://nvd.nist.gov/vuln/detail/CVE-2018-20225.
+3. If you see high severity vulnerability for usage of library Pillow, it's ONLY IF we try to generate an image containing text that can uncontrollably lengthy. In PKScreener, the image is NEVER generated locally on your laptop or docker container. It is generated only when running in telegram-bot for morning/afternoon analysis alerts. Additionally, there are checks to ensure we never go beyond the maximum size of the number of columns in the analysis tables. To conclude, the image generation module never gets activated on docker/locally on your laptop. See https://nvd.nist.gov/vuln/detail/CVE-2023-44271
+
+The story is similar for other low severity vulnerabilities that docker might show. If you're genuinely concerned, you can search with the respective CVE # in the NIST database to understand more or create an issue https://github.com/pkjmesra/PKScreener/issues . We keep reviewing all vulnerabilties regularly and fix those immediately if at all they are likely to impact us or our users.
+
 # Installing the latest version from PyPi.
-* Go ahead and install using `pip install pkscreener`
+* Go ahead and install using `pip install pkscreener`. The releases page also has the latest wheels for multiple platforms.
 * This should install all of the major dependencies, except maybe, TA-Lib.
 * This app can still run without TA-Lib, but if you need to install TA-Lib for technical indicators (which otherwise is used from `pandas_ta` in the absence of TA-Lib), you can do this: Head to `.github/dependencies/` under this repo. Download the respective TA-Lib file/whl file and install either from the .whl file or from source. Check out any of the workflow files for steps to install TA-Lib.
 
@@ -200,7 +273,7 @@ The Result table contains a lot of different parameters which can be pretty over
 Feel free to Edit the parameters in the `pkscreener.ini` file which will be generated by the application.
 ```
 [config]
-period = 450d
+period = 1y
 daystolookback = 22
 duration = 1d
 minprice = 20.0
@@ -246,16 +319,16 @@ After you have finished the run, go to that copied path, zip the contents of the
 * DO NOT use the results provided by the software 'solely' to make your trading decisions.
 * Always backtest and analyze the stocks manually before you trade.
 * The Author(s), the software and any related/unrelated entity will not be held liable for your own investing decisions or losses. The authors or this softfware does not make any claim about the correctness of the results.
-* This screener began as a [fork](https://github.com/pranjal-joshi/Screeni-py) but has since added a lot of additional scanners, backtesting, Telegram bots, Alerts and a number of modifications and improvements.
+* This screener began as a [fork] but has since added a lot of additional scanners, backtesting, Telegram bots, Alerts and a number of modifications and improvements.
 
 [MADE-IN-INDIA-badge]: https://img.shields.io/badge/MADE%20WITH%20%E2%9D%A4%20IN-INDIA-orange
 [MADE-IN-INDIA]: https://en.wikipedia.org/wiki/India
 [Windows-badge]: https://img.shields.io/badge/Windows-0078D6?logo=windows&logoColor=white
-[Windows]: https://github.com/pkjmesra/PKScreener/releases/download/0.44.20240309.236/pkscreenercli.exe
+[Windows]: https://github.com/pkjmesra/PKScreener/releases/download/0.45.20240815.509/pkscreenercli.exe
 [Linux-badge]: https://img.shields.io/badge/Linux-FCC624?logo=linux&logoColor=black
-[Linux]: https://github.com/pkjmesra/PKScreener/releases/download/0.44.20240309.236/pkscreenercli.bin
+[Linux]: https://github.com/pkjmesra/PKScreener/releases/download/0.45.20240815.509/pkscreenercli.bin
 [Mac OS-badge]: https://img.shields.io/badge/mac%20os-D3D3D3?logo=apple&logoColor=000000
-[Mac OS]: https://github.com/pkjmesra/PKScreener/releases/download/0.44.20240309.236/pkscreenercli.run
+[Mac OS]: https://github.com/pkjmesra/PKScreener/releases/download/0.45.20240815.509/pkscreenercli.run
 [GitHub release (latest by date)-badge]: https://img.shields.io/github/v/release/pkjmesra/PKScreener
 [GitHub release (latest by date)]: https://github.com/pkjmesra/PKScreener/releases/latest
 [pypi-badge]: https://img.shields.io/pypi/v/pkscreener.svg?style=flat-square
@@ -268,7 +341,7 @@ After you have finished the run, go to that copied path, zip the contents of the
 [Codefactor]: https://www.codefactor.io/repository/github/pkjmesra/PKScreener
 [PR-Guidelines-badge]: https://img.shields.io/badge/PULL%20REQUEST-GUIDELINES-red?style=for-the-badge
 [PR-Guidelines]: https://github.com/pkjmesra/PKScreener/blob/new-features/CONTRIBUTING.md
-[github-license]: https://img.shields.io/pypi/l/gspread?logo=github
+[github-license]: https://img.shields.io/github/license/pkjmesra/pkscreener
 [Downloads-badge]: https://static.pepy.tech/personalized-badge/pkscreener?period=total&units=international_system&left_color=black&right_color=brightgreen&left_text=PyPi%20Downloads
 [Downloads]: https://pepy.tech/project/pkscreener
 [Latest-Downloads-badge]: https://img.shields.io/github/downloads-pre/pkjmesra/pkscreener/latest/total?logo=github

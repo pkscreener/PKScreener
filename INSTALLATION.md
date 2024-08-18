@@ -31,3 +31,16 @@ chmod +x pkscreenercli.run       # Apply Execute permission to the file
 
 10. Close the window.
 11. Now double click on `pkscreenercli.run` file to use the application.
+
+Alternative:
+1. You can simply open terminal on your Mac and run 
+```
+sudo xattr -d com.apple.quarantine <full-path-where-you-downloaded-pkscreenercli.run>
+
+```
+
+enter your password and hit enter. 
+
+2. Run the application.
+
+See https://iboysoft.com/howto/apple-cannot-check-it-for-malicious-software.html
