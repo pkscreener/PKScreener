@@ -193,6 +193,7 @@ original__stdout = sys.__stdout__
 # args.skiplistlevel3 = "0"
 # args.skiplistlevel4 = "0"
 # args.branchname = "actions-data-download"
+# args.barometer = True
 
 from pkscreener.classes.MenuOptions import MenuRenderStyle, menus, PREDEFINED_SCAN_MENU_KEYS
 

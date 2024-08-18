@@ -190,6 +190,7 @@ jobs:
         RUNNER : "GitHub_Actions"
         GSHEET_SERVICE_ACCOUNT_DEV: ${{secrets.GSHEET_SERVICE_ACCOUNT_DEV}}
         GSHEET_VIEWONLY_LINK: ${{secrets.GSHEET_VIEWONLY_LINK}}
+        ALERT_TRIGGER: ${{ inputs.alertTrigger || 'N' }}
       run: |
         ${{ inputs.prerequisites }}
         pkscreenercli.exe ${{ inputs.params }} --maxdisplayresults 100
