@@ -193,7 +193,6 @@ original__stdout = sys.__stdout__
 # args.skiplistlevel3 = "0"
 # args.skiplistlevel4 = "0"
 # args.branchname = "actions-data-download"
-# args.barometer = True
 
 from pkscreener.classes.MenuOptions import MenuRenderStyle, menus, PREDEFINED_SCAN_MENU_KEYS
 
@@ -627,9 +626,9 @@ def triggerRemoteScanAlertWorkflow(scanOptions, branch):
 
 def triggerHistoricalScanWorkflowActions(scanDaysInPast=0):
     defaultS1 = "W,N,E,M,Z,0,2,3,4,6,7,9,10,13,15" if args.skiplistlevel1 is None else args.skiplistlevel1
-    defaultS2 = "42,0,22,29,M,Z" if args.skiplistlevel2 is None else args.skiplistlevel2
+    defaultS2 = "42,0,22,29,M,Z,S,50" if args.skiplistlevel2 is None else args.skiplistlevel2
     runForIndices = [12,5,8,1,11,14]
-    runForOptions = [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,23,24,25,26]
+    runForOptions = [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39]
     runForIndicesStr = ",".join(str(x) for x in runForIndices)
     runForOptionsStr = ",".join(str(x) for x in runForOptions)
     branch = "actions-data-download"
@@ -669,7 +668,7 @@ def triggerHistoricalScanWorkflowActions(scanDaysInPast=0):
         '{"ref":"'
         + branch
         + '","inputs":{"installtalib":"N","skipDownload":"Y","scanOptions":"'
-        + '--scanDaysInPast 251 -s0 S,T,E,U,Z,H,Y,B,G,C,M,D,I,L,P -s1 W,N,E,M,Z,0,2,3,4,6,7,9,10,13,15 -s2 0,22,29,42,M,Z -s3 0 -s4 0 --branchname actions-data-download","name":"X_Cleanup"'
+        + '--scanDaysInPast 251 -s0 S,T,E,U,Z,H,Y,B,G,C,M,D,I,L,P -s1 W,N,E,M,Z,S,0,2,3,4,6,7,9,10,13,15 -s2 0,22,29,42,50,M,Z -s3 0 -s4 0 --branchname actions-data-download","name":"X_Cleanup"'
         + (',"cleanuphistoricalscans":"Y"}')
         + '}'
         )
