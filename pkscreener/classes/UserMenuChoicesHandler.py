@@ -24,6 +24,7 @@
 """
 import sys
 from PKDevTools.classes.ColorText import colorText
+from PKDevTools.classes.OutputControls import OutputControls
 
 import pkscreener.classes.ConfigManager as ConfigManager
 import pkscreener.classes.Utility as Utility
@@ -43,7 +44,7 @@ class UserMenuChoicesHandler:
                 cache_file=cache_file, defaultAnswer=defaultAnswer
             )
             if shouldReplace == "N":
-                print(
+                OutputControls().printOutput(
                     cache_file
                     + colorText.END
                     + " already exists. Exiting as user chose not to replace it!"

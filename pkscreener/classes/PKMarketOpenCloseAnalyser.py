@@ -25,17 +25,27 @@
 """
 import copy
 import datetime
+import shutil
 import sys
 import os
+import numpy as np
 import pandas as pd
 import pkscreener.classes.Utility as Utility
 from pkscreener.classes.ConfigManager import parser, tools
+from pkscreener.classes.ScreeningStatistics import ScreeningStatistics
 from PKDevTools.classes.ColorText import colorText
 from PKDevTools.classes import Archiver
 from PKDevTools.classes.Singleton import SingletonType, SingletonMixin
 from PKDevTools.classes.PKPickler import PKPicklerDB
 from PKDevTools.classes.PKDateUtilities import PKDateUtilities
+from PKDevTools.classes.MarketHours import MarketHours
 from PKDevTools.classes.log import default_logger
+from PKDevTools.classes.OutputControls import OutputControls
+from PKDevTools.classes.SuppressOutput import SuppressOutput
+from PKDevTools.classes.MarketHours import MarketHours
+
+configManager = tools()
+
 STD_ENCODING=sys.stdout.encoding if sys.stdout is not None else 'utf-8'
 
 class PKDailyStockDataDB(SingletonMixin, metaclass=SingletonType):
@@ -66,57 +76,111 @@ class PKMarketOpenCloseAnalyser:
     configManager.getConfig(parser)
     updatedCandleData = None
     allDailyCandles = None
+    allIntradayCandles = None
     def getStockDataForSimulation():
         int_exists, int_cache_file = PKMarketOpenCloseAnalyser.ensureIntradayStockDataExists()
         daily_exists, daily_cache_file = PKMarketOpenCloseAnalyser.ensureDailyStockDataExists()
         updatedCandleData = PKMarketOpenCloseAnalyser.updatedCandleData
         allDailyCandles = PKMarketOpenCloseAnalyser.allDailyCandles
         if  (int_exists and daily_exists) and (updatedCandleData is None or allDailyCandles is None):
-            latestDailyCandle,allDailyCandles = PKMarketOpenCloseAnalyser.getLatestDailyCandleData(daily_cache_file)
+            allDailyCandles = PKMarketOpenCloseAnalyser.getLatestDailyCandleData(daily_cache_file)
             morningIntradayCandle = PKMarketOpenCloseAnalyser.getIntradayCandleFromMorning(int_cache_file)
-            updatedCandleData = PKMarketOpenCloseAnalyser.combineDailyStockDataWithMorningSimulation(latestDailyCandle,allDailyCandles,morningIntradayCandle)
-            Utility.tools.saveStockData(updatedCandleData,PKMarketOpenCloseAnalyser.configManager,0,False,False)
+            updatedCandleData = PKMarketOpenCloseAnalyser.combineDailyStockDataWithMorningSimulation(allDailyCandles,morningIntradayCandle)
+            # PKMarketOpenCloseAnalyser.updatedCandleData = updatedCandleData
+            # PKMarketOpenCloseAnalyser.allDailyCandles = allDailyCandles
+            Utility.tools.saveStockData(updatedCandleData,PKMarketOpenCloseAnalyser.configManager,1,False,False, True)
         return updatedCandleData, allDailyCandles
 
-    def runOpenCloseAnalysis(updatedCandleData,allDailyCandles,screen_df,save_df,runOptionName=None):
+    def runOpenCloseAnalysis(updatedCandleData,allDailyCandles,screen_df,save_df,runOptionName=None,filteredListOfStocks=[]):
         # stockListFromMorningTrade,morningIntraday_df = PKMarketOpenCloseAnalyser.simulateMorningTrade(updatedCandleData)
         # latest_daily_df = PKMarketOpenCloseAnalyser.runScanForStocksFromMorningTrade(stockListFromMorningTrade,allDailyCandles)
-        PKMarketOpenCloseAnalyser.diffMorningCandleDataWithLatestDailyCandleData(screen_df,save_df, allDailyCandles,runOptionName=runOptionName)
+        try:
+            shouldSuppress = not OutputControls().enableMultipleLineOutput
+            with SuppressOutput(suppress_stderr=shouldSuppress, suppress_stdout=shouldSuppress):
+                save_df, screen_df = PKMarketOpenCloseAnalyser.diffMorningCandleDataWithLatestDailyCandleData(screen_df,save_df, updatedCandleData, allDailyCandles,runOptionName=runOptionName,filteredListOfStocks=filteredListOfStocks)
+        except:
+            pass
+        Utility.tools.saveStockData(allDailyCandles,PKMarketOpenCloseAnalyser.configManager,1,False,False, True)
+        return save_df, screen_df
 
     def ensureIntradayStockDataExists():
         # Ensure that the intraday_stock_data_<date>.pkl file exists
         exists, cache_file = Utility.tools.afterMarketStockDataExists(intraday=True)
+        copyFilePath = os.path.join(Archiver.get_user_outputs_dir(), f"copy_{cache_file}")
+        srcFilePath = os.path.join(Archiver.get_user_outputs_dir(), cache_file)
+        srcFileSize = os.stat(srcFilePath).st_size if os.path.exists(srcFilePath) else 0
+        if exists and srcFileSize < 1024*1024*40:
+             # File less than 30MB ? Must have been corrupted
+            try:
+                os.remove(srcFilePath)
+                exists = False
+            except:
+                pass
         if not exists:
             savedPeriod = PKMarketOpenCloseAnalyser.configManager.period
             savedDuration = PKMarketOpenCloseAnalyser.configManager.duration
             PKMarketOpenCloseAnalyser.configManager.period = "1d"
             PKMarketOpenCloseAnalyser.configManager.duration = "1m"
-            print(f"[+] {colorText.FAIL}{cache_file}{colorText.END} not found under {Archiver.get_user_outputs_dir()} !")
-            print(f"[+] {colorText.GREEN}Trying to download {cache_file}{colorText.END}. Please wait ...")
-            Utility.tools.loadStockData({},PKMarketOpenCloseAnalyser.configManager,False,'Y',False,False,None,isIntraday=True)
+            OutputControls().printOutput(f"[+] {colorText.FAIL}{cache_file}{colorText.END} not found under {Archiver.get_user_outputs_dir()} !")
+            OutputControls().printOutput(f"[+] {colorText.GREEN}Trying to download {cache_file}{colorText.END}. Please wait ...")
+            if os.path.exists(copyFilePath):
+                copyFileSize = os.stat(copyFilePath).st_size if os.path.exists(copyFilePath) else 0
+                if copyFileSize >= 1024*1024*40:
+                    shutil.copy(copyFilePath,srcFilePath) # copy is the saved source of truth
+                    return True, cache_file
+            Utility.tools.loadStockData({},PKMarketOpenCloseAnalyser.configManager,False,'Y',False,False,[],isIntraday=True)
             exists, cache_file = Utility.tools.afterMarketStockDataExists(intraday=True)
             if not exists:
-                print(f"[+] {colorText.FAIL}{cache_file}{colorText.END} not found under {Archiver.get_user_outputs_dir()} !")
-                print(f"[+] Please run {colorText.FAIL}pkscreener{colorText.END}{colorText.GREEN} -a Y -e -d -i 1m{colorText.END} and then run this menu option again.")
+                OutputControls().printOutput(f"[+] {colorText.FAIL}{cache_file}{colorText.END} not found under {Archiver.get_user_outputs_dir()}/ !")
+                OutputControls().printOutput(f"[+] Please run {colorText.FAIL}pkscreener{colorText.END}{colorText.GREEN} -a Y -e -d -i 1m{colorText.END} and then run this menu option again.")
                 input("Press any key to continue...")
             PKMarketOpenCloseAnalyser.configManager.period = savedPeriod
             PKMarketOpenCloseAnalyser.configManager.duration = savedDuration
+        try:
+            if os.path.exists(copyFilePath) and exists:
+                shutil.copy(copyFilePath,srcFilePath) # copy is the saved source of truth
+            if not os.path.exists(copyFilePath) and exists: # Let's make a copy of the original one
+                shutil.copy(srcFilePath,copyFilePath)
+        except:
+            pass
         return exists, cache_file
 
     def ensureDailyStockDataExists():
         # Ensure that the stock_data_<date>.pkl file exists
         exists, cache_file = Utility.tools.afterMarketStockDataExists(intraday=False)
+        copyFilePath = os.path.join(Archiver.get_user_outputs_dir(), f"copy_{cache_file}")
+        srcFilePath = os.path.join(Archiver.get_user_outputs_dir(), cache_file)
+        srcFileSize = os.stat(srcFilePath).st_size if os.path.exists(srcFilePath) else 0
+        if exists and srcFileSize < 1024*1024*40:
+             # File less than 30MB ? Must have been corrupted
+            try:
+                os.remove(srcFilePath)
+                exists = False
+            except:
+                pass
         if not exists:
-            print(f"[+] {colorText.FAIL}{cache_file}{colorText.END} not found under {Archiver.get_user_outputs_dir()} !")
+            OutputControls().printOutput(f"[+] {colorText.FAIL}{cache_file}{colorText.END} not found under {Archiver.get_user_outputs_dir()} !")
         # We should download a fresh copy anyways because we may have altered the existing copy in
-        # the previous run.
-        print(f"[+] {colorText.GREEN}Trying to download {cache_file}{colorText.END}. Please wait ...")
-        Utility.tools.loadStockData({},PKMarketOpenCloseAnalyser.configManager,False,'Y',False,False,None,isIntraday=False,forceRedownload=True)
-        exists, cache_file = Utility.tools.afterMarketStockDataExists(intraday=True)
-        if not exists:
-            print(f"[+] {colorText.FAIL}{cache_file}{colorText.END} not found under {Archiver.get_user_outputs_dir()} !")
-            print(f"[+] Please run {colorText.FAIL}pkscreener{colorText.END}{colorText.GREEN} -a Y -e -d{colorText.END} and then run this menu option again.")
-            input("Press any key to continue...")
+        # the previous run. -- !!!! Not required if we saved at the end of last operation !!!!
+            OutputControls().printOutput(f"[+] {colorText.GREEN}Trying to download {cache_file}{colorText.END}. Please wait ...")
+            if os.path.exists(copyFilePath):
+                copyFileSize = os.stat(copyFilePath).st_size if os.path.exists(copyFilePath) else 0
+                if copyFileSize >= 1024*1024*40:
+                    shutil.copy(copyFilePath,srcFilePath) # copy is the saved source of truth
+                    return True, cache_file
+            Utility.tools.loadStockData({},PKMarketOpenCloseAnalyser.configManager,False,'Y',False,False,[],isIntraday=False,forceRedownload=True)
+            exists, cache_file = Utility.tools.afterMarketStockDataExists(intraday=False)
+            if not exists:
+                OutputControls().printOutput(f"[+] {colorText.FAIL}{cache_file}{colorText.END} not found under {Archiver.get_user_outputs_dir()}/ !")
+                OutputControls().printOutput(f"[+] Please run {colorText.FAIL}pkscreener{colorText.END}{colorText.GREEN} -a Y -e -d{colorText.END} and then run this menu option again.")
+                input("Press any key to continue...")
+        try:
+            if os.path.exists(copyFilePath) and exists:
+                shutil.copy(copyFilePath,srcFilePath) # copy is the saved source of truth
+            if not os.path.exists(copyFilePath) and exists: # Let's make a copy of the original one
+                shutil.copy(srcFilePath,copyFilePath)
+        except:
+            pass
         return exists, cache_file
     
     def simulateMorningTrade(updatedCandleData):
@@ -134,10 +198,10 @@ class PKMarketOpenCloseAnalyser:
         return stockListFromMorningTrade, morningIntraday_df
     
     def getLatestDailyCandleData(daily_cache_file):
-        latestDailyCandle,allDailyCandles = None, None
+        allDailyCandles = None
         dailyDB = PKDailyStockDataDB(fileName=daily_cache_file)
         allDailyCandles = dailyDB.pickler.pickler.unpickle(fileName=dailyDB.pickler.fileName)
-        latestDailyCandle = {}
+        # latestDailyCandle = {}
         # stocks = list(allDailyCandles.keys())
         # for stock in stocks:
         #     try:
@@ -147,12 +211,15 @@ class PKMarketOpenCloseAnalyser:
         #         latestDailyCandle[stock] = df.to_dict("split")
         #     except:
         #         continue
-        return latestDailyCandle,allDailyCandles
+        return allDailyCandles
     
-    def getIntradayCandleFromMorning(int_cache_file):
+    def getIntradayCandleFromMorning(int_cache_file=None,candle1MinuteNumberSinceMarketStarted=0):
+        if candle1MinuteNumberSinceMarketStarted <= 0:
+            candle1MinuteNumberSinceMarketStarted = PKMarketOpenCloseAnalyser.configManager.morninganalysiscandlenumber
         morningIntradayCandle = None
         intradayDB = PKIntradayStockDataDB(fileName=int_cache_file)
         allDailyIntradayCandles = intradayDB.pickler.pickler.unpickle(fileName=intradayDB.pickler.fileName)
+        PKMarketOpenCloseAnalyser.allIntradayCandles = allDailyIntradayCandles
         morningIntradayCandle = {}
         stocks = list(allDailyIntradayCandles.keys())
         numOfCandles = PKMarketOpenCloseAnalyser.configManager.morninganalysiscandlenumber
@@ -170,21 +237,41 @@ class PKMarketOpenCloseAnalyser:
                                 columns=allDailyIntradayCandles[stock]["columns"],
                                 index=allDailyIntradayCandles[stock]["index"])
                 df = df.head(numOfCandles)
-                df = df[df.index <=  f'{PKDateUtilities.tradingDate().strftime("%Y-%m-%d")} 09:57:00+05:30']
+                try:
+                    df = df[df.index <=  pd.to_datetime(f'{PKDateUtilities.tradingDate().strftime(f"%Y-%m-%d")} {MarketHours().openHour:02}:{MarketHours().openMinute+candle1MinuteNumberSinceMarketStarted}:00+05:30').to_datetime64()]
+                except:
+                    df = df[df.index <=  pd.to_datetime(f'{PKDateUtilities.tradingDate().strftime(f"%Y-%m-%d")} {MarketHours().openHour:02}:{MarketHours().openMinute+candle1MinuteNumberSinceMarketStarted}:00+05:30', utc=True)]
+                    pass
                 if df is not None and len(df) > 0:
-                    combinedCandle = {"Open":df["Open"][0], "High":max(df["High"]), 
-                                    "Low":min(df["Low"]),"Close":df["Close"][-1],
+                    combinedCandle = {"Open":PKMarketOpenCloseAnalyser.getMorningOpen(df), "High":max(df["High"]), 
+                                    "Low":min(df["Low"]),"Close":PKMarketOpenCloseAnalyser.getMorningClose(df),
                                     "Adj Close":df["Adj Close"][-1],"Volume":sum(df["Volume"])}
-                    tradingDate = PKDateUtilities.tradingDate()
-                    timestamp = datetime.datetime.strptime(tradingDate.strftime("%Y-%m-%d hh:mm:ss"),"%Y-%m-%d hh:mm:ss")
+                    tradingDate = df.index[-1] #PKDateUtilities.tradingDate()
+                    timestamp = datetime.datetime.strptime(tradingDate.strftime("%Y-%m-%d %H:%M:%S"),"%Y-%m-%d %H:%M:%S")
                     df = pd.DataFrame([combinedCandle], columns=df.columns, index=[timestamp])
                     morningIntradayCandle[stock] = df.to_dict("split")
             except Exception as e:
-                print(f"{stock}:    {e}")
+                OutputControls().printOutput(f"{stock}:    {e}")
                 continue
         return morningIntradayCandle
 
-    def combineDailyStockDataWithMorningSimulation(latestDailyCandle,allDailyCandles,morningIntradayCandle):
+    def getMorningOpen(df):
+        open = df["Open"][0]
+        index = 0
+        while open is np.nan and index < len(df):
+            open = df["Open"][index + 1]
+            index += 1
+        return open
+    
+    def getMorningClose(df):
+        close = df["Close"][-1]
+        index = len(df)
+        while close is np.nan and index >= 0:
+            close = df["Close"][index - 1]
+            index -= 1
+        return close
+    
+    def combineDailyStockDataWithMorningSimulation(allDailyCandles,morningIntradayCandle):
         mutableAllDailyCandles = copy.deepcopy(allDailyCandles)
         stocks = list(mutableAllDailyCandles.keys())
         intradayStocks = list(morningIntradayCandle.keys())
@@ -200,6 +287,9 @@ class PKMarketOpenCloseAnalyser:
                     priceDict["Morning"] = morningPrice
                     priceDict["EoD"] = closePrice
                     listPriceDict.append(priceDict)
+                    # We basically need to replace today's candle with a single candle that has data from market open to the time
+                    # when we are taking as reference point in the morning. This is how it would have looked when running the scan 
+                    # in the morning hours.
                     mutableAllDailyCandles[stock]["data"] = mutableAllDailyCandles[stock]["data"][:-1] + [morningIntradayCandle[stock]["data"][0]]
                     mutableAllDailyCandles[stock]["index"] = mutableAllDailyCandles[stock]["index"][:-1] + morningIntradayCandle[stock]["index"]
                 else:
@@ -209,64 +299,159 @@ class PKMarketOpenCloseAnalyser:
                     del mutableAllDailyCandles[stock]
             except:
                 del mutableAllDailyCandles[stock]
+                if 'PKDevTools_Default_Log_Level' in os.environ.keys():
+                    intradayChange = colorText.miniTabulator().tabulate(
+                                        pd.DataFrame(listPriceDict),
+                                        headers="keys",
+                                        tablefmt=colorText.No_Pad_GridFormat,
+                                        showindex=False
+                                    ).encode("utf-8").decode(STD_ENCODING)
+                    default_logger().debug(intradayChange)
                 continue
-            if 'PKDevTools_Default_Log_Level' in os.environ.keys():
-                intradayChange = colorText.miniTabulator().tabulate(
-                                    pd.DataFrame(listPriceDict),
-                                    headers="keys",
-                                    tablefmt=colorText.No_Pad_GridFormat,
-                                    showindex=False
-                                ).encode("utf-8").decode(STD_ENCODING)
-                default_logger().debug(intradayChange)
         return mutableAllDailyCandles
 
     def runScanForStocksFromMorningTrade(stockListFromMorningTrade,dailyCandleData):
         latest_daily_df = None
         return latest_daily_df
 
-    def diffMorningCandleDataWithLatestDailyCandleData(screen_df,save_df, allDailyCandles,runOptionName=None):
+    def diffMorningCandleDataWithLatestDailyCandleData(screen_df,save_df, updatedCandleData, allDailyCandles,runOptionName=None,filteredListOfStocks=[]):
         save_df.reset_index(inplace=True)
         screen_df.reset_index(inplace=True)
+        save_df.drop(f"index", axis=1, inplace=True, errors="ignore")
+        screen_df.drop(f"index", axis=1, inplace=True, errors="ignore")
         stocks = save_df["Stock"]
+        filterStocks = []
+        for stock in stocks:
+            if stock in filteredListOfStocks:
+                filterStocks.append(stock)
+        stocks = filterStocks
+        save_df = save_df[save_df['Stock'].isin(filteredListOfStocks)]
+        df_screenResults = None
+        for stk in filteredListOfStocks:
+            df_screenResults_filter = screen_df[screen_df['Stock'].astype(str).str.contains(f"NSE%3A{stk}") == True]
+            df_screenResults = pd.concat([df_screenResults, df_screenResults_filter], axis=0)
+        screen_df = df_screenResults
         eodLTPs = []
-        diff = []
+        dayHighLTPs = []
+        morningTimestamps = []
+        morningAlertLTPs = []
+        sellTimestamps = []
+        dayHighTimestamps = []
+        sellLTPs = []
+        eodDiffs = []
+        dayHighDiffs = []
+        sqrOffDiffs = []
         index = 0
+        ts = None
+        row = None
+        scrStats = ScreeningStatistics(PKMarketOpenCloseAnalyser.configManager, default_logger())
         for stock in stocks:
             try:
                 # Open, High, Low, Close, Adj Close, Volume. We need the 3rd index item: Close.
+                dayHighLTP = allDailyCandles[stock]["data"][-1][1]
                 endOfDayLTP = allDailyCandles[stock]["data"][-1][3]
-                morningLTP = round(save_df["LTP"][index],2)
+                savedMorningLTP = updatedCandleData[stock]["data"][-1][3]
+                morningLTP = savedMorningLTP if pd.notna(savedMorningLTP) else round(save_df["LTP"][index],2)
+                morningTime = updatedCandleData[stock]["index"][-1].strftime("%H:%M")
+                morningTimestamps.append(morningTime)
+                morningCandles = PKMarketOpenCloseAnalyser.allIntradayCandles
+                df = pd.DataFrame(data=morningCandles[stock]["data"],
+                                columns=morningCandles[stock]["columns"],
+                                index=morningCandles[stock]["index"])
+                # try:
+                #     # Let's only consider those candles that are after the alert issue-time in the mornings
+                #     df = df[df.index >=  pd.to_datetime(f'{PKDateUtilities.tradingDate().strftime(f"%Y-%m-%d")} 09:{15+PKMarketOpenCloseAnalyser.configManager.morninganalysiscandlenumber}:00+05:30').to_datetime64()]
+                # except:
+                #     df = df[df.index >=  pd.to_datetime(f'{PKDateUtilities.tradingDate().strftime(f"%Y-%m-%d")} 09:{15+PKMarketOpenCloseAnalyser.configManager.morninganalysiscandlenumber}:00+05:30', utc=True)]
+                #     pass
+                ts, row = scrStats.findMACDCrossover(df=df,
+                                           afterTimestamp=updatedCandleData[stock]["index"][-1],
+                                           nthCrossover=1,
+                                           upDirection=True)
+                # saveDictionary = {}
+                # screeningDictionary = {}
+                # nextSellMinute = 1
+                # foundNextSellCandle = False
+                # index = None
+                # while not foundNextSellCandle:
+                #     try:
+                #         # Let's only consider those candles that are right after the alert issue-time in the mornings
+                #         index = pd.to_datetime(f'{PKDateUtilities.tradingDate().strftime(f"%Y-%m-%d")} {MarketHours().openHour:02}:{MarketHours().openMinute+PKMarketOpenCloseAnalyser.configManager.morninganalysiscandlenumber+nextSellMinute}:00+05:30').to_datetime64()
+                #         df = df[df.index <=  index]
+                #     except:
+                #         index = pd.to_datetime(f'{PKDateUtilities.tradingDate().strftime(f"%Y-%m-%d")} {MarketHours().openHour:02}:{MarketHours().openMinute+PKMarketOpenCloseAnalyser.configManager.morninganalysiscandlenumber+nextSellMinute}:00+05:30', utc=True)
+                #         df = df[df.index <=  index]
+                #         pass
+                #     foundNextSellCandle = scrStats.findATRTrailingStops(df=df,sensitivity=configManager.atrTrailingStopSensitivity, atr_period=configManager.atrTrailingStopPeriod,ema_period=configManager.atrTrailingStopEMAPeriod,buySellAll=2,saveDict=saveDictionary,screenDict=screeningDictionary)
+                #     nextSellMinute += 1
+                # if foundNextSellCandle:
+                #     ts = df.tail(len(df)-index +1).head(1).index[-1]
+                #     row = df[df.index == ts]
+                highTS, highRow = scrStats.findIntradayHighCrossover(df=df)
+                # buySell_df = scrStats.computeBuySellSignals(updatedCandleData[stock]["data"])
+                # OutputControls().printOutput(buySell_df)
+                dayHighLTP = dayHighLTP if pd.notna(dayHighLTP) else highRow["High"][-1]
+                sellTimestamps.append(ts.strftime("%H:%M"))
+                dayHighTimestamps.append(highTS.strftime("%H:%M"))
+                sellLTPs.append(row["High"][-1])
                 eodLTPs.append(round(endOfDayLTP,2))
-                diff.append(round(endOfDayLTP - morningLTP,2))
+                dayHighLTPs.append(round(dayHighLTP,2))
+                eodDiffs.append(round(endOfDayLTP - morningLTP,2))
+                dayHighDiffs.append(round(dayHighLTP - morningLTP,2))
+                sqrOffDiffs.append(round(row["High"][-1] - morningLTP,2))
+                morningAlertLTPs.append(str(int(round(morningLTP,0))))
                 index += 1
             except:
                 eodLTPs.append("0")
-                diff.append("0")
+                eodDiffs.append("0")
+                dayHighLTPs.append("0")
+                dayHighDiffs.append("0")
                 continue
-        save_df["EoDLTP"] = eodLTPs
-        screen_df["EoDLTP"] = eodLTPs
-        save_df["Diff"] = diff
-        screen_df["Diff"] = diff
+        diffColumns = ["LTP@Alert", "AlertTime", "SqrOff", "SqrOffLTP", "SqrOffDiff","DayHighTime","DayHigh","DayHighDiff", "EoDLTP", "EoDDiff"]
+        diffValues = [morningAlertLTPs, morningTimestamps, sellTimestamps, sellLTPs, sqrOffDiffs,dayHighTimestamps,dayHighLTPs, dayHighDiffs,eodLTPs, eodDiffs]
+        for column in diffColumns:
+            columnName = column
+            save_df[columnName] = diffValues[diffColumns.index(columnName)]
+            screen_df.loc[:, columnName] = save_df.loc[:, columnName].apply(
+                lambda x: x if columnName in ["LTP@Alert","AlertTime", "SqrOff", "SqrOffLTP", "EoDLTP","DayHigh","DayHighTime"] else ((colorText.GREEN if x >= 0 else colorText.FAIL) + str(x) + colorText.END)
+            )
+
         columns = save_df.columns
         lastIndex = len(save_df)
         for col in columns:
-            if col in ["Stock", "LTP", "%Chng", "EoDLTP", "Diff","Pattern"]:
+            if col in ["Stock", "LTP@Alert", "Pattern", "LTP", "SqrOffLTP","SqrOffDiff","DayHigh","DayHighDiff", "EoDLTP", "EoDDiff", "%Chng"]:
                 if col == "Stock":
-                    save_df.loc[lastIndex,col] = "PORTFOLIO"
+                    save_df.loc[lastIndex,col] = "BASKET"
                 elif col == "Pattern":
                     save_df.loc[lastIndex,col] = runOptionName if runOptionName is not None else ""
-                elif col in ["LTP","EoDLTP", "Diff"]:
+                elif col in ["LTP", "LTP@Alert", "SqrOffLTP","SqrOffDiff", "EoDLTP", "EoDDiff","DayHigh","DayHighDiff"]:
                     save_df.loc[lastIndex,col] = round(sum(save_df[col].dropna(inplace=False).astype(float)),2)
                 elif col == "%Chng":
-                    change_pct = sum(save_df["Diff"].dropna(inplace=False).astype(float))*100/sum(save_df["LTP"].dropna(inplace=False).astype(float))
-                    save_df.loc[lastIndex,col] = round(change_pct,2)
+                    ltpSum = sum(save_df["LTP@Alert"].dropna(inplace=False).astype(float))
+                    change_pct = sum(save_df["EoDDiff"].dropna(inplace=False).astype(float))*100/ltpSum
+                    save_df.loc[lastIndex,col] = f"{round(change_pct,2)}%"
             else:
                 save_df.loc[lastIndex,col] = ""
             screen_df.loc[lastIndex,col] = save_df.loc[lastIndex,col]
+        eodDiff = save_df.loc[lastIndex,"EoDDiff"]
+        sqrOffDiff = save_df.loc[lastIndex,"SqrOffDiff"]
+        dayHighDiff = save_df.loc[lastIndex,"DayHighDiff"]
+        save_df.loc[lastIndex,"EoDDiff"] = str(eodDiff) + f'({round(100*eodDiff/ltpSum,2)}%)'
+        save_df.loc[lastIndex,"SqrOffDiff"] = str(sqrOffDiff) + f'({round(100*sqrOffDiff/ltpSum,2)}%)'
+        save_df.loc[lastIndex,"DayHighDiff"] = str(dayHighDiff) + f'({round(100*dayHighDiff/ltpSum,2)}%)'
+        screen_df.loc[lastIndex,"EoDDiff"] = (colorText.GREEN if eodDiff >= 0 else colorText.FAIL) + save_df.loc[lastIndex,"EoDDiff"] + colorText.END
+        screen_df.loc[lastIndex,"SqrOffDiff"] = (colorText.GREEN if sqrOffDiff >= 0 else colorText.FAIL) + save_df.loc[lastIndex,"SqrOffDiff"] + colorText.END
+        screen_df.loc[lastIndex,"DayHighDiff"] = (colorText.GREEN if dayHighDiff >= 0 else colorText.FAIL) + save_df.loc[lastIndex,"DayHighDiff"] + colorText.END
         save_df.set_index("Stock", inplace=True)
         screen_df.set_index("Stock", inplace=True)
-        if 'index' in save_df.columns:
-            save_df.drop('index', axis=1, inplace=True, errors="ignore")
-        if 'index' in screen_df.columns:
-            screen_df.drop('index', axis=1, inplace=True, errors="ignore")
-
+        PKMarketOpenCloseAnalyser.allIntradayCandles = None
+        screen_df.replace(np.nan, "", regex=True)
+        save_df.replace(np.nan, "", regex=True)
+        # Drop the unnecessary columns for this scanner type to make way for other columns to be fitted nicely on screen
+        columnsToBeDropped = ["Breakout(22Prds)","MA-Signal","Trend(22Prds)","index","EoDLTP"]
+        for col in columnsToBeDropped:
+            if col in save_df.columns:
+                save_df.drop(col, axis=1, inplace=True, errors="ignore")
+            if col in screen_df.columns:
+                screen_df.drop(col, axis=1, inplace=True, errors="ignore")
+        return save_df, screen_df

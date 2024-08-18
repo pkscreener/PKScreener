@@ -22,15 +22,30 @@
     SOFTWARE.
 
 """
-
+import os
 from PKNSETools.PKNSEStockDataFetcher import nseStockDataFetcher
 from PKDevTools.classes.Singleton import SingletonType, SingletonMixin
 from PKDevTools.classes.log import default_logger
+from PKDevTools.classes.SuppressOutput import SuppressOutput
+from PKDevTools.classes import log as log
 
 class MarketStatus(SingletonMixin, metaclass=SingletonType):
     nseFetcher = nseStockDataFetcher()
     def __init__(self):
         super(MarketStatus, self).__init__()
+
+    @property
+    def exchange(self):
+        if "exchange" in self.attributes.keys():
+            return self.attributes["exchange"]
+        else:
+            return "^NSEI"
+    
+    @exchange.setter
+    def exchange(self, exchangeKey):
+        if self.exchange != exchangeKey:
+            self.marketStatus = self.getMarketStatus(exchangeSymbol=exchangeKey)
+        self.attributes["exchange"] = exchangeKey
 
     @property
     def marketStatus(self):
@@ -45,12 +60,19 @@ class MarketStatus(SingletonMixin, metaclass=SingletonType):
     def marketStatus(self, status):
         self.attributes["marketStatus"] = status
 
-    def getMarketStatus(self, progress=None, task_id=0, exchangeSymbol="^NSEI"):
+    def getMarketStatus(self, progress=None, task_id=0, exchangeSymbol="^NSEI",namedOnly=False):
         lngStatus = ""
         try:
-            if progress:
-                progress[task_id] = {"progress": 0, "total": 1}
-            _,lngStatus,_ = MarketStatus.nseFetcher.capitalMarketStatus(exchange=exchangeSymbol)
+            suppressLogs = True
+            if "PKDevTools_Default_Log_Level" in os.environ.keys():
+                suppressLogs = os.environ["PKDevTools_Default_Log_Level"] == str(log.logging.NOTSET)
+            with SuppressOutput(suppress_stdout=suppressLogs, suppress_stderr=suppressLogs):
+                if progress:
+                    progress[task_id] = {"progress": 0, "total": 1}
+                _,lngStatus,_ = MarketStatus.nseFetcher.capitalMarketStatus(exchange=exchangeSymbol)
+                if exchangeSymbol in ["^NSEI","^BSESN"] and not namedOnly:
+                    _,bseStatus,_ = MarketStatus.nseFetcher.capitalMarketStatus(exchange="^BSESN")
+                    lngStatus = f"{lngStatus} | {bseStatus}"
             if progress:
                 progress[task_id] = {"progress": 1, "total": 1}
         except Exception as e:# pragma: no cover

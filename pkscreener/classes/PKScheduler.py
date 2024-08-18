@@ -24,12 +24,22 @@
 """
 import warnings
 import os
+import sys
+import time
+# from PKDevTools.classes.OutputControls import OutputControls
 warnings.simplefilter("ignore", UserWarning,append=True)
 os.environ["PYTHONWARNINGS"]="ignore::UserWarning"
+
+def init_pool_processes(the_lock):
+    '''Initialize each process with a global variable lock.
+    '''
+    global lock
+    lock = the_lock
+
 import multiprocessing
 from multiprocessing import Lock
 
-from time import sleep
+# from time import sleep
 from concurrent.futures import ProcessPoolExecutor
 from rich.progress import Progress, BarColumn, TimeRemainingColumn, TimeElapsedColumn
 from rich.console import Console
@@ -37,13 +47,8 @@ from rich.control import Control
 from rich.segment import ControlType
 from pkscreener.classes.PKTask import PKTask
 
-multiprocessing.freeze_support()
-
-def init_pool_processes(the_lock):
-    '''Initialize each process with a global variable lock.
-    '''
-    global lock
-    lock = the_lock
+if __name__ == '__main__':
+    multiprocessing.freeze_support()
 
 # def long_running_fn(*args, **kwargs):
 #     len_of_task = random.randint(3, 20000)  # take some random length of time
@@ -60,7 +65,7 @@ def init_pool_processes(the_lock):
 
 progressUpdater=None
 class PKScheduler():
-    def scheduleTasks(tasksList=[], label:str=None, showProgressBars=False,submitTaskAsArgs=True):
+    def scheduleTasks(tasksList=[], label:str=None, showProgressBars=False,submitTaskAsArgs=True, timeout=6, minAcceptableCompletionPercentage=100):
         n_workers = multiprocessing.cpu_count() - 1  # set this to the number of cores you have on your machine
         global progressUpdater
         console = Console()
@@ -87,6 +92,7 @@ class PKScheduler():
                 _progress = manager.dict()
                 _results = manager.dict()
                 console.control(Control(*((ControlType.CURSOR_UP,1),))) # Cursor up 1 lines f"\x1b[{param}A"
+                # sys.stdout.write("\x1b[2K")  # delete the last line
                 overall_progress_task = progress.add_task(f"[green]{label if label is not None else 'Pending jobs progress:'}")
 
                 lock = Lock()
@@ -102,13 +108,18 @@ class PKScheduler():
                         futures.append(executor.submit(task.long_running_fn, task if submitTaskAsArgs else task.long_running_fn_args))
 
                     # monitor the progress:
-                    while (n_finished := sum([future.done() for future in futures])) < len(futures):
+                    start_time = time.time()
+                    while (((n_finished := sum([future.done() for future in futures])) < len(futures)) and ((time.time() - start_time) < timeout)):
                         progress.update(
                             overall_progress_task,
                             completed=n_finished,
                             total=len(futures),
                             visible=n_finished < len(futures)
                         )
+                        # OutputControls().printOutput(f"{n_finished} of {len(futures)}")
+                        # We've reached a state where the caller may not want to wait any further
+                        if n_finished*100/len(futures) >= minAcceptableCompletionPercentage:
+                            break
                         for task_id, update_data in _progress.items():
                             for task in tasksList:
                                 if task.taskId == task_id:
@@ -143,8 +154,8 @@ class PKScheduler():
                     lock.acquire()
                     progress.refresh()
                     # raise any errors:
-                    for future in futures:
-                        future.result()
+                    # for future in futures:
+                    #     future.result()
                     lock.release()
 
 # if __name__ == "__main__":

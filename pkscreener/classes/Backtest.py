@@ -36,7 +36,11 @@ from pkscreener.classes.ConfigManager import parser, tools
 configManager = tools()
 configManager.getConfig(parser)
 
-
+# Backtests for a given stock with the data for the past x number of days.
+# Before this gets called, the assumption is that the user must already
+# have run some scanner from the available options. SampleDays is the
+# sampling period for which we need to run the backtests. Generally, a
+# 30 day period or a 180-day period should be more than enough.
 def backtest(
     stock,
     data,
@@ -71,8 +75,8 @@ def backtest(
         return backTestedData
     data = data.head(max(calcPeriods) + 1)
     # Let's check the returns for the given strategy over a period ranging from 1 period to 30 periods.
-    # columns=['Stock', 'Date', 'Volume', 'Trend', 'MA-Signal', 'LTP', '52Wk H',
-    #          '52Wk L', '1-Pd', '2-Pd', '3-Pd', '4-Pd', '5-Pd', '10-Pd', '15-Pd',
+    # columns=['Stock', 'Date', 'Volume', 'Trend', 'MA-Signal', 'LTP', '52Wk-H',
+    #          '52Wk-L', '1-Pd', '2-Pd', '3-Pd', '4-Pd', '5-Pd', '10-Pd', '15-Pd',
     #          '22-Pd', '30-Pd', 'Consol.', 'Breakout', 'RSI', 'Pattern', 'CCI',
     #          'LTP1', 'Growth1', 'LTP2', 'Growth2', 'LTP3', 'Growth3', 'LTP4',
     #          'Growth4', 'LTP5', 'Growth5', 'LTP10', 'Growth10', 'LTP15', 'Growth15',
@@ -96,8 +100,8 @@ def backtest(
                 "Trend",
                 "MA-Signal",
                 "LTP",
-                "52Wk H",
-                "52Wk L"
+                "52Wk-H",
+                "52Wk-L"
             ]
     backTestedStock = {
         "Stock": "",
@@ -106,8 +110,8 @@ def backtest(
         "Trend": "",
         "MA-Signal": "",
         "LTP": "",
-        "52Wk H": "",
-        "52Wk L": ""
+        "52Wk-H": "",
+        "52Wk-L": ""
     }
     for prd in calcPeriods:
         columns.append(f"{prd}-Pd")
@@ -121,8 +125,8 @@ def backtest(
     backTestedStock["MA-Signal"] = screenedDict["MA-Signal"]
     backTestedStock["Volume"] = screenedDict["Volume"]
     backTestedStock["LTP"] = screenedDict["LTP"]
-    backTestedStock["52Wk H"] = screenedDict["52Wk H"]
-    backTestedStock["52Wk L"] = screenedDict["52Wk L"]
+    backTestedStock["52Wk-H"] = screenedDict["52Wk-H"]
+    backTestedStock["52Wk-L"] = screenedDict["52Wk-L"]
     backTestedStock["RSI"] = screenedDict["RSI"]
     backTestedStock["Trend"] = screenedDict["Trend"]
     backTestedStock["Pattern"] = screenedDict["Pattern"]
@@ -163,7 +167,9 @@ def backtest(
         pass
     return backTestedData
 
-
+# Prepares a backtest summary based on the color codes of individual days or stocks
+# Based on that it calculates an overall success rate of a given strategy for which
+# this backtest is run.
 def backtestSummary(df):
     summary = {}
     overall = {}

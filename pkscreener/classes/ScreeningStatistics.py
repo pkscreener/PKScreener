@@ -37,6 +37,7 @@ from sys import float_info as sflt
 import pkscreener.classes.Utility as Utility
 from pkscreener import Imports
 from pkscreener.classes.Pktalib import pktalib
+from PKDevTools.classes.OutputControls import OutputControls
 from PKNSETools.morningstartools import Stock
 
 if sys.version_info >= (3, 11):
@@ -49,12 +50,15 @@ if Imports["scipy"]:
 from PKDevTools.classes.ColorText import colorText
 from PKDevTools.classes.PKDateUtilities import PKDateUtilities
 from PKDevTools.classes.SuppressOutput import SuppressOutput
+from PKDevTools.classes.MarketHours import MarketHours
 # from PKDevTools.classes.log import measure_time
 
 # Exception for only downloading stock data and not screening
 class DownloadDataOnly(Exception):
     pass
 
+class EligibilityConditionNotMet(Exception):
+    pass
 
 # Exception for stocks which are not newly listed when screening only for Newly Listed
 class NotNewlyListed(Exception):
@@ -81,9 +85,117 @@ class StockDataNotAdequate(Exception):
 
 # This Class contains methods for stock analysis and screening validation
 class ScreeningStatistics:
-    def __init__(self, configManager, default_logger) -> None:
+    def __init__(self, configManager, default_logger,shouldLog=False) -> None:
         self.configManager = configManager
         self.default_logger = default_logger
+        self.shouldLog = shouldLog
+
+    #Calculating signals
+    def computeBuySellSignals(self,df,ema_period=200,retry=True):
+        try:
+            if Imports["vectorbt"]:
+                from vectorbt.indicators import MA as vbt
+                if df is not None:
+                    ema = vbt.run(df["Close"], 1, short_name='EMA', ewm=True)
+                    df["Above"] = ema.ma_crossed_above(df["ATRTrailingStop"])
+                    df["Below"] = ema.ma_crossed_below(df["ATRTrailingStop"])
+            else:
+                OutputControls().printOutput(f"{colorText.FAIL}The main module needed for best Buy/Sell result calculation is missing. Falling back on an alternative, but it is not very reliable.{colorText.END}")
+                # if self.shouldLog:
+                #     self.default_logger.debug(e, exc_info=True)
+                if df is not None:
+                    ema = pktalib.EMA(df["Close"], ema_period) if ema_period > 1 else df["Close"]#short_name='EMA', ewm=True)        
+                    df["Above"] = ema > df["ATRTrailingStop"]
+                    df["Below"] = ema < df["ATRTrailingStop"]
+        except (OSError,FileNotFoundError) as e:
+            # if self.shouldLog:
+            #     self.default_logger.debug(e, exc_info=True)
+            OutputControls().printOutput(f"{colorText.FAIL}Some dependencies are missing. Try and run this option again.{colorText.END}")
+            # OSError:RALLIS: [Errno 2] No such file or directory: '/tmp/_MEIzoTV6A/vectorbt/templates/light.json'
+            # if "No such file or directory" in str(e):
+            try:
+                import os
+                outputFolder = None
+                try:
+                    outputFolder = os.sep.join(e.filename.split(os.sep)[:-1])
+                except Exception as e:
+                    # if self.shouldLog:
+                    #     self.default_logger.debug(e, exc_info=True)
+                    outputFolder = os.sep.join(str(e).split("\n")[0].split(": ")[1].replace("'","").split(os.sep)[:-1])
+            except Exception as e:
+                # if self.shouldLog:
+                #     self.default_logger.debug(e, exc_info=True)
+                pass
+            self.downloadSaveTemplateJsons(outputFolder)
+            if retry:
+                return self.computeBuySellSignals(df,ema_period=ema_period,retry=False)
+            return None
+        except ImportError as e:
+            OutputControls().printOutput(f"{colorText.FAIL}The main module needed for best Buy/Sell result calculation is missing. Falling back on an alternative, but it is not very reliable.{colorText.END}")
+            # if self.shouldLog:
+            #     self.default_logger.debug(e, exc_info=True)
+            if df is not None:
+                ema = pktalib.EMA(df["Close"], ema_period) if ema_period > 1 else df["Close"]#short_name='EMA', ewm=True)        
+                df["Above"] = ema > df["ATRTrailingStop"]
+                df["Below"] = ema < df["ATRTrailingStop"]
+        except Exception as e:
+            # if self.shouldLog:
+            #     self.default_logger.debug(e, exc_info=True)
+            pass
+                
+        if df is not None:
+            df["Buy"] = (df["Close"] > df["ATRTrailingStop"]) & (df["Above"]==True)
+            df["Sell"] = (df["Close"] < df["ATRTrailingStop"]) & (df["Below"]==True)
+
+        return df
+
+    # Example of combining UTBot Alerts with RSI and ADX
+    def custom_strategy(self,dataframe):
+        dataframe = self.findBuySellSignalsFromATRTrailing(dataframe, key_value=2, atr_period=7, ema_period=100)
+        
+        # Calculate RSI and ADX
+        rsi = pktalib.RSI(dataframe['Close'])
+        adx = pktalib.ADX(dataframe['High'], dataframe['Low'], dataframe['Close'])
+        
+        # Define conditions based on UTBot Alerts and additional indicators
+        # ... (your custom conditions here)
+        
+        return dataframe
+
+    def downloadSaveTemplateJsons(self, outputFolderPath=None):
+        from PKDevTools.classes.Fetcher import fetcher
+        import os
+        if outputFolderPath is None:
+            dirName = 'templates'
+            outputFolder = os.path.join(os.getcwd(),dirName)
+        else:
+            outputFolder = outputFolderPath
+        outputFolder = f"{outputFolder}{os.sep}" if not outputFolder.endswith(f"{os.sep}") else outputFolder
+        if not os.path.isdir(outputFolder):
+            os.makedirs(outputFolder, exist_ok=True)
+        json1 = "https://raw.githubusercontent.com/polakowo/vectorbt/master/vectorbt/templates/dark.json"
+        json2 = "https://raw.githubusercontent.com/polakowo/vectorbt/master/vectorbt/templates/light.json"
+        json3 = "https://raw.githubusercontent.com/polakowo/vectorbt/master/vectorbt/templates/seaborn.json"
+        fileURLs = [json1,json2,json3]
+        fileFetcher = fetcher()
+        from PKDevTools.classes.Utils import random_user_agent
+        for url in fileURLs:
+            try:
+                path = os.path.join(outputFolder,url.split("/")[-1])
+                if not os.path.exists(path):
+                    # if self.shouldLog:
+                    #     self.default_logger.debug(f"Fetching {url} to keep at {path}")
+                    resp = fileFetcher.fetchURL(url=url,trial=3,timeout=5,headers={'user-agent': f'{random_user_agent()}'})
+                    if resp is not None and resp.status_code == 200:
+                        with open(path, "w") as f:
+                            f.write(resp.text)
+                # else:
+                #     if self.shouldLog:
+                #         self.default_logger.debug(f"Already exists: {path}")
+            except Exception as e:
+                # if self.shouldLog:
+                #     self.default_logger.debug(e, exc_info=True)
+                continue
 
     # Find stocks that have broken through 52 week high.
     def find52WeekHighBreakout(self, df):
@@ -95,22 +207,11 @@ class ScreeningStatistics:
         data = data.replace([np.inf, -np.inf], 0)
         one_week = 5
         recent = data.head(1)["High"].iloc[0]
-        last1Week = data.head(one_week)
-        last2Week = data.head(2 * one_week)
-        previousWeek = last2Week.tail(one_week)
         full52Week = data.head(50 * one_week)
-        last1WeekHigh = last1Week["High"].max()
-        previousWeekHigh = previousWeek["High"].max()
         full52WeekHigh = full52Week["High"].max()
-        return (
-            (recent >= full52WeekHigh)
-            or (last1WeekHigh >= max(full52WeekHigh, last1WeekHigh))
-            or (
-                last1WeekHigh
-                >= previousWeekHigh
-                >= max(full52WeekHigh, previousWeekHigh)
-            )
-        )
+        # if self.shouldLog:
+        #     self.default_logger.debug(data.head(10))
+        return recent >= full52WeekHigh
 
     #@measure_time
     # Find stocks' 52 week high/low.
@@ -128,8 +229,8 @@ class ScreeningStatistics:
         full52WeekHigh = full52Week["High"].max()
         full52WeekLow = full52Week["Low"].min()
 
-        saveDict["52Wk H"] = "{:.2f}".format(full52WeekHigh)
-        saveDict["52Wk L"] = "{:.2f}".format(full52WeekLow)
+        saveDict["52Wk-H"] = "{:.2f}".format(full52WeekHigh)
+        saveDict["52Wk-L"] = "{:.2f}".format(full52WeekLow)
         if recentHigh >= full52WeekHigh:
             highColor = colorText.GREEN
         elif recentHigh >= 0.9 * full52WeekHigh:
@@ -143,53 +244,59 @@ class ScreeningStatistics:
         else:
             lowColor = colorText.GREEN
         screenDict[
-            "52Wk H"
+            "52Wk-H"
         ] = f"{highColor}{str('{:.2f}'.format(full52WeekHigh))}{colorText.END}"
         screenDict[
-            "52Wk L"
+            "52Wk-L"
         ] = f"{lowColor}{str('{:.2f}'.format(full52WeekLow))}{colorText.END}"
+        # if self.shouldLog:
+        #     self.default_logger.debug(data.head(10))
+
+    # Find stocks that have broken through 10 days low.
+    def find10DaysLowBreakout(self, df):
+        if df is None or len(df) == 0:
+            return False
+        data = df.copy()
+        data = data.fillna(0)
+        data = data.replace([np.inf, -np.inf], 0)
+        one_week = 5
+        recent = data.head(1)["Low"].iloc[0]
+        last1Week = data.head(one_week)
+        last2Week = data.head(2 * one_week)
+        previousWeek = last2Week.tail(one_week)
+        last1WeekLow = last1Week["Low"].min()
+        previousWeekLow = previousWeek["Low"].min()
+        # if self.shouldLog:
+        #     self.default_logger.debug(data.head(10))
+        return (recent <= min(previousWeekLow, last1WeekLow)) and (
+            last1WeekLow <= previousWeekLow
+        )
 
     # Find stocks that have broken through 52 week low.
     def find52WeekLowBreakout(self, df):
+        if df is None or len(df) == 0:
+            return False
         # https://chartink.com/screener/52-week-low-breakout
         data = df.copy()
         data = data.fillna(0)
         data = data.replace([np.inf, -np.inf], 0)
         one_week = 5
         recent = data.head(1)["Low"].iloc[0]
-        last1Week = data.head(one_week)
-        last2Week = data.head(2 * one_week)
-        previousWeek = last2Week.tail(one_week)
+        # last1Week = data.head(one_week)
+        # last2Week = data.head(2 * one_week)
+        # previousWeek = last2Week.tail(one_week)
         full52Week = data.head(50 * one_week)
-        last1WeekLow = last1Week["Low"].min()
-        previousWeekLow = previousWeek["Low"].min()
+        # last1WeekLow = last1Week["Low"].min()
+        # previousWeekLow = previousWeek["Low"].min()
         full52WeekLow = full52Week["Low"].min()
-        return (
-            (recent <= full52WeekLow)
-            or (last1WeekLow <= min(full52WeekLow, last1WeekLow))
-            or (last1WeekLow <= previousWeekLow <= min(full52WeekLow, previousWeekLow))
-        )
+        # if self.shouldLog:
+        #     self.default_logger.debug(data.head(10))
+        return recent <= full52WeekLow
 
-        # Find stocks that have broken through 52 week low.
-
-    def find10DaysLowBreakout(self, df):
-        data = df.copy()
-        data = data.fillna(0)
-        data = data.replace([np.inf, -np.inf], 0)
-        one_week = 5
-        recent = data.head(1)["Low"].iloc[0]
-        last1Week = data.head(one_week)
-        last2Week = data.head(2 * one_week)
-        previousWeek = last2Week.tail(one_week)
-        last1WeekLow = last1Week["Low"].min()
-        previousWeekLow = previousWeek["Low"].min()
-        return (recent <= min(previousWeekLow, last1WeekLow)) and (
-            last1WeekLow <= previousWeekLow
-        )
-
-        # Find stocks that have broken through 52 week low.
-
+    # Find stocks that have broken through Aroon bullish crossover.
     def findAroonBullishCrossover(self, df):
+        if df is None or len(df) == 0:
+            return False
         data = df.copy()
         data = data.fillna(0)
         data = data.replace([np.inf, -np.inf], 0)
@@ -199,15 +306,546 @@ class ScreeningStatistics:
         recent = aroondf.tail(1)
         up = recent[f"AROONU_{period}"].iloc[0]
         down = recent[f"AROOND_{period}"].iloc[0]
+        # if self.shouldLog:
+        #     self.default_logger.debug(data.head(10))
         return up > down
     
-    def non_zero_range(self, high: pd.Series, low: pd.Series) -> pd.Series:
-        """Returns the difference of two series and adds epsilon to any zero values.  This occurs commonly in crypto data when 'high' = 'low'."""
-        diff = high - low
-        if diff.eq(0).any().any():
-            diff += sflt.epsilon
-        return diff
+    # Find ATR cross stocks
+    def findATRCross(self, df,saveDict, screenDict):
+        #https://chartink.com/screener/stock-crossing-atr
+        if df is None or len(df) == 0:
+            return False
+        data = df.copy()
+        data = data.fillna(0)
+        data = data.replace([np.inf, -np.inf], 0)
+        recent = data.head(1)
+        recentCandleHeight = self.getCandleBodyHeight(recent)
+        data = data[::-1]  # Reverse the dataframe so that its the oldest date first
+        atr = pktalib.ATR(data["High"],data["Low"],data["Close"], 14)
+        atrCross = recentCandleHeight >= atr.tail(1).iloc[0]
+        bullishRSI = recent["RSI"].iloc[0] >= 55 or recent["RSIi"].iloc[0] >= 55
+        smav7 = pktalib.SMA(data["Volume"],timeperiod=7).tail(1).iloc[0]
+        atrCrossCondition = atrCross and bullishRSI and (smav7 < recent["Volume"].iloc[0])
+        saveDict["ATR"] = round(atr.tail(1).iloc[0],1)
+        screenDict["ATR"] = saveDict["ATR"] #(colorText.GREEN if atrCrossCondition else colorText.FAIL) + str(atr.tail(1).iloc[0]) + colorText.END
+        # if self.shouldLog:
+        #     self.default_logger.debug(data.head(10))
+        return atrCrossCondition
     
+    def findATRTrailingStops(self,df,sensitivity=1, atr_period=10, ema_period=1,buySellAll=1,saveDict=None,screenDict=None):
+        if df is None or len(df) == 0:
+            return False
+        data = df.copy()
+        data = data.fillna(0)
+        data = data.replace([np.inf, -np.inf], 0)
+        data = data[::-1]  # Reverse the dataframe so that its the oldest date first
+
+        SENSITIVITY = sensitivity
+        # Compute ATR And nLoss variable
+        data["xATR"] = pktalib.ATR(data["High"], data["Low"], data["Close"], timeperiod=atr_period)
+        data["nLoss"] = SENSITIVITY * data["xATR"]
+        
+        #Drop all rows that have nan, X first depending on the ATR preiod for the moving average
+        data = data.dropna()
+        data = data.reset_index()
+        # Filling ATRTrailingStop Variable
+        data["ATRTrailingStop"] = [0.0] + [np.nan for i in range(len(data) - 1)]
+        
+        for i in range(1, len(data)):
+            data.loc[i, "ATRTrailingStop"] = self.xATRTrailingStop_func(
+                data.loc[i, "Close"],
+                data.loc[i - 1, "Close"],
+                data.loc[i - 1, "ATRTrailingStop"],
+                data.loc[i, "nLoss"],
+            )
+        data = self.computeBuySellSignals(data,ema_period=ema_period)
+        if data is None:
+            return False
+        recent = data.tail(1)
+        buy = recent["Buy"].iloc[0]
+        sell = recent["Sell"].iloc[0]
+        saveDict["B/S"] = "Buy" if buy else ("Sell" if sell else "NA")
+        screenDict["B/S"] = ((colorText.GREEN + "Buy") if buy else ((colorText.FAIL+ "Sell") if sell else (colorText.WARN + "NA"))) + colorText.END
+        # if self.shouldLog:
+        #     self.default_logger.debug(data.head(10))
+        return buy if buySellAll==1 else (sell if buySellAll == 2 else (True if buySellAll == 3 else False))
+
+
+    # def identify_demand_zone(self,data, cmp):
+    #     demand_zones = []
+    #     drop_base_rally_zone = False
+    #     rally_base_rally_zone = False
+        
+    #     # Additional variables to track base candle prices for proximal line calculation
+    #     base_candle_prices = []
+        
+    #     for i in range(len(data) - 2):
+    #         if data['Candle Type'][i] == 'Drop Candle' and data['Candle Type'][i + 1] == 'Base Candle':
+    #             base_count = 1
+    #             j = i + 2
+    #             while j < len(data) and data['Candle Type'][j] == 'Base Candle':
+    #                 base_count += 1
+    #                 j += 1
+                
+    #             if base_count <= 4:  # Maximum of 4 base candles for weekly or monthly timeframe, else 3 for daily
+    #                 if j < len(data) and data['Candle Type'][j] == 'Rally Candle':
+    #                     if data['Close'][j] > data['Low'][i] + 0.6 * data['Candle Range'][i] and data['High'][i] <= cmp:
+    #                         # Check for one more rally candle or green base candle
+    #                         k = j + 1
+    #                         while k < len(data):
+    #                             if data['Candle Type'][k] == 'Rally Candle' or (data['Candle Type'][k] == 'Base Candle' and data['Close'][k] > data['Open'][k]):
+    #                                 demand_zones.append((i, j, 'Drop Base Rally', base_count))
+    #                                 drop_base_rally_zone = True
+    #                                 break
+    #                             k += 1
+    #         elif data['Candle Type'][i] == 'Rally Candle' and data['Candle Type'][i + 1] == 'Base Candle':
+    #             base_count = 1
+    #             j = i + 2
+    #             while j < len(data) and data['Candle Type'][j] == 'Base Candle':
+    #                 base_count += 1
+    #                 j += 1
+                
+    #             if base_count >= 1:  # At least one base candle required
+    #                 if j < len(data) and data['Candle Type'][j] == 'Rally Candle':
+    #                     if data['Close'][j] > data['Close'][i] and data['High'][i] <= cmp:  # New condition: close of 2nd rally candle > 1st rally candle
+    #                         # Check for one more rally candle or green base candle
+    #                         k = j + 1
+    #                         while k < len(data):
+    #                             if data['Candle Type'][k] == 'Rally Candle' or (data['Candle Type'][k] == 'Base Candle' and data['Close'][k] > data['Open'][k]):
+    #                                 demand_zones.append((i, j, 'Rally Base Rally', base_count))
+    #                                 rally_base_rally_zone = True
+    #                                 break
+    #                             k += 1
+                            
+    #         # Collect base candle prices for proximal line calculation
+    #         if data['Candle Type'][i] == 'Base Candle':
+    #             base_candle_prices.append(data['Close'][i])
+
+    #     # Calculate proximal line price (highest price among base candles)
+    #     proximal_line_price = max(base_candle_prices) if base_candle_prices else None
+
+    #     return demand_zones, drop_base_rally_zone, rally_base_rally_zone, proximal_line_price
+
+    # def identify_supply_zone(self,data, cmp):
+    #     supply_zones = []
+    #     rally_base_drop_zone = False
+    #     drop_base_drop_zone = False
+        
+    #     # Additional variables to track base candle prices for proximal line calculation
+    #     base_candle_prices = []
+        
+    #     for i in range(len(data) - 2):
+    #         if data['Candle Type'][i] == 'Drop Candle' and data['Candle Type'][i + 1] == 'Base Candle':
+    #             base_count = 1
+    #             j = i + 2
+    #             while j < len(data) and data['Candle Type'][j] == 'Base Candle':
+    #                 base_count += 1
+    #                 j += 1
+                
+    #             if base_count <= 4:  # Maximum of 4 base candles for weekly or monthly timeframe, else 3 for daily
+    #                 if j < len(data) and data['Candle Type'][j] == 'Drop Candle':
+    #                     if data['Close'][i] < data['Low'][j] and data['Low'][i] >= cmp:  # New condition: close of drop candle < low of base candle
+    #                         # New logic: Look for one more drop candle or red base candle
+    #                         k = j + 1
+    #                         while k < len(data) and (data['Candle Type'][k] == 'Drop Candle' or data['Close'][k] < data['Open'][k]):
+    #                             k += 1
+    #                         if k < len(data) and (data['Candle Type'][k] == 'Drop Candle' or data['Close'][k] < data['Open'][k]):
+    #                             supply_zones.append((i, j, 'Drop Base Drop', base_count))
+    #                             drop_base_drop_zone = True
+    #         elif data['Candle Type'][i] == 'Rally Candle' and data['Candle Type'][i + 1] == 'Base Candle':
+    #             base_count = 1
+    #             j = i + 2
+    #             while j < len(data) and data['Candle Type'][j] == 'Base Candle':
+    #                 base_count += 1
+    #                 j += 1
+                
+    #             if base_count >= 1:  # At least one base candle required
+    #                 if j < len(data) and data['Candle Type'][j] == 'Drop Candle':
+    #                     if data['Close'][j] < data['Open'][j] and data['Low'][i] >= cmp:  # Modified condition: close of drop candle < open of drop candle
+    #                         supply_zones.append((i, j, 'Rally Base Drop', base_count))
+    #                         rally_base_drop_zone = True
+                            
+    #         # Collect base candle prices for proximal line calculation
+    #         if data['Candle Type'][i] == 'Base Candle':
+    #             base_candle_prices.append(data['Close'][i])
+
+    #     # Calculate proximal line price (lowest price among base candles)
+    #     proximal_line_price = min(base_candle_prices) if base_candle_prices else None
+
+    #     return supply_zones, rally_base_drop_zone, drop_base_drop_zone, proximal_line_price
+
+    # def calculate_demand_proximal_lines(self,data, demand_zones):
+    #     proximal_line_prices = []
+    #     for start, end, _, _ in demand_zones:
+    #         base_candle_prices = data.loc[(data['Candle Type'] == 'Base Candle') & (data.index >= data.index[start]) & (data.index <= data.index[end]), ['Open', 'Close']]
+    #         max_price = base_candle_prices.max(axis=1).max()  # Get the maximum price among all base candles' open and close prices
+    #         proximal_line_prices.append(max_price)
+    #     return proximal_line_prices
+
+    # def calculate_supply_proximal_lines(self,data, supply_zones):
+    #     proximal_line_prices = []
+    #     for start, end, _, _ in supply_zones:
+    #         base_candle_prices = data.loc[(data['Candle Type'] == 'Base Candle') & (data.index >= data.index[start]) & (data.index <= data.index[end]), ['Open', 'Close']]
+    #         min_price = base_candle_prices.min(axis=1).min()  # Get the minimum price among all base candles' open and close prices
+    #         proximal_line_prices.append(min_price)
+    #     return proximal_line_prices
+        
+    # def calculate_demand_distal_lines(self,data, demand_zones):
+    #     distal_line_prices = []
+    #     for start, end, pattern, _ in demand_zones:
+    #         if pattern == 'Drop Base Rally':
+    #             # Logic for Drop Base Rally pattern: Take the lowest price among all components of the zone
+    #             lowest_price = min(data['Low'][start:end + 1])  # Get the lowest price within the zone
+    #             distal_line_prices.append(lowest_price)
+    #         elif pattern == 'Rally Base Rally':
+    #             # Logic for Rally Base Rally pattern: Take the lowest of only all base candle and followed rally candle
+    #             base_candle_prices = data.loc[(data['Candle Type'] == 'Base Candle') & (data.index >= data.index[start]) & (data.index <= data.index[end]), 'Low']
+    #             rally_candle_prices = data.loc[(data['Candle Type'] == 'Rally Candle') & (data.index >= data.index[end]) & (data.index < data.index[end+1]), 'Low']
+    #             all_prices = pd.concat([base_candle_prices, rally_candle_prices])
+    #             lowest_price = all_prices.min() if not all_prices.empty else None
+    #             distal_line_prices.append(lowest_price)
+    #     return distal_line_prices
+
+    # def calculate_supply_distal_lines(self,data, supply_zones):
+    #     distal_line_prices = []
+    #     for start, end, pattern, _ in supply_zones:
+    #         if pattern == 'Rally Base Drop':
+    #             # Logic for Rally Base Drop pattern: Take the highest price among all components of the zone
+    #             highest_price = max(data['High'][start:end + 1])  # Get the highest price within the zone
+    #             distal_line_prices.append(highest_price)
+    #         elif pattern == 'Drop Base Drop':
+    #             # Logic for Drop Base Drop pattern: Take the highest of only all base candles and followed drop candle
+    #             base_candle_prices = data.loc[(data['Candle Type'] == 'Base Candle') & (data.index >= data.index[start]) & (data.index <= data.index[end]), 'High']
+    #             drop_candle_prices = data.loc[(data['Candle Type'] == 'Drop Candle') & (data.index >= data.index[start]) & (data.index <= data.index[end]), 'High']
+    #             all_prices = pd.concat([base_candle_prices, drop_candle_prices])
+    #             highest_price = all_prices.max() if not all_prices.empty else None
+    #             distal_line_prices.append(highest_price)
+    #     return distal_line_prices
+
+    # def is_zone_tested(self,data, start_index, end_index, proximal_line_price):
+    #     """
+    #     Check if the proximal line price has been tested by future prices.
+        
+    #     Args:
+    #     - data: DataFrame containing stock data
+    #     - start_index: Start index of the demand/supply zone
+    #     - end_index: End index of the demand/supply zone
+    #     - proximal_line_price: Proximal line price
+        
+    #     Returns:
+    #     - True if the proximal line price is tested, False otherwise
+    #     """
+    #     for i in range(end_index + 1, len(data)):
+    #         if data['Low'][i] <= proximal_line_price <= data['High'][i]:
+    #             return True
+    #     return False
+
+    # def calculate_zone_range(self,proximal_line, distal_line):
+    #     """
+    #     Calculate the range of a zone given its proximal and distal lines.
+        
+    #     Args:
+    #     - proximal_line: Proximal line price
+    #     - distal_line: Distal line price
+        
+    #     Returns:
+    #     - Range of the zone
+    #     """
+    #     if proximal_line is not None and distal_line is not None:
+    #         return abs(proximal_line - distal_line)
+    #     else:
+    #         return None
+
+    # def calculate_demand_zone_ranges(self,demand_zones, demand_proximal_lines, demand_distal_lines):
+    #     """
+    #     Calculate the range of each demand zone.
+        
+    #     Args:
+    #     - demand_zones: List of demand zone tuples (start, end, pattern, base_count)
+    #     - demand_proximal_lines: List of proximal line prices for demand zones
+    #     - demand_distal_lines: List of distal line prices for demand zones
+        
+    #     Returns:
+    #     - List of ranges corresponding to each demand zone
+    #     """
+    #     demand_zone_ranges = []
+    #     for i, (start, end, _, _) in enumerate(demand_zones):
+    #         range_of_zone = self.calculate_zone_range(demand_proximal_lines[i], demand_distal_lines[i])
+    #         demand_zone_ranges.append(range_of_zone)
+    #     return demand_zone_ranges
+
+    # def calculate_supply_zone_ranges(self,supply_zones, supply_proximal_lines, supply_distal_lines):
+    #     """
+    #     Calculate the range of each supply zone.
+        
+    #     Args:
+    #     - supply_zones: List of supply zone tuples (start, end, pattern, base_count)
+    #     - supply_proximal_lines: List of proximal line prices for supply zones
+    #     - supply_distal_lines: List of distal line prices for supply zones
+        
+    #     Returns:
+    #     - List of ranges corresponding to each supply zone
+    #     """
+    #     supply_zone_ranges = []
+    #     for i, (start, end, _, _) in enumerate(supply_zones):
+    #         range_of_zone = self.calculate_zone_range(supply_proximal_lines[i], supply_distal_lines[i])
+    #         supply_zone_ranges.append(range_of_zone)
+    #     return supply_zone_ranges
+
+    # def filter_stocks_by_distance(self,data,symbol_list, threshold_percent, timeframe):
+    #     filtered_stocks = []
+    #     for symbol in symbol_list:
+    #         if data is not None:
+    #             cmp = data.iloc[-1]['Close']  # Current market price
+    #             demand_zones, _, _, demand_proximal_line = self.identify_demand_zone(data, cmp)  # Pass cmp argument here
+    #             supply_zones, _, _, supply_proximal_line = self.identify_supply_zone(data, cmp)  # Pass cmp argument here
+                
+    #             # Check if either demand or supply zones exist for the stock
+    #             if demand_zones or supply_zones:
+    #                 filtered_stocks.append(symbol)
+
+    #     return filtered_stocks
+    
+    # def findDemandSupplyZones(self,data,threshold_percent=1):        
+    #     # Initialize count for filtered stocks
+    #     count_filtered_stocks = 0
+
+    #     # Analyze demand and supply zones for each stock and save results in a file
+    #     with open("demand_supply_zones.txt", "w") as file:
+    #         for symbol in data["Stock"]:
+    #             if data is not None:
+    #                 cmp = data.iloc[-1]['Close']  # Current market price
+    #                 demand_zones, _, _, demand_proximal_line = self.identify_demand_zone(data, cmp)
+    #                 supply_zones, _, _, supply_proximal_line = self.identify_supply_zone(data, cmp)
+
+    #                 # Step 1: Calculate proximal lines for demand and supply zones
+    #                 demand_proximal_lines = self.calculate_demand_proximal_lines(data, demand_zones)
+    #                 supply_proximal_lines = self.calculate_supply_proximal_lines(data, supply_zones)
+                    
+    #                 # Step 2: Calculate distal lines for demand zones and supply zones
+    #                 demand_distal_lines = self.calculate_demand_distal_lines(data, demand_zones)
+    #                 supply_distal_lines = self.calculate_supply_distal_lines(data, supply_zones)
+
+    #                 # Calculate range of demand and supply zones
+    #                 demand_zone_ranges = self.calculate_demand_zone_ranges(demand_zones, demand_proximal_lines, demand_distal_lines)
+    #                 supply_zone_ranges = self.calculate_supply_zone_ranges(supply_zones, supply_proximal_lines, supply_distal_lines)
+                    
+    #                 file.write(f"\n\nAnalysis for {symbol} ({timeframe}):")
+                    
+    #                 # Demand Zones
+    #                 file.write("\n\nDemand Zones:")
+    #                 if demand_zones:  # Check if demand_zones is not empty
+    #                     for i, (start, end, pattern, base_count) in enumerate(demand_zones):
+    #                         dist_from_cmp = abs((cmp - demand_proximal_lines[i]) / cmp) * 100
+    #                         file.write(f"\n\nZone {i+1}: Start Date: {data.index[start].date()}, End Date: {data.index[end].date()}")
+    #                         file.write(f"\nPattern Name: {pattern}, Number of Base Candle: {base_count}")
+    #                         file.write(f"\nDistance from CMP: {dist_from_cmp:.2f}%")
+    #                         if demand_proximal_lines:
+    #                             file.write(f"\nProximal Line Price: {demand_proximal_lines[i]:.2f}")
+    #                         if demand_distal_lines:  # Include distal line price if available
+    #                             file.write(f"\nDistal Line Price: {demand_distal_lines[i]:.2f}")
+    #                         # Include zone range
+    #                             file.write(f"\nZone Range: {demand_zone_ranges[i]:.2f}")       
+    #                         # Check if proximal line is tested
+    #                         tested = self.is_zone_tested(data, start, end, demand_proximal_lines[i])
+    #                         if tested:
+    #                             file.write("\nZone is Tested")
+    #                         else:
+    #                             file.write("\nFresh Zone")
+    #                 else:
+    #                     file.write("\nNo demand zone patterns found.")
+
+    #                 # Supply Zones
+    #                 file.write("\n\nSupply Zones:")
+    #                 if supply_zones:  # Check if supply_zones is not empty
+    #                     for i, (start, end, pattern, base_count) in enumerate(supply_zones):
+    #                         dist_from_cmp = abs((cmp - supply_proximal_lines[i]) / cmp) * 100
+    #                         file.write(f"\n\nZone {i+1}: Start Date: {data.index[start].date()}, End Date: {data.index[end].date()}")
+    #                         file.write(f"\nPattern Name: {pattern}, Number of Base Candle: {base_count}")
+    #                         file.write(f"\nDistance from CMP: {dist_from_cmp:.2f}%")
+    #                         if supply_proximal_lines:
+    #                             file.write(f"\nProximal Line Price: {supply_proximal_lines[i]:.2f}")
+    #                         if supply_distal_lines:  # Include distal line price if available
+    #                             file.write(f"\nDistal Line Price: {supply_distal_lines[i]:.2f}")
+    #                         # Include zone range
+    #                             file.write(f"\nZone Range: {supply_zone_ranges[i]:.2f}")
+    #                         # Check if proximal line is tested
+    #                         tested = is_zone_tested(data, start, end, supply_proximal_lines[i])
+    #                         if tested:
+    #                             file.write("\nZone is Tested")
+    #                         else:
+    #                             file.write("\nFresh Zone")
+    #                 else:
+    #                     file.write("\nNo supply zone patterns found.")
+
+    #                 # Check if the stock has either demand or supply zone within the threshold
+    #                 has_demand_or_supply_within_threshold = any(
+    #                     abs((cmp - price) / cmp) * 100 <= threshold_percent
+    #                     for price in demand_proximal_lines + supply_proximal_lines
+    #                 )
+                    
+    #                 # If the stock has demand or supply zone within the threshold, increment the count
+    #                 if has_demand_or_supply_within_threshold:
+    #                     count_filtered_stocks += 1
+
+    #     # Filter stocks based on the percentage threshold and save the results in another file
+    #     filtered_stocks = self.filter_stocks_by_distance(stock_symbols, threshold_percent, timeframe)
+
+    #     with open("filtered_stocks_data.txt", "w") as file:
+    #         file.write(f"Number of stocks Filtered: {count_filtered_stocks}\n\n")
+    #         file.write("Filtered Stock Data:\n\n")
+            
+    #         for symbol in filtered_stocks:
+    #             if data is not None:
+    #                 cmp = data.iloc[-1]['Close']  # Current market price
+    #                 demand_zones, _, _, demand_proximal_line = self.identify_demand_zone(data, cmp)
+    #                 supply_zones, _, _, supply_proximal_line = self.identify_supply_zone(data, cmp)
+
+    #                 # Step 1: Calculate proximal lines for demand and supply zones
+    #                 demand_proximal_lines = self.calculate_demand_proximal_lines(data, demand_zones)
+    #                 supply_proximal_lines = self.calculate_supply_proximal_lines(data, supply_zones)
+                    
+    #                 # Step 2: Calculate distal lines for demand zones and supply zones
+    #                 demand_distal_lines = self.calculate_demand_distal_lines(data, demand_zones)
+    #                 supply_distal_lines = self.calculate_supply_distal_lines(data, supply_zones)
+                    
+    #                 # Calculate range of demand and supply zones
+    #                 demand_zone_ranges = self.calculate_demand_zone_ranges(demand_zones, demand_proximal_lines, demand_distal_lines)
+    #                 supply_zone_ranges = self.calculate_supply_zone_ranges(supply_zones, supply_proximal_lines, supply_distal_lines)
+                                    
+    #                 # Check if the stock has either demand or supply zone within the threshold
+    #                 has_demand_or_supply_within_threshold = any(
+    #                     abs((cmp - price) / cmp) * 100 <= threshold_percent
+    #                     for price in demand_proximal_lines + supply_proximal_lines
+    #                 )
+                    
+    #                 # If the stock has demand or supply zone within the threshold, write its analysis
+    #                 if has_demand_or_supply_within_threshold:
+    #                     file.write(f"Analysis for {symbol} ({timeframe}):\n")
+                        
+    #                     # Demand Zones
+    #                     file.write("\n\nDemand Zones:")
+    #                     if demand_zones:  # Check if demand_zones is not empty
+    #                         for i, (start, end, pattern, base_count) in enumerate(demand_zones):
+    #                             dist_from_cmp = abs((cmp - demand_proximal_lines[i]) / cmp) * 100
+    #                             if abs(dist_from_cmp) <= threshold_percent:  # Check if dist_from_cmp is within threshold
+    #                                 file.write(f"\n\nZone {i+1}: Start Date: {data.index[start].date()}, End Date: {data.index[end].date()}")
+    #                                 file.write(f"\nPattern Name: {pattern}, Number of Base Candle: {base_count}")
+    #                                 file.write(f"\nDistance from CMP: {dist_from_cmp:.2f}%")
+    #                                 if demand_proximal_lines:
+    #                                     file.write(f"\nProximal Line Price: {demand_proximal_lines[i]:.2f}")
+    #                                 if demand_distal_lines:  # Include distal line price if available
+    #                                     file.write(f"\nDistal Line Price: {demand_distal_lines[i]:.2f}")
+    #                                 # Include zone range
+    #                                     file.write(f"\nZone Range: {demand_zone_ranges[i]:.2f}")
+    #                                 # Check if proximal line is tested
+    #                                 tested = is_zone_tested(data, start, end, demand_proximal_lines[i])
+    #                                 if tested:
+    #                                     file.write("\nZone is Tested")
+    #                                 else:
+    #                                     file.write("\nFresh Zone")
+    #                     else:
+    #                         file.write("\nNo demand zone patterns found.")
+
+    #                     # Supply Zones
+    #                     file.write("\n\nSupply Zones:")
+    #                     if supply_zones:  # Check if supply_zones is not empty
+    #                         for i, (start, end, pattern, base_count) in enumerate(supply_zones):
+    #                             dist_from_cmp = abs((cmp - supply_proximal_lines[i]) / cmp) * 100
+    #                             if abs(dist_from_cmp) <= threshold_percent:  # Check if dist_from_cmp is within threshold
+    #                                 file.write(f"\n\nZone {i+1}: Start Date: {data.index[start].date()}, End Date: {data.index[end].date()}")
+    #                                 file.write(f"\nPattern Name: {pattern}, Number of Base Candle: {base_count}")
+    #                                 file.write(f"\nDistance from CMP: {dist_from_cmp:.2f}%")
+    #                                 if supply_proximal_lines:
+    #                                     file.write(f"\nProximal Line Price: {supply_proximal_lines[i]:.2f}")
+    #                                 if supply_distal_lines:  # Include distal line price if available
+    #                                     file.write(f"\nDistal Line Price: {supply_distal_lines[i]:.2f}")
+    #                                 # Include zone range
+    #                                     file.write(f"\nZone Range: {supply_zone_ranges[i]:.2f}")
+    #                                 # Check if proximal line is tested
+    #                                 tested = self.is_zone_tested(data, start, end, supply_proximal_lines[i])
+    #                                 if tested:
+    #                                     file.write("\nZone is Tested")
+    #                                 else:
+    #                                     file.write("\nFresh Zone")
+    #                     else:
+    #                         file.write("\nNo supply zone patterns found.")
+
+    #                     file.write("\n\n")
+                    
+    #     print("Analysis completed and results saved.")
+
+    # @measure_time
+    def findBbandsSqueeze(self,fullData, screenDict, saveDict, filter=4):
+        """
+        The TTM Squeeze indicator measures the relationship between the 
+        Bollinger Bands and Keltner's Channel. When the volatility increases, 
+        so does the distance between the bands, and conversely, when the 
+        volatility declines, the distance also decreases. The Squeeze indicator 
+        finds sections of the Bollinger Bands study which fall inside the 
+        Keltner's Channels.
+        
+        At the moment this squeeze happens, a price breakout from the upper 
+        Bollinger Band would indicate the possibility of an uptrend in the 
+        future. This is backed by the fact that once the price starts breaking 
+        out of the bands, it would mean a relaxation of the squeeze and the 
+        possibility of high market volatility and price movement in the future. 
+        Similarly, a price breakout from the lower Bollinger Band after a squeeze 
+        would indicate the possibility of a downtrend in the future and an 
+        increased market volatility in the same direction. When the market 
+        finishes a move, the indicator turns off, which corresponds to bands 
+        having pushed well outside the range of Keltner's Channels.
+        """
+        if fullData is None or len(fullData) < 20:
+            return False
+        oldestRecordsFirst_df = fullData.head(30).copy()
+        latestRecordsFirst_df = oldestRecordsFirst_df[::-1].tail(30)
+        latestRecordsFirst_df = latestRecordsFirst_df.fillna(0)
+        latestRecordsFirst_df = latestRecordsFirst_df.replace([np.inf, -np.inf], 0)
+        # Bollinger bands
+        latestRecordsFirst_df.loc[:,'BBands-U'], latestRecordsFirst_df.loc[:,'BBands-M'], latestRecordsFirst_df.loc[:,'BBands-L'] = pktalib.BBANDS(latestRecordsFirst_df["Close"], 20)
+        # compute Keltner's channel
+        latestRecordsFirst_df['low_kel'], latestRecordsFirst_df['upp_kel'] = pktalib.KeltnersChannel(latestRecordsFirst_df["High"], latestRecordsFirst_df["Low"],latestRecordsFirst_df["Close"],20)
+        # squeeze indicator
+        def in_squeeze(df):
+            return df['low_kel'] < df['BBands-L'] < df['BBands-U'] < df['upp_kel']
+
+        latestRecordsFirst_df['squeeze'] = latestRecordsFirst_df.apply(in_squeeze, axis=1)
+
+        # Let's review just the previous 3 candles including today (at the end)
+        latestRecordsFirst_df = latestRecordsFirst_df.tail(3)
+        # stock is coming out of the squeeze
+        saved = self.findCurrentSavedValue(screenDict, saveDict, "Pattern")
+        candle3Sqz = latestRecordsFirst_df.iloc[-3]["squeeze"]
+        candle1Sqz = latestRecordsFirst_df.iloc[-1]["squeeze"]
+        candle2Sqz = latestRecordsFirst_df.iloc[-2]["squeeze"]
+        if candle3Sqz and not candle1Sqz:
+            # 3rd candle from the most recent one was in squeeze but the most recent one is not.
+            if filter not in [1,3,4]: # Buy/Sell/All
+                return False
+            # decide which action to take by comparing distances                
+            distance_to_upper = abs(latestRecordsFirst_df['BBands-U'].values[-1] - latestRecordsFirst_df['Close'].values[-1])
+            distance_to_lower = abs(latestRecordsFirst_df['BBands-L'].values[-1] - latestRecordsFirst_df['Close'].values[-1])
+            
+            action = False
+            if distance_to_upper < distance_to_lower:
+                if filter not in [1,4]: # Buy/All
+                    return False
+                action = True
+            elif filter not in [3,4]: # Sell/All
+                return False
+            screenDict["Pattern"] = saved[0] + colorText.BOLD + (colorText.GREEN if action else colorText.FAIL) + f"BBands-SQZ-{'Buy' if action else 'Sell'}" + colorText.END
+            saveDict["Pattern"] = saved[1] + f"TTM-SQZ-{'Buy' if action else 'Sell'}"
+            return True
+        elif candle3Sqz and candle2Sqz and candle1Sqz:
+            # Last 3 candles in squeeze
+            if filter not in [2,4]: # SqZ/All
+                return False
+            screenDict["Pattern"] = f'{saved[0]}{colorText.BOLD}{colorText.WARN}TTM-SQZ{colorText.END}'
+            saveDict["Pattern"] = f'{saved[1]}TTM-SQZ'
+            return True
+        return False
+
     # Find accurate breakout value
     def findBreakingoutNow(self, df, fullData, saveDict, screenDict):
         if df is None or len(df) == 0:
@@ -252,6 +890,8 @@ class ScreeningStatistics:
     def findBreakoutValue(
         self, df, screenDict, saveDict, daysToLookback, alreadyBrokenout=False
     ):
+        if df is None or len(df) == 0:
+            return False
         data = df.copy()
         data = data.fillna(0)
         data = data.replace([np.inf, -np.inf], 0)
@@ -391,6 +1031,50 @@ class ScreeningStatistics:
             )
             return not alreadyBrokenout
 
+    def findBullishAVWAP(self, df, screenDict, saveDict):
+        if df is None or len(df) == 0:
+            return False
+        data = df.copy()
+        data = data.fillna(0)
+        data = data.replace([np.inf, -np.inf], 0)
+        reversedData = data[::-1]  # Reverse the dataframe so that its the oldest date first
+        # Find the anchor point. Find the candle where there's a major dip.
+        majorLow = reversedData["Low"].min()
+        lowRow = reversedData[reversedData["Low"] == majorLow]
+        anchored_date = lowRow.index[0]
+        avwap = pktalib.AVWAP(df=reversedData,anchored_date=anchored_date)
+        recentOpen = reversedData["Open"].tail(1).head(1).iloc[0]
+        recentClose = reversedData["Close"].tail(1).head(1).iloc[0]
+        recentLow = reversedData["Low"].tail(1).head(1).iloc[0]
+        recentAVWAP = reversedData["anchored_VWAP"].tail(1).head(1).iloc[0]
+        recentVol = reversedData["Volume"].tail(1).head(1).iloc[0]
+        prevVol = reversedData["Volume"].tail(2).head(1).iloc[0]
+        avwap.replace(np.inf, np.nan).replace(-np.inf, np.nan).dropna(inplace=True)
+        reversedData = reversedData.tail(len(avwap))
+        diffFromAVWAP = (abs(recentClose-recentAVWAP)/recentAVWAP) * 100
+        x = reversedData.index
+        y = avwap.astype(float)
+        # Create a sequance of integers from 0 to x.size to use in np.polyfit() call
+        x_seq = np.arange(x.size)
+        # call numpy polyfit() method with x_seq, y 
+        fit = np.polyfit(x_seq, y, 1)
+        fit_fn = np.poly1d(fit)
+        slope = fit[0]
+        # print('Slope = ', fit[0], ", ","Intercept = ", fit[1])
+        # print(fit_fn)
+        isBullishAVWAP = (slope <= 1 and # AVWAP is flat
+                recentOpen == recentLow and recentLow !=0 and # Open = Low candle
+                recentClose > recentAVWAP and recentAVWAP != 0 and # price near AVWAP
+                recentVol > (self.configManager.volumeRatio)*prevVol and prevVol != 0 and # volumes spiked
+                diffFromAVWAP <= self.configManager.anchoredAVWAPPercentage)
+
+        if isBullishAVWAP:
+            saveDict["AVWAP"] = round(recentAVWAP,2)
+            screenDict["AVWAP"] = round(recentAVWAP,2)
+            saveDict["Anchor"] = str(anchored_date).split(" ")[0]
+            screenDict["Anchor"] = str(anchored_date).split(" ")[0]
+        return isBullishAVWAP
+
     # Find stocks that are bullish intraday: RSI crosses 55, Macd Histogram positive, price above EMA 10
     def findBullishIntradayRSIMACD(self, df):
         if df is None or len(df) == 0:
@@ -410,6 +1094,246 @@ class ScreeningStatistics:
         cond4 = cond3 and (recent["Close"].iloc[0] > recent["EMA200"].iloc[0])
         return cond4
     
+    def findBuySellSignalsFromATRTrailing(self,df, key_value=1, atr_period=10, ema_period=200,buySellAll=1,saveDict=None,screenDict=None):
+        if df is None or len(df) == 0:
+            return False
+        data = df.copy()
+        data = data.fillna(0)
+        data = data.replace([np.inf, -np.inf], 0)
+        data = data[::-1]  # Reverse the dataframe so that its the oldest date first
+
+        # Calculate ATR and xATRTrailingStop
+        xATR = np.array(pktalib.ATR(data['High'], data['Low'], data['Close'], timeperiod=atr_period))
+        nLoss = key_value * xATR
+        src = data['Close']
+        # Initialize arrays
+        xATRTrailingStop = np.zeros(len(data))
+        xATRTrailingStop[0] = src[0] - nLoss[0]
+
+        # Calculate xATRTrailingStop using vectorized operations
+        mask_1 = (src > np.roll(xATRTrailingStop, 1)) & (np.roll(src, 1) > np.roll(xATRTrailingStop, 1))
+        mask_2 = (src < np.roll(xATRTrailingStop, 1)) & (np.roll(src, 1) < np.roll(xATRTrailingStop, 1))
+        mask_3 = src > np.roll(xATRTrailingStop, 1)
+
+        xATRTrailingStop = np.where(mask_1, np.maximum(np.roll(xATRTrailingStop, 1), src - nLoss), xATRTrailingStop)
+        xATRTrailingStop = np.where(mask_2, np.minimum(np.roll(xATRTrailingStop, 1), src + nLoss), xATRTrailingStop)
+        xATRTrailingStop = np.where(mask_3, src - nLoss, xATRTrailingStop)
+
+        mask_buy = (np.roll(src, 1) < xATRTrailingStop) & (src > np.roll(xATRTrailingStop, 1))
+        mask_sell = (np.roll(src, 1) > xATRTrailingStop) & (src < np.roll(xATRTrailingStop, 1))
+
+        pos = np.zeros(len(data))
+        pos = np.where(mask_buy, 1, pos)
+        pos = np.where(mask_sell, -1, pos)
+        pos[~((pos == 1) | (pos == -1))] = 0
+
+        ema = np.array(pktalib.EMA(data['Close'], timeperiod=ema_period))
+
+        buy_condition_utbot = (xATRTrailingStop > ema) & (pos > 0) & (src > ema)
+        sell_condition_utbot = (xATRTrailingStop < ema) & (pos < 0) & (src < ema)
+
+        # The resulting trend array holds values of 1 (buy), -1 (sell), or 0 (neutral).
+        trend = np.where(buy_condition_utbot, 1, np.where(sell_condition_utbot, -1, 0))
+        trend_arr = np.array(trend)
+        data.insert(len(data.columns), "trend", trend_arr)
+        trend = trend[0]
+        saveDict["B/S"] = "Buy" if trend == 1 else ("Sell" if trend == -1 else "NA")
+        screenDict["B/S"] = (colorText.GREEN + "Buy") if trend == 1 else ((colorText.FAIL+ "Sell") if trend == -1 else (colorText.WARN + "NA")) + colorText.END
+        return buySellAll == trend
+
+    def findCurrentSavedValue(self, screenDict, saveDict, key):
+        existingScreen = screenDict.get(key)
+        existingSave = saveDict.get(key)
+        existingScreen = f"{existingScreen}, " if (existingScreen is not None and len(existingScreen) > 0) else ""
+        existingSave = f"{existingSave}, " if (existingSave is not None and len(existingSave) > 0) else ""
+        return existingScreen, existingSave
+
+    def findHigherBullishOpens(self, df):
+        if df is None or len(df) == 0:
+            return False
+        data = df.copy()
+        data = data.fillna(0)
+        data = data.replace([np.inf, -np.inf], 0)
+        recent = data.head(2)
+        if len(recent) < 2:
+            return False
+        return recent["Open"].iloc[0] > recent["High"].iloc[1]
+
+    # Find stocks that opened higher than the previous high
+    def findHigherOpens(self, df):
+        if df is None or len(df) == 0:
+            return False
+        data = df.copy()
+        data = data.fillna(0)
+        data = data.replace([np.inf, -np.inf], 0)
+        recent = data.head(2)
+        if len(recent) < 2:
+            return False
+        return recent["Open"].iloc[0] > recent["Close"].iloc[1]
+
+    # Find DEEL Momentum
+    def findHighMomentum(self, df):
+        #https://chartink.com/screener/deel-momentum-rsi-14-mfi-14-cci-14
+        if df is None or len(df) < 2:
+            return False
+        data = df.copy()
+        data = data.fillna(0)
+        data = data.replace([np.inf, -np.inf], 0)
+        data = data[::-1]  # Reverse the dataframe so that its the oldest date first
+        mfis = pktalib.MFI(data["High"],data["Low"],data["Close"],data["Volume"], 14)
+        ccis = pktalib.CCI(data["High"],data["Low"],data["Close"], 14)
+        sma7 = pktalib.SMA(data["Close"], 7)
+        sma20 = pktalib.SMA(data["Close"], 20)
+        recent = data.tail(2)
+        percentChange = round((recent["Close"].iloc[1] - recent["Close"].iloc[0]) *100/recent["Close"].iloc[0],1)
+        rsi = recent["RSI"].iloc[1]
+        mfi = mfis.tail(1).iloc[0]
+        cci = ccis.tail(1).iloc[0]
+        hasDeelMomentum = percentChange >= 1 and ((rsi>= 68 and mfi >= 68 and cci >= 110) or (rsi>= 50 and mfi >= 50 and recent["Close"].iloc[1] >= sma7 and recent["Close"].iloc[1] >= sma20))
+        # if self.shouldLog:
+        #     self.default_logger.debug(data.head(10))
+        return hasDeelMomentum
+
+    def findIntradayHighCrossover(self, df, afterTimestamp=None):
+        if df is None or len(df) == 0:
+            return False
+        data = df.copy()
+        data = data.fillna(0)
+        data = data.replace([np.inf, -np.inf], 0)
+        data = data[::-1]  # Reverse the dataframe so that its the oldest date first
+        diff_df = None
+        try:
+            # Let's only consider those candles that are after the alert issue-time in the mornings + 2 candles (for buy/sell)
+            diff_df = data[data.index >=  pd.to_datetime(f'{PKDateUtilities.tradingDate().strftime(f"%Y-%m-%d")} {MarketHours().openHour:02}:{MarketHours().openMinute+self.configManager.morninganalysiscandlenumber + 2}:00+05:30').to_datetime64()]
+            # brokerSqrOfftime = pd.to_datetime(f'{PKDateUtilities.tradingDate().strftime(f"%Y-%m-%d")} 15:14:00+05:30').to_datetime64()
+        except:
+            diff_df = data[data.index >=  pd.to_datetime(f'{PKDateUtilities.tradingDate().strftime(f"%Y-%m-%d")} {MarketHours().openHour:02}:{MarketHours().openMinute+self.configManager.morninganalysiscandlenumber + 2}:00+05:30', utc=True)]
+            # brokerSqrOfftime = pd.to_datetime(f'{PKDateUtilities.tradingDate().strftime(f"%Y-%m-%d")} 15:14:00+05:30', utc=True)
+            pass
+        dayHighAfterAlert = diff_df["High"].max()
+        highRow = diff_df[diff_df["High"] >= dayHighAfterAlert]
+        if highRow is not None and len(highRow) > 0:
+            highRow = highRow.tail(1)
+        return highRow.index[-1], highRow
+
+    def findIntradayOpenSetup(self,df,df_intraday,saveDict,screenDict,buySellAll=1):
+        if df is None or len(df) == 0 or df_intraday is None or len(df_intraday) == 0:
+            return False
+        data = df.copy()
+        data = data.fillna(0)
+        data = data.replace([np.inf, -np.inf], 0)
+        previousDay = data.head(1)
+        prevDayHigh = previousDay["High"].iloc[0]
+        prevDayLow = previousDay["Low"].iloc[0]
+        candleDurations = [1,5,10,15,30]
+        int_df = None
+        hasIntradaySetup = False
+        for candle1MinuteNumberSinceMarketStarted in candleDurations:
+            try:
+                int_df = df_intraday[df_intraday.index <=  pd.to_datetime(f'{PKDateUtilities.tradingDate().strftime(f"%Y-%m-%d")} {MarketHours().openHour:02}:{MarketHours().openMinute+candle1MinuteNumberSinceMarketStarted}:00+05:30').to_datetime64()]
+            except:
+                int_df = df_intraday[df_intraday.index <=  pd.to_datetime(f'{PKDateUtilities.tradingDate().strftime(f"%Y-%m-%d")} {MarketHours().openHour:02}:{MarketHours().openMinute+candle1MinuteNumberSinceMarketStarted}:00+05:30', utc=True)]
+                pass
+            if int_df is not None and len(int_df) > 0:
+                combinedCandle = {"Open":self.getMorningOpen(int_df), "High":max(int_df["High"]), 
+                                "Low":min(int_df["Low"]),"Close":self.getMorningClose(int_df),
+                                "Adj Close":int_df["Adj Close"][-1],"Volume":sum(int_df["Volume"])}
+                openPrice = combinedCandle["Open"]
+                lowPrice = combinedCandle["Low"]
+                closePrice = combinedCandle["Close"]
+                highPrice = combinedCandle["High"]
+                if buySellAll == 1 or buySellAll == 3:
+                    hasIntradaySetup = openPrice == lowPrice and openPrice < prevDayHigh and closePrice > prevDayHigh
+                elif buySellAll == 2 or buySellAll == 3:
+                    hasIntradaySetup = openPrice == highPrice and openPrice > prevDayLow and closePrice < prevDayLow
+                if hasIntradaySetup:
+                    saveDict["B/S"] = f"{'Buy' if buySellAll == 1 else ('Sell' if buySellAll == 2 else 'All')}-{candle1MinuteNumberSinceMarketStarted}m"
+                    screenDict["B/S"] = (colorText.GREEN if buySellAll == 1 else (colorText.FAIL if buySellAll == 2 else colorText.WARN)) + f"{'Buy' if buySellAll == 1 else ('Sell' if buySellAll == 2 else 'All')}-{candle1MinuteNumberSinceMarketStarted}m" + colorText.END
+                    break
+        return hasIntradaySetup
+
+    def findIntradayShortSellWithPSARVolumeSMA(self, df,df_intraday):
+        if df is None or len(df) == 0 or df_intraday is None or len(df_intraday) == 0:
+            return False
+        data = df.copy()
+        data_int = df_intraday.copy()
+        data = data.fillna(0)
+        data = data.replace([np.inf, -np.inf], 0)
+        data = data[::-1]  # Reverse the dataframe so that its the oldest date first
+        data_int = pd.DataFrame(data_int)['Close'].resample('30T', offset='15min').ohlc()
+        # data_int = data_int[::-1]  # Reverse the dataframe so that its the oldest date first
+        if len(data_int) < 5: # we need TMA for period 5
+            return False
+        data.loc[:,'PSAR'] = pktalib.psar(data["High"],data["Low"],acceleration=0.08)
+        data_int.loc[:,'TMA5'] = pktalib.TriMA(data_int["close"],length=5)
+        recent = data.tail(4)
+        recent = recent[::-1]
+        recent_i = data_int[::-1]
+        recent_i = recent_i.head(2)
+        # recent_i = recent_i[::-1]
+        if len(recent) < 4 or len(recent_i) < 2:
+            return False
+        # daily PSAR crossed above recent 30m TMA
+        cond1 = recent["PSAR"].iloc[0] >= recent_i["TMA5"].iloc[0] and \
+                recent["PSAR"].iloc[1] <= recent_i["TMA5"].iloc[1]
+        # Daily volume > 1400k
+        cond2 = cond1 and (recent["Volume"].iloc[0] > 1400000)
+        # Daily close above 50
+        cond4 = cond2 and recent["Close"].iloc[0] > 50
+        return cond4
+
+    def findIPOLifetimeFirstDayBullishBreak(self, df):
+        if df is None or len(df) == 0 or len(df) >= 220:
+            return False
+        data = df.copy()
+        data = data.fillna(0)
+        data = data.replace([np.inf, -np.inf], 0)
+        data.dropna(axis=0, how="all", inplace=True) # Maybe there was no trade done at these times?
+        data = data[::-1]  # Reverse the dataframe so that its the oldest date first
+        return data["High"].iloc[0] >= data["High"].max()
+
+    def findMACDCrossover(self, df, afterTimestamp=None, nthCrossover=1, upDirection=True, minRSI=60):
+        if df is None or len(df) == 0:
+            return False
+        data = df.copy()
+        data = data.fillna(0)
+        data = data.replace([np.inf, -np.inf], 0)
+        data.dropna(axis=0, how="all", inplace=True) # Maybe there was no trade done at these times?
+        data = data[::-1]  # Reverse the dataframe so that its the oldest date first
+        macdLine, macdSignal, macdHist = pktalib.MACD(data["Close"], 12, 26, 9)
+        # rsi_df = pktalib.RSI(data["Close"], 14)
+        line_df = pd.DataFrame(macdLine)
+        signal_df = pd.DataFrame(macdSignal)
+        vol_df = data["Volume"]
+        diff_df = pd.concat([line_df, signal_df, signal_df-line_df,vol_df], axis=1)
+        diff_df.columns = ["line","signal","diff","vol"]
+        diff_df = diff_df[diff_df["vol"] > 0] # We're not going to do anything with a candle where there was no trade.
+        # brokerSqrOfftime = None
+        try:
+            # Let's only consider those candles that are after the alert issue-time in the mornings + 2 candles (for buy/sell)
+            diff_df = diff_df[diff_df.index >=  pd.to_datetime(f'{PKDateUtilities.tradingDate().strftime(f"%Y-%m-%d")} {MarketHours().openHour:02}:{MarketHours().openMinute+self.configManager.morninganalysiscandlenumber + 2}:00+05:30').to_datetime64()]
+            # brokerSqrOfftime = pd.to_datetime(f'{PKDateUtilities.tradingDate().strftime(f"%Y-%m-%d")} 15:14:00+05:30').to_datetime64()
+        except:
+            diff_df = diff_df[diff_df.index >=  pd.to_datetime(f'{PKDateUtilities.tradingDate().strftime(f"%Y-%m-%d")} {MarketHours().openHour:02}:{MarketHours().openMinute+self.configManager.morninganalysiscandlenumber + 2}:00+05:30', utc=True)]
+            # brokerSqrOfftime = pd.to_datetime(f'{PKDateUtilities.tradingDate().strftime(f"%Y-%m-%d")} 15:14:00+05:30', utc=True)
+            pass
+        index = len(diff_df)
+        crossOver = 0
+        
+        # Loop until we've found the nth crossover for MACD or we've reached the last point in time
+        while (crossOver < nthCrossover and index >=0):
+            if diff_df["diff"][index-1] < 0: # Signal line has not crossed yet and is below the zero line
+                while((diff_df["diff"][index-1] < 0 and index >=0)): # and diff_df.index <= brokerSqrOfftime): # or diff_df["rsi"][index-1] <= minRSI):
+                    # Loop while Signal line has not crossed yet and is below the zero line and we've not reached the last point
+                    index -= 1
+            else:
+                while((diff_df["diff"][index-1] >= 0 and index >=0)): # and diff_df.index <= brokerSqrOfftime): # or diff_df["rsi"][index-1] <= minRSI):
+                    # Loop until signal line has not crossed yet and is above the zero line
+                    index -= 1
+            crossOver += 1
+        ts = diff_df.tail(len(diff_df)-index +1).head(1).index[-1]
+        return ts, data[data.index == ts] #df.head(len(df) -index +1).tail(1)
+
     def findNR4Day(self, df):
         if df is None or len(df) == 0:
             return False
@@ -441,6 +1365,31 @@ class ScreeningStatistics:
         cond6 = cond5 and (recent["SMA50"].iloc[0] > recent["SMA200"].iloc[0])
         return cond6
 
+    def findPerfectShortSellsFutures(self, df):
+        if df is None or len(df) == 0:
+            return False
+        data = df.copy()
+        data = data.fillna(0)
+        data = data.replace([np.inf, -np.inf], 0)
+        data = data[::-1]  # Reverse the dataframe so that its the oldest date first
+        data.loc[:,'BBands-U'], data.loc[:,'BBands-M'], data.loc[:,'BBands-L'] = pktalib.BBANDS(data["Close"], 20)
+        recent = data.tail(4)
+        recent = recent[::-1]
+        if len(recent) < 4:
+            return False
+        # 1 day ago high > 2 days ago high
+        cond1 = recent["High"].iloc[1] > recent["High"].iloc[2]
+        # 1 day ago close < 2 days ago high
+        cond2 = cond1 and (recent["Close"].iloc[1] < recent["High"].iloc[2])
+        # 1 day ago volume > 3 days ago volume
+        cond3 = cond2 and (recent["Volume"].iloc[1] > recent["Volume"].iloc[3])
+        # daily high < 1 day ago high
+        cond4 = cond3 and (recent["High"].iloc[0] < recent["High"].iloc[1])
+        # daily close crossed below daily lower bollinger band(20,2)
+        cond5 = cond4 and (recent["Close"].iloc[0] <= recent["BBands-L"].iloc[0] and \
+                           recent["Close"].iloc[1] >= recent["BBands-L"].iloc[1])
+        return cond5
+    
     # Find potential breakout stocks
     # This scanner filters stocks whose current close price + 5% is higher
     # than the highest High price in past 200 candles and the maximum high
@@ -460,25 +1409,32 @@ class ScreeningStatistics:
         highestHigh200 = round(data.head(201).tail(200).describe()["High"]["max"], 2)
         highestHigh30 = round(data.head(31).tail(30).describe()["High"]["max"], 2)
         highestHigh200From30 = round(data.tail(200).describe()["High"]["max"], 2)
+        highestHigh8From30 = round(data.head(39).tail(8).describe()["High"]["max"], 2)
         data = data.head(200)
         data = data[::-1]  # Reverse the dataframe so that its the oldest date first
-        vol = pktalib.SMA(data["Volume"],timeperiod=200)
-        data["SMA200V"] = vol
+        vol200 = pktalib.SMA(data["Volume"],timeperiod=200)
+        data["SMA200V"] = vol200
+        vol50 = pktalib.SMA(data["Volume"],timeperiod=50)
+        data["SMA50V"] = vol50
         recent = data.tail(1)
         sma200v = recent["SMA200V"].iloc[0]
+        sma50v = recent["SMA50V"].iloc[0]
         if (
             np.isnan(recentClose)
             or np.isnan(highestHigh200)
             or np.isnan(highestHigh30)
             or np.isnan(highestHigh200From30)
+            or np.isnan(highestHigh8From30)
             or np.isnan(recentVolume)
             or np.isnan(sma200v)
+            or np.isnan(sma50v)
         ):
             return False
         if (
             (recentClose > highestHigh200)
-            and (highestHigh30 < highestHigh200From30)
-            and (recentVolume > sma200v)
+            and (((highestHigh30 < highestHigh200From30) and (recentVolume > sma200v)) or \
+                 ((highestHigh30 < highestHigh8From30) and (recentVolume > sma50v))
+                )
         ):
             saveDict["Breakout"] = saveDict["Breakout"] + "(Potential)"
             screenDict["Breakout"] = screenDict["Breakout"] + (
@@ -487,17 +1443,83 @@ class ScreeningStatistics:
             return True
         return False
 
+    def findProbableShortSellsFutures(self, df):
+        if df is None or len(df) == 0:
+            return False
+        data = df.copy()
+        data = data.fillna(0)
+        data = data.replace([np.inf, -np.inf], 0)
+        data = data[::-1]  # Reverse the dataframe so that its the oldest date first
+        recent = data.tail(4)
+        recent = recent[::-1]
+        if len(recent) < 4:
+            return False
+        # 1 day ago high > 2 days ago high
+        cond1 = recent["High"].iloc[1] > recent["High"].iloc[2]
+        # daily close < 1 day ago high
+        cond2 = cond1 and (recent["Close"].iloc[0] < recent["High"].iloc[1])
+        # Daily volume > 3 days ago volume
+        cond3 = cond2 and (recent["Volume"].iloc[0] > recent["Volume"].iloc[3])
+        # daily high < 1 day ago high
+        cond4 = cond3 and (recent["High"].iloc[0] < recent["High"].iloc[1])
+        return cond4
+    
+    # Find stocks with reversing PSAR and RSI
+    def findPSARReversalWithRSI(self, df, screenDict, saveDict,minRSI=50):
+        if df is None or len(df) == 0:
+            return False
+        data = df.copy()
+        data = data[::-1]
+        psar = pktalib.psar(data["High"],data["Low"])
+        if len(psar) < 3:
+            return False
+        psar = psar.tail(3)
+        data = data.tail(3)
+        # dayMinus2Psar = psar.iloc[0]
+        dayMinus1Psar = psar.iloc[1]
+        dayPSAR = psar.iloc[2]
+        # dayMinus2Close = data["Close"].iloc[0]
+        dayMinus1Close = data["Close"].iloc[1]
+        dayClose = data["Close"].iloc[2]
+        # dayMinus2RSI = data["RSI"].iloc[0]
+        dayMinus1RSI = data["RSI"].iloc[1]
+        dayRSI = data["RSI"].iloc[2]
+        
+        hasReversal= (((dayMinus1Psar >= dayMinus1Close) and \
+                    (dayClose >= dayPSAR)) and \
+                    (dayMinus1RSI <= minRSI) and \
+                    (dayRSI >= dayMinus1RSI))
+        if hasReversal:
+            saved = self.findCurrentSavedValue(screenDict,saveDict, "Pattern")
+            screenDict["Pattern"] = (
+                saved[0] 
+                + colorText.BOLD
+                + colorText.GREEN
+                + f"PSAR-RSI-Rev"
+                + colorText.END
+            )
+            saveDict["Pattern"] = saved[1] + f"PSAR-RSI-Rev"
+                # (((dayMinus2Psar >= dayMinus2Close) and \
+                # ((dayMinus1Close >= dayMinus1Psar) and \
+                # (dayClose >= dayPSAR))) and \
+                # (dayMinus2RSI >= minRSI) and \
+                # (dayMinus1RSI >= dayMinus2RSI) and \
+                # (dayRSI >= dayMinus1RSI)) or \
+        return hasReversal
+
     # Find stock reversing at given MA
     def findReversalMA(self, df, screenDict, saveDict, maLength, percentage=0.02):
+        if df is None or len(df) == 0:
+            return False
         data = df.copy()
-        maRange = [10, 20, 50, 200]
+        maRange = [9, 10, 20, 50, 200] if maLength in [9,10,20,50,100] else [9,10,20,50,100,maRange]
         results = []
         hasReversals = False
         data = data[::-1]
         saved = self.findCurrentSavedValue(screenDict,saveDict, "MA-Signal")
         for maLength in maRange:
             dataCopy = data
-            if self.configManager.useEMA:
+            if self.configManager.useEMA or maLength == 9:
                 maRev = pktalib.EMA(dataCopy["Close"], timeperiod=maLength)
             else:
                 maRev = pktalib.MA(dataCopy["Close"], timeperiod=maLength)
@@ -506,114 +1528,95 @@ class ScreeningStatistics:
             except Exception:# pragma: no cover
                 pass
             dataCopy.insert(len(dataCopy.columns), "maRev", maRev)
-            dataCopy = dataCopy[::-1].head(3)
-            if (
-                dataCopy.equals(
-                    dataCopy[
-                        (
-                            dataCopy.Close
-                            >= (dataCopy.maRev - (dataCopy.maRev * percentage))
-                        )
-                        & (
-                            dataCopy.Close
-                            <= (dataCopy.maRev + (dataCopy.maRev * percentage))
-                        )
-                    ]
-                )
-                and dataCopy.head(1)["Close"].iloc[0]
-                >= dataCopy.head(1)["maRev"].iloc[0]
-            ):
+            dataCopy = dataCopy[::-1].head(4)
+            bullishMAReversal = dataCopy["maRev"].iloc[0] >= dataCopy["maRev"].iloc[1] and \
+                dataCopy["maRev"].iloc[1] >= dataCopy["maRev"].iloc[2] and \
+                    dataCopy["maRev"].iloc[2] < dataCopy["maRev"].iloc[3]
+            bullishClose = dataCopy.head(1)["Close"].iloc[0] >= dataCopy.head(1)["maRev"].iloc[0]
+            bearishMAReversal = dataCopy["maRev"].iloc[0] <= dataCopy["maRev"].iloc[1] and \
+                dataCopy["maRev"].iloc[1] <= dataCopy["maRev"].iloc[2] and \
+                    dataCopy["maRev"].iloc[2] > dataCopy["maRev"].iloc[3]
+            isRecentCloseWithinPercentRange = dataCopy.equals(dataCopy[(dataCopy.Close >= (dataCopy.maRev - (dataCopy.maRev * percentage))) & (dataCopy.Close <= (dataCopy.maRev + (dataCopy.maRev * percentage)))])
+            if (isRecentCloseWithinPercentRange and bullishClose and bullishMAReversal) or \
+                (isRecentCloseWithinPercentRange and not bullishClose and bearishMAReversal):
                 hasReversals = True
                 results.append(str(maLength))
         if hasReversals:
             screenDict["MA-Signal"] = (
                 saved[0] 
                 + colorText.BOLD
-                + colorText.GREEN
-                + f"Reversal-[{','.join(results)}]MA"
+                + (colorText.GREEN if bullishMAReversal else (colorText.FAIL if bearishMAReversal else colorText.WARN))
+                + f"Reversal-[{','.join(results)}]{'EMA' if (maLength == 9 or self.configManager.useEMA) else 'MA'}"
                 + colorText.END
             )
-            saveDict["MA-Signal"] = saved[1] + f"Reversal-[{','.join(results)}]MA"
+            saveDict["MA-Signal"] = saved[1] + f"Reversal-[{','.join(results)}]{'EMA' if (maLength == 9 or self.configManager.useEMA) else 'MA'}"
         return hasReversals
-
-    def findCurrentSavedValue(self, screenDict, saveDict, key):
-        existingScreen = screenDict.get(key)
-        existingSave = saveDict.get(key)
-        existingScreen = f"{existingScreen}, " if (existingScreen is not None and len(existingScreen) > 0) else ""
-        existingSave = f"{existingSave}, " if (existingSave is not None and len(existingSave) > 0) else ""
-        return existingScreen, existingSave
-
-    # @measure_time
-    def findBbandsSqueeze(self,fullData, screenDict, saveDict, filter=4):
-        """
-        The TTM Squeeze indicator measures the relationship between the 
-        Bollinger Bands and Keltner's Channel. When the volatility increases, 
-        so does the distance between the bands, and conversely, when the 
-        volatility declines, the distance also decreases. The Squeeze indicator 
-        finds sections of the Bollinger Bands study which fall inside the 
-        Keltner's Channels.
-        
-        At the moment this squeeze happens, a price breakout from the upper 
-        Bollinger Band would indicate the possibility of an uptrend in the 
-        future. This is backed by the fact that once the price starts breaking 
-        out of the bands, it would mean a relaxation of the squeeze and the 
-        possibility of high market volatility and price movement in the future. 
-        Similarly, a price breakout from the lower Bollinger Band after a squeeze 
-        would indicate the possibility of a downtrend in the future and an 
-        increased market volatility in the same direction. When the market 
-        finishes a move, the indicator turns off, which corresponds to bands 
-        having pushed well outside the range of Keltner's Channels.
-        """
-        if fullData is None or len(fullData) < 20:
+    
+    # Find stocks with rising RSI from lower levels
+    def findRisingRSI(self, df, rsiKey="RSI"):
+        if df is None or len(df) == 0:
             return False
-        oldestRecordsFirst_df = fullData.head(30).copy()
-        latestRecordsFirst_df = oldestRecordsFirst_df[::-1].tail(30)
-        latestRecordsFirst_df = latestRecordsFirst_df.fillna(0)
-        latestRecordsFirst_df = latestRecordsFirst_df.replace([np.inf, -np.inf], 0)
-        # Bollinger bands
-        latestRecordsFirst_df.loc[:,'BBands-U'], latestRecordsFirst_df.loc[:,'BBands-M'], latestRecordsFirst_df.loc[:,'BBands-L'] = pktalib.BBANDS(latestRecordsFirst_df["Close"], 20)
-        # compute Keltner's channel
-        latestRecordsFirst_df['low_kel'], latestRecordsFirst_df['upp_kel'] = pktalib.KeltnersChannel(latestRecordsFirst_df["High"], latestRecordsFirst_df["Low"],latestRecordsFirst_df["Close"],20)
-        # squeeze indicator
-        def in_squeeze(df):
-            return df['low_kel'] < df['BBands-L'] < df['BBands-U'] < df['upp_kel']
+        if rsiKey not in df.columns:
+            return False
+        data = df.copy()
+        data = data[::-1]
+        data = data.tail(3)
+        if len(data) < 3:
+            return False
+        dayMinus2RSI = data["RSI"].iloc[0]
+        dayMinus1RSI = data["RSI"].iloc[1]
+        dayRSI = data["RSI"].iloc[2]
+        returnValue = (dayMinus2RSI <= 35 and dayMinus1RSI > dayMinus2RSI and dayRSI > dayMinus1RSI) or \
+                (dayMinus1RSI <= 35 and dayRSI > dayMinus1RSI)
+        if rsiKey == "RSI":
+            returnValue = self.findRisingRSI(df, rsiKey="RSIi") or returnValue
+        return returnValue
 
-        latestRecordsFirst_df['squeeze'] = latestRecordsFirst_df.apply(in_squeeze, axis=1)
-
-        # Let's review just the previous 3 candles including today (at the end)
-        latestRecordsFirst_df = latestRecordsFirst_df.tail(3)
-        # stock is coming out of the squeeze
-        saved = self.findCurrentSavedValue(screenDict, saveDict, "Pattern")
-        candle3Sqz = latestRecordsFirst_df.iloc[-3]["squeeze"]
-        candle1Sqz = latestRecordsFirst_df.iloc[-1]["squeeze"]
-        candle2Sqz = latestRecordsFirst_df.iloc[-2]["squeeze"]
-        if candle3Sqz and not candle1Sqz:
-            # 3rd candle from the most recent one was in squeeze but the most recent one is not.
-            if filter not in [1,3,4]: # Buy/Sell/All
-                return False
-            # decide which action to take by comparing distances                
-            distance_to_upper = abs(latestRecordsFirst_df['BBands-U'].values[-1] - latestRecordsFirst_df['Close'].values[-1])
-            distance_to_lower = abs(latestRecordsFirst_df['BBands-L'].values[-1] - latestRecordsFirst_df['Close'].values[-1])
-            
-            action = False
-            if distance_to_upper < distance_to_lower:
-                if filter not in [1,4]: # Buy/All
-                    return False
-                action = True
-            elif filter not in [3,4]: # Sell/All
-                return False
-            screenDict["Pattern"] = saved[0] + colorText.BOLD + (colorText.GREEN if action else colorText.FAIL) + f"BBands-SQZ-{'Buy' if action else 'Sell'}" + colorText.END
-            saveDict["Pattern"] = saved[1] + f"TTM-SQZ-{'Buy' if action else 'Sell'}"
-            return True
-        elif candle3Sqz and candle2Sqz and candle1Sqz:
-            # Last 3 candles in squeeze
-            if filter not in [2,4]: # SqZ/All
-                return False
-            screenDict["Pattern"] = f'{saved[0]}{colorText.BOLD}{colorText.WARN}TTM-SQZ{colorText.END}'
-            saveDict["Pattern"] = f'{saved[1]}TTM-SQZ'
-            return True
-        return False
-        
+    # Find stock showing RSI crossing with RSI 9 SMA
+    def findRSICrossingMA(self, df, screenDict, saveDict,lookFor=1, maLength=9, rsiKey="RSI"):
+        if df is None or len(df) == 0:
+            return False
+        if rsiKey not in df.columns:
+            return False
+        data = df.copy()
+        data = data[::-1]
+        maRsi = pktalib.MA(data[rsiKey], timeperiod=maLength)
+        data = data[::-1].head(3)
+        maRsi = maRsi[::-1].head(3)
+        saved = self.findCurrentSavedValue(screenDict,saveDict,"Trend")
+        if lookFor in [1,3] and maRsi.iloc[0] <= data[rsiKey].iloc[0] and maRsi.iloc[1] > data[rsiKey].iloc[1]:
+            screenDict['MA-Signal'] = saved[0] + colorText.BOLD + colorText.GREEN + f'RSI-MA-Buy' + colorText.END
+            saveDict['MA-Signal'] = saved[1] + f'RSI-MA-Buy'
+            return True if (rsiKey == "RSIi") else (self.findRSICrossingMA(df, screenDict, saveDict,lookFor=lookFor, maLength=maLength, rsiKey="RSIi") or True)
+        elif lookFor in [2,3] and maRsi.iloc[0] >= data[rsiKey].iloc[0] and maRsi.iloc[1] < data[rsiKey].iloc[1]:
+            screenDict['MA-Signal'] = saved[0] + colorText.BOLD + colorText.FAIL + f'RSI-MA-Sell' + colorText.END
+            saveDict['MA-Signal'] = saved[1] + f'RSI-MA-Sell'
+            return True if (rsiKey == "RSIi") else (self.findRSICrossingMA(df, screenDict, saveDict,lookFor=lookFor, maLength=maLength, rsiKey="RSIi") or True)
+        return False if (rsiKey == "RSIi") else (self.findRSICrossingMA(df, screenDict, saveDict,lookFor=lookFor, maLength=maLength, rsiKey="RSIi"))
+    
+    def findShortSellCandidatesForVolumeSMA(self, df):
+        if df is None or len(df) == 0:
+            return False
+        data = df.copy()
+        data = data.fillna(0)
+        data = data.replace([np.inf, -np.inf], 0)
+        data = data[::-1]  # Reverse the dataframe so that its the oldest date first
+        data.loc[:,'SMAV10'] = pktalib.SMA(data["Volume"], 10)
+        recent = data.tail(4)
+        recent = recent[::-1]
+        if len(recent) < 4:
+            return False
+        # daily close < 1 day ago close * .97
+        cond1 = recent["Close"].iloc[0] < recent["Close"].iloc[1] * 0.97
+        # Daily volume > 100k
+        cond2 = cond1 and (recent["Volume"].iloc[0] > 100000)
+        # Daily volume * Daily Close > 1000k
+        cond3 = cond2 and (recent["Volume"].iloc[0] * recent["Close"].iloc[0] > 1000000)
+        # Daily close above 8
+        cond4 = cond3 and recent["Close"].iloc[0] > 8
+        cond5 = cond4 and (recent["Volume"].iloc[0] > recent["SMAV10"].iloc[0] * 0.75)
+        return cond5
+    
     #@measure_time
     # Find out trend for days to lookback
     def findTrend(self, df, screenDict, saveDict, daysToLookback=None, stockName=""):
@@ -767,7 +1770,7 @@ class ScreeningStatistics:
         return False
 
     # @measure_time
-    def findUptrend(self, df, screenDict, saveDict, testing, stock,onlyMF=False,hostData=None,exchangeName="INDIA"):
+    def findUptrend(self, df, screenDict, saveDict, testing, stock,onlyMF=False,hostData=None,exchangeName="INDIA",refreshMFAndFV=True,downloadOnly=False):
         # shouldProceed = True
         isUptrend = False
         isDowntrend = False
@@ -810,38 +1813,42 @@ class ScreeningStatistics:
         dma50decision = 't:▲' if is50DMAUptrend else ('t:▼' if is50DMADowntrend else '')
         mf_inst_ownershipChange = 0
         change_millions =""
-        try:
-            mf_inst_ownershipChange = self.getMutualFundStatus(stock,onlyMF=onlyMF,hostData=hostData,force=(hostData is None or hostData.empty or not ("MF" in hostData.columns or "FII" in hostData.columns)),exchangeName=exchangeName)
-            roundOff = 2
-            millions = round(mf_inst_ownershipChange/1000000,roundOff)
-            while float(millions) == 0 and roundOff <=5:
-                roundOff +=1
-                millions = round(mf_inst_ownershipChange/1000000,roundOff)
-            change_millions = f"({millions}M)"
-        except Exception as e:  # pragma: no cover
-            self.default_logger.debug(e, exc_info=True)
-            pass
-        try:
-            #Let's get the fair value, either saved or fresh from service
-            fairValue = self.getFairValue(stock,hostData,force=(hostData is None or hostData.empty or "FairValue" not in hostData.columns),exchangeName=exchangeName)
-            if fairValue is not None and fairValue != 0:
-                ltp = saveDict["LTP"]
-                fairValueDiff = round(fairValue - ltp,0)
-                saveDict["FairValue"] = str(fairValue)
-                saveDict["FVDiff"] = fairValueDiff
-                screenDict["FVDiff"] = fairValueDiff
-                screenDict["FairValue"] = (colorText.GREEN if fairValue >= ltp else colorText.FAIL) + saveDict["FairValue"] + colorText.END
-        except Exception as e:  # pragma: no cover
-            self.default_logger.debug(e, exc_info=True)
-            pass
         mf = ""
         mfs = ""
-        if mf_inst_ownershipChange > 0:
-            mf = f"MFI:▲ {change_millions}"
-            mfs = colorText.GREEN + mf + colorText.END
-        elif mf_inst_ownershipChange < 0:
-            mf = f"MFI:▼ {change_millions}"
-            mfs = colorText.FAIL + mf + colorText.END
+        if refreshMFAndFV:
+            try:
+                mf_inst_ownershipChange = self.getMutualFundStatus(stock,onlyMF=onlyMF,hostData=hostData,force=(hostData is None or hostData.empty or not ("MF" in hostData.columns or "FII" in hostData.columns)) and downloadOnly,exchangeName=exchangeName)
+                if isinstance(mf_inst_ownershipChange, pd.Series):
+                    mf_inst_ownershipChange = 0
+                roundOff = 2
+                millions = round(mf_inst_ownershipChange/1000000,roundOff)
+                while float(millions) == 0 and roundOff <=5:
+                    roundOff +=1
+                    millions = round(mf_inst_ownershipChange/1000000,roundOff)
+                change_millions = f"({millions}M)"
+            except Exception as e:  # pragma: no cover
+                self.default_logger.debug(e, exc_info=True)
+                pass
+            try:
+                #Let's get the fair value, either saved or fresh from service
+                fairValue = self.getFairValue(stock,hostData,force=(hostData is None or hostData.empty or "FairValue" not in hostData.columns) and downloadOnly,exchangeName=exchangeName)
+                if fairValue is not None and fairValue != 0:
+                    ltp = saveDict["LTP"]
+                    fairValueDiff = round(fairValue - ltp,0)
+                    saveDict["FairValue"] = str(fairValue)
+                    saveDict["FVDiff"] = fairValueDiff
+                    screenDict["FVDiff"] = fairValueDiff
+                    screenDict["FairValue"] = (colorText.GREEN if fairValue >= ltp else colorText.FAIL) + saveDict["FairValue"] + colorText.END
+            except Exception as e:  # pragma: no cover
+                self.default_logger.debug(e, exc_info=True)
+                pass
+            
+            if mf_inst_ownershipChange > 0:
+                mf = f"MFI:▲ {change_millions}"
+                mfs = colorText.GREEN + mf + colorText.END
+            elif mf_inst_ownershipChange < 0:
+                mf = f"MFI:▼ {change_millions}"
+                mfs = colorText.FAIL + mf + colorText.END
 
         saved = self.findCurrentSavedValue(screenDict,saveDict,"Trend")
         decision_scr = (colorText.GREEN if isUptrend else (colorText.FAIL if isDowntrend else colorText.WARN)) + f"{decision}" + colorText.END
@@ -851,15 +1858,31 @@ class ScreeningStatistics:
         saveDict["MFI"] = mf_inst_ownershipChange
         screenDict["MFI"] = mf_inst_ownershipChange
         return isUptrend, mf_inst_ownershipChange, fairValueDiff
-    
-    # Private method to find candle type
-    # True = Bullish, False = Bearish
-    def getCandleType(self, dailyData):
-        return bool(dailyData["Close"].iloc[0] >= dailyData["Open"].iloc[0])
+
+    def getMorningClose(self,df):
+        close = df["Close"][-1]
+        index = len(df)
+        while close is np.nan and index >= 0:
+            close = df["Close"][index - 1]
+            index -= 1
+        return close
+
+    def getMorningOpen(self,df):
+        open = df["Open"][0]
+        index = 0
+        while open is np.nan and index < len(df):
+            open = df["Open"][index + 1]
+            index += 1
+        return open
 
     def getCandleBodyHeight(self, dailyData):
         bodyHeight = dailyData["Close"].iloc[0] - dailyData["Open"].iloc[0]
         return bodyHeight
+
+    # Private method to find candle type
+    # True = Bullish, False = Bearish
+    def getCandleType(self, dailyData):
+        return bool(dailyData["Close"].iloc[0] >= dailyData["Open"].iloc[0])
 
     def getFairValue(self, stock, hostData=None, force=False,exchangeName="INDIA"):
         if hostData is None or len(hostData) < 1:
@@ -876,12 +1899,20 @@ class ScreeningStatistics:
                 security = None
                 # Refresh each saturday or sunday or when not found in saved data
                 try:
-                    security = Stock(stock,exchange=exchangeName)
+                    with SuppressOutput(suppress_stderr=True, suppress_stdout=True):
+                        security = Stock(stock,exchange=exchangeName)
                 except ValueError: # pragma: no cover
                     # We did not find the stock? It's okay. Move on to the next one.
                     pass
+                except (TimeoutError, ConnectionError) as e:
+                    self.default_logger.debug(e, exc_info=True)
+                    pass
+                except Exception as e:
+                    self.default_logger.debug(e, exc_info=True)
+                    pass
                 if security is not None:
-                    fv = security.fairValue()
+                    with SuppressOutput(suppress_stderr=True, suppress_stdout=True):
+                        fv = security.fairValue()
                     if fv is not None:
                         try:
                             fvResponseValue = fv["latestFairValue"]
@@ -897,6 +1928,54 @@ class ScreeningStatistics:
                         pass
         return fairValue
 
+    def getFreshMFIStatus(self, stock,exchangeName="INDIA"):
+        changeStatusDataMF = None
+        changeStatusDataInst = None
+        netChangeMF = 0
+        netChangeInst = 0
+        latest_mfdate = None
+        latest_instdate = None
+        security = None
+        try:
+            with SuppressOutput(suppress_stderr=True, suppress_stdout=True):
+                security = Stock(stock,exchange=exchangeName)
+        except ValueError:
+            # We did not find the stock? It's okay. Move on to the next one.
+            pass
+        except (TimeoutError, ConnectionError) as e:
+            self.default_logger.debug(e, exc_info=True)
+            pass
+        except Exception as e:
+            self.default_logger.debug(e, exc_info=True)
+            pass
+        if security is not None:
+            try:
+                with SuppressOutput(suppress_stderr=True, suppress_stdout=True):
+                    changeStatusRowsMF = security.mutualFundOwnership(top=5)
+                    changeStatusRowsInst = security.institutionOwnership(top=5)
+                    changeStatusDataMF = security.mutualFundFIIChangeData(changeStatusRowsMF)
+                    changeStatusDataInst = security.mutualFundFIIChangeData(changeStatusRowsInst)
+            except Exception as e:
+                self.default_logger.debug(e, exc_info=True)
+                # TypeError or ConnectionError because we could not find the stock or MFI data isn't available?
+                pass
+            lastDayLastMonth = PKDateUtilities.last_day_of_previous_month(PKDateUtilities.currentDateTime())
+            lastDayLastMonth = lastDayLastMonth.strftime("%Y-%m-%dT00:00:00.000")
+            if changeStatusDataMF is not None and len(changeStatusDataMF) > 0:
+                df_groupedMF = changeStatusDataMF.groupby("date", sort=False)
+                for mfdate, df_groupMF in df_groupedMF:
+                    netChangeMF = df_groupMF["changeAmount"].sum()
+                    latest_mfdate = mfdate
+                    break
+            if changeStatusDataInst is not None and len(changeStatusDataInst) > 0:
+                df_groupedInst = changeStatusDataInst.groupby("date", sort=False)
+                for instdate, df_groupInst in df_groupedInst:
+                    if (latest_mfdate is not None and latest_mfdate == instdate) or (latest_mfdate is None) or (instdate == lastDayLastMonth):
+                        netChangeInst = df_groupInst["changeAmount"].sum()
+                        latest_instdate = instdate
+                    break
+        return netChangeMF,netChangeInst,latest_mfdate,latest_instdate
+    
     def getMutualFundStatus(self, stock,onlyMF=False, hostData=None, force=False,exchangeName="INDIA"):
         if hostData is None or len(hostData) < 1:
             hostData = pd.DataFrame()
@@ -919,10 +1998,14 @@ class ScreeningStatistics:
                     pass
                 try:
                     latest_mfdate = hostData.loc[hostData.index[-1],"MF_Date"]
+                    if isinstance(latest_mfdate, float):
+                        latest_mfdate = datetime.datetime.fromtimestamp(latest_mfdate).strftime('%Y-%m-%d')
                 except (KeyError,IndexError):
                     pass
                 try:
                     latest_instdate = hostData.loc[hostData.index[-1],"FII_Date"]
+                    if isinstance(latest_instdate, float):
+                        latest_instdate = datetime.datetime.fromtimestamp(latest_instdate).strftime('%Y-%m-%d')
                 except (KeyError,IndexError):
                     pass
                 if latest_mfdate is not None:
@@ -981,46 +2064,6 @@ class ScreeningStatistics:
                 latest_instdate = PKDateUtilities.dateFromYmdString(latest_instdate.split("T")[0])
             return netChangeMF if ((latest_mfdate is not None) and latest_mfdate > (latest_instdate if latest_instdate is not None else (latest_mfdate - datetime.timedelta(1)))) else netChangeInst
 
-    def getFreshMFIStatus(self, stock,exchangeName="INDIA"):
-        changeStatusDataMF = None
-        changeStatusDataInst = None
-        netChangeMF = 0
-        netChangeInst = 0
-        latest_mfdate = None
-        latest_instdate = None
-        security = None
-        try:
-            security = Stock(stock,exchange=exchangeName)
-        except ValueError:
-            # We did not find the stock? It's okay. Move on to the next one.
-            pass
-        if security is not None:
-            try:
-                changeStatusRowsMF = security.mutualFundOwnership(top=5)
-                changeStatusRowsInst = security.institutionOwnership(top=5)
-                changeStatusDataMF = security.mutualFundFIIChangeData(changeStatusRowsMF)
-                changeStatusDataInst = security.mutualFundFIIChangeData(changeStatusRowsInst)
-            except Exception as e:
-                self.default_logger.debug(e, exc_info=True)
-                # TypeError or ConnectionError because we could not find the stock or MFI data isn't available?
-                pass
-            lastDayLastMonth = PKDateUtilities.last_day_of_previous_month(PKDateUtilities.currentDateTime())
-            lastDayLastMonth = lastDayLastMonth.strftime("%Y-%m-%dT00:00:00.000")
-            if changeStatusDataMF is not None and len(changeStatusDataMF) > 0:
-                df_groupedMF = changeStatusDataMF.groupby("date", sort=False)
-                for mfdate, df_groupMF in df_groupedMF:
-                    netChangeMF = df_groupMF["changeAmount"].sum()
-                    latest_mfdate = mfdate
-                    break
-            if changeStatusDataInst is not None and len(changeStatusDataInst) > 0:
-                df_groupedInst = changeStatusDataInst.groupby("date", sort=False)
-                for instdate, df_groupInst in df_groupedInst:
-                    if (latest_mfdate is not None and latest_mfdate == instdate) or (latest_mfdate is None) or (instdate == lastDayLastMonth):
-                        netChangeInst = df_groupInst["changeAmount"].sum()
-                        latest_instdate = instdate
-                    break
-        return netChangeMF,netChangeInst,latest_mfdate,latest_instdate
-
 
     def getNiftyPrediction(self, df):
         import warnings
@@ -1040,7 +2083,8 @@ class ScreeningStatistics:
             data = data.iloc[-1]
             ###
             data = pkl["scaler"].transform([data])
-            pred = model.predict(data)[0]
+            with SuppressOutput(suppress_stdout=True, suppress_stderr=True):
+                pred = model.predict(data)[0]
         if pred > 0.5:
             outText = "BEARISH"
             out = (
@@ -1061,8 +2105,8 @@ class ScreeningStatistics:
                 + colorText.BOLD
             )
             sug = "Stay Bullish!"
-        if not PKDateUtilities.isClosingHour():
-            print(
+        if PKDateUtilities.isClosingHour():
+            OutputControls().printOutput(
                 colorText.BOLD
                 + colorText.WARN
                 + "Note: The AI prediction should be executed After 3 PM or Near to Closing time as the Prediction Accuracy is based on the Closing price!"
@@ -1072,7 +2116,7 @@ class ScreeningStatistics:
         strengthText = "Probability/Strength of Prediction = {}%".format(
             Utility.tools.getSigmoidConfidence(pred[0])
         )
-        print(
+        OutputControls().printOutput(
             colorText.BOLD
             + colorText.BLUE
             + "\n"
@@ -1082,7 +2126,7 @@ class ScreeningStatistics:
             + predictionText
             + colorText.END
         )
-        print(
+        OutputControls().printOutput(
             colorText.BOLD
             + colorText.BLUE
             + "\n"
@@ -1152,9 +2196,11 @@ class ScreeningStatistics:
             elif data_list[cnt] in last_signal:
                 try:
                     condition = last_signal[data_list[cnt]][0]["SL"][0]
-                except KeyError as e: # pragma: no cover
-                    self.default_logger.debug(e, exc_info=True)
-                    condition = last_signal[data_list[cnt]]["SL"][0]
+                except (KeyError,IndexError) as e: # pragma: no cover
+                    try:
+                        condition = last_signal[data_list[cnt]]["SL"][0]
+                    except (KeyError,IndexError) as e: # pragma: no cover
+                        condition = None
                 # if last_signal[data_list[cnt]] is not final:          # Debug - Shows all conditions
                 if len(final["SL"]) > 0 and condition != final["SL"].iloc[0]:
                     # Do something with results
@@ -1210,47 +2256,162 @@ class ScreeningStatistics:
             result_df.sort_values(by="Time", inplace=True)
         return result_df[::-1]
 
+    def non_zero_range(self, high: pd.Series, low: pd.Series) -> pd.Series:
+        """Returns the difference of two series and adds epsilon to any zero values.  This occurs commonly in crypto data when 'high' = 'low'."""
+        diff = high - low
+        if diff.eq(0).any().any():
+            diff += sflt.epsilon
+        return diff
+    
+    def populate_entry_trend(self, dataframe: pd.DataFrame, metadata: dict) -> pd.DataFrame:
+
+        dataframe.loc[
+            (
+                        (dataframe['adx'] > self.adx_long_min.value) & # trend strength confirmation
+                        (dataframe['adx'] < self.adx_long_max.value) & # trend strength confirmation
+                        (dataframe['trend_l'] > 0) &
+                        (dataframe['volume'] > dataframe['volume_mean']) &
+                        (dataframe['volume'] > 0)
+
+            ),
+            'enter_long'] = 1
+
+        dataframe.loc[
+            (
+                        (dataframe['adx'] > self.adx_short_min.value) & # trend strength confirmation
+                        (dataframe['adx'] < self.adx_short_max.value) & # trend strength confirmation
+                        (dataframe['trend_s'] < 0) &
+                        (dataframe['volume'] > dataframe['volume_mean_s']) # volume weighted indicator
+            ),
+            'enter_short'] = 1
+        
+        return dataframe
+    
+    def populate_exit_trend(self, dataframe: pd.DataFrame, metadata: dict) -> pd.DataFrame:
+
+        conditions_long = []
+        conditions_short = []
+        dataframe.loc[:, 'exit_tag'] = ''
+
+        exit_long = (
+                # (dataframe['close'] < dataframe['low'].shift(self.sell_shift.value)) &
+                (dataframe['close'] < dataframe['ema_l']) &
+                (dataframe['volume'] > dataframe['volume_mean_exit'])
+        )
+
+        exit_short = (
+                # (dataframe['close'] > dataframe['high'].shift(self.sell_shift_short.value)) &
+                (dataframe['close'] > dataframe['ema_s']) &
+                (dataframe['volume'] > dataframe['volume_mean_exit_s'])
+        )
+
+
+        conditions_short.append(exit_short)
+        dataframe.loc[exit_short, 'exit_tag'] += 'exit_short'
+
+
+        conditions_long.append(exit_long)
+        dataframe.loc[exit_long, 'exit_tag'] += 'exit_long'
+
+
+        if conditions_long:
+            dataframe.loc[
+                pd.reduce(lambda x, y: x | y, conditions_long),
+                'exit_long'] = 1
+
+        if conditions_short:
+            dataframe.loc[
+                pd.reduce(lambda x, y: x | y, conditions_short),
+                'exit_short'] = 1
+            
+        return dataframe
+
+    def populate_indicators(self, dataframe: pd.DataFrame, metadata: dict) -> pd.DataFrame:
+        if not self.dp:
+            # Don't do anything if DataProvider is not available.
+            return dataframe
+        L_optimize_trend_alert  = self.findBuySellSignalsFromATRTrailing(dataframe=dataframe, key_value= self.key_value_l.value, atr_period= self.atr_period_l.value, ema_period=self.ema_period_l.value)
+        # Long position?
+        dataframe['trend_l'] = L_optimize_trend_alert['trend']
+        S_optimize_trend_alert  = self.findBuySellSignalsFromATRTrailing(dataframe=dataframe, key_value= self.key_value_s.value, atr_period= self.atr_period_s.value, ema_period=self.ema_period_s.value)
+        # Short position?
+        dataframe['trend_s'] = S_optimize_trend_alert['trend']
+
+        # ADX
+        dataframe['adx'] = pktalib.ADX(dataframe)
+        
+        # RSI
+        # dataframe['rsi'] = ta.RSI(dataframe)
+
+        # EMA
+        dataframe['ema_l'] = pktalib.EMA(dataframe['close'], timeperiod=self.ema_period_l_exit.value)
+        dataframe['ema_s'] = pktalib.EMA(dataframe['close'], timeperiod=self.ema_period_s_exit.value)
+
+
+        # Volume Weighted
+        dataframe['volume_mean'] = dataframe['volume'].rolling(self.volume_check.value).mean().shift(1)
+        dataframe['volume_mean_exit'] = dataframe['volume'].rolling(self.volume_check_exit.value).mean().shift(1)
+
+        dataframe['volume_mean_s'] = dataframe['volume'].rolling(self.volume_check_s.value).mean().shift(1)
+        dataframe['volume_mean_exit_s'] = dataframe['volume'].rolling(self.volume_check_exit_s.value).mean().shift(1)
+        return dataframe
+    
     # Preprocess the acquired data
     def preprocessData(self, df, daysToLookback=None):
+        assert isinstance(df, pd.DataFrame)
         data = df.copy()
-        self.default_logger.info(f"Preprocessing data:\n{data.head(1)}\n")
-        if daysToLookback is None:
-            daysToLookback = self.configManager.daysToLookback
-        if self.configManager.useEMA:
-            sma = pktalib.EMA(data["Close"], timeperiod=50)
-            lma = pktalib.EMA(data["Close"], timeperiod=200)
-            ssma = pktalib.EMA(data["Close"], timeperiod=9)
-            data.insert(len(data.columns), "SMA", sma)
-            data.insert(len(data.columns), "LMA", lma)
-            data.insert(len(data.columns), "SSMA", ssma)
-        else:
-            sma = pktalib.SMA(data["Close"], timeperiod=50)
-            lma = pktalib.SMA(data["Close"], timeperiod=200)
-            ssma = pktalib.SMA(data["Close"], timeperiod=9)
-            data.insert(len(data.columns), "SMA", sma)
-            data.insert(len(data.columns), "LMA", lma)
-            data.insert(len(data.columns), "SSMA", ssma)
-        vol = pktalib.SMA(data["Volume"], timeperiod=20)
-        rsi = pktalib.RSI(data["Close"], timeperiod=14)
-        data.insert(len(data.columns), "VolMA", vol)
-        data.insert(len(data.columns), "RSI", rsi)
-        cci = pktalib.CCI(data["High"], data["Low"], data["Close"], timeperiod=14)
-        data.insert(len(data.columns), "CCI", cci)
-        # len(data["Close"])
-        fastk, fastd = pktalib.STOCHRSI(
-            data["Close"], timeperiod=14, fastk_period=5, fastd_period=3, fastd_matype=0
-        )
-        data.insert(len(data.columns), "FASTK", fastk)
-        data.insert(len(data.columns), "FASTD", fastd)
+        try:
+            data = data.replace(np.inf, np.nan).replace(-np.inf, np.nan).dropna(how="all")
+            # self.default_logger.info(f"Preprocessing data:\n{data.head(1)}\n")
+            if daysToLookback is None:
+                daysToLookback = self.configManager.daysToLookback
+            if self.configManager.useEMA:
+                sma = pktalib.EMA(data["Close"], timeperiod=50)
+                lma = pktalib.EMA(data["Close"], timeperiod=200)
+                ssma = pktalib.EMA(data["Close"], timeperiod=9)
+                ssma20 = pktalib.EMA(data["Close"], timeperiod=20)
+                data.insert(len(data.columns), "SMA", sma)
+                data.insert(len(data.columns), "LMA", lma)
+                data.insert(len(data.columns), "SSMA", ssma)
+                data.insert(len(data.columns), "SSMA20", ssma20)
+            else:
+                sma = pktalib.SMA(data["Close"], timeperiod=50)
+                lma = pktalib.SMA(data["Close"], timeperiod=200)
+                ssma = pktalib.SMA(data["Close"], timeperiod=9)
+                ssma20 = pktalib.SMA(data["Close"], timeperiod=20)
+                data.insert(len(data.columns), "SMA", sma)
+                data.insert(len(data.columns), "LMA", lma)
+                data.insert(len(data.columns), "SSMA", ssma)
+                data.insert(len(data.columns), "SSMA20", ssma20)
+            vol = pktalib.SMA(data["Volume"], timeperiod=20)
+            rsi = pktalib.RSI(data["Close"], timeperiod=14)
+            data.insert(len(data.columns), "VolMA", vol)
+            data.insert(len(data.columns), "RSI", rsi)
+            cci = pktalib.CCI(data["High"], data["Low"], data["Close"], timeperiod=14)
+            data.insert(len(data.columns), "CCI", cci)
+            try:
+                fastk, fastd = pktalib.STOCHRSI(
+                    data["Close"], timeperiod=14, fastk_period=5, fastd_period=3, fastd_matype=0
+                )
+                data.insert(len(data.columns), "FASTK", fastk)
+                data.insert(len(data.columns), "FASTD", fastd)
+            except Exception as e:
+                self.default_logger.debug(e, exc_info=True)
+                pass
+        except Exception as e:
+                self.default_logger.debug(e, exc_info=True)
+                pass
         data = data[::-1]  # Reverse the dataframe
         # data = data.fillna(0)
         # data = data.replace([np.inf, -np.inf], 0)
         fullData = data
         trimmedData = data.head(daysToLookback)
         return (fullData, trimmedData)
-
+    
     # Validate if the stock is bullish in the short term
     def validate15MinutePriceVolumeBreakout(self, df):
+        if df is None or len(df) == 0:
+            return False
         # https://chartink.com/screener/15-min-price-volume-breakout
         data = df.copy()
         data = data.fillna(0)
@@ -1262,10 +2423,15 @@ class ScreeningStatistics:
             ::-1
         ]  # Reverse the dataframe so that it's the most recent date first
         recent = data.head(3)
-        cond1 = recent["Close"].iloc[0] > recent["Close"].iloc[1]
-        cond2 = cond1 and (recent["Close"].iloc[0] > recent["SMA20"].iloc[0])
+        if len(recent) < 3:
+            return False
+        # Price at least 1% higher than previous close
+        cond1 = recent["Close"].iloc[0] > 1.01*recent["Close"].iloc[1]
+        # Volume at least 5% higher than previous volume
+        cond6 = recent["Volume"].iloc[0] > 1.05*recent["Volume"].iloc[1]
+        cond2 = cond1 and cond6 and (recent["Close"].iloc[0] > recent["SMA20"].iloc[0])
         cond3 = cond2 and (recent["Close"].iloc[1] > recent["High"].iloc[2])
-        cond4 = cond3 and (recent["Volume"].iloc[0] > recent["SMA20V"].iloc[0])
+        cond4 = cond3 and (recent["Volume"].iloc[0] > 1.05*recent["SMA20V"].iloc[0])
         cond5 = cond4 and (recent["Volume"].iloc[1] > recent["SMA20V"].iloc[0])
         return cond5
 
@@ -1305,6 +2471,8 @@ class ScreeningStatistics:
     #@measure_time
     # validate if CCI is within given range
     def validateCCI(self, df, screenDict, saveDict, minCCI, maxCCI):
+        if df is None or len(df) == 0:
+            return False
         data = df.copy()
         data = data.fillna(0)
         data = data.replace([np.inf, -np.inf], 0)
@@ -1324,31 +2492,127 @@ class ScreeningStatistics:
         return False
 
     # Find Conflucence
-    def validateConfluence(self, stock, df, screenDict, saveDict, percentage=0.1,confFilter=3):
-        data = df.copy()
+    def validateConfluence(self, stock, df, full_df, screenDict, saveDict, percentage=0.1,confFilter=3):
+        if df is None or len(df) == 0:
+            return False
+        data = df.copy() if confFilter < 4 else full_df.copy()
         recent = data.head(2)
-        is50DMAUpTrend = (recent["SMA"].iloc[0] > recent["SMA"].iloc[1])
-        is50DMADownTrend = (recent["SMA"].iloc[0] < recent["SMA"].iloc[1])
-        isGoldenCrossOver = (recent["SMA"].iloc[0] >= recent["LMA"].iloc[0]) and \
+        if len(recent) < 2:
+            return False
+        key1 = "SMA"
+        key2 = "LMA"
+        key3 = "50DMA"
+        key4 = "200DMA"
+        saved = self.findCurrentSavedValue(screenDict,saveDict,"MA-Signal")
+        if confFilter == 4:
+            maxRecentDays = int(self.configManager.superConfluenceMaxReviewDays)
+            recentCurrentDay = 1
+            isSuperConfluence = False
+            ema_8 = 0
+            ema_21 = 0
+            ema_55 = 0
+            reversedData = data[::-1]  # Reverse the dataframe so that it's oldest data first
+            emas = self.configManager.superConfluenceEMAPeriods.split(",")
+            if len(emas) < 2:
+                emas = [8,21,]
+            ema8CrossedEMA21 = False
+            ema8CrossedEMA55 = False
+            ema21CrossedEMA55 = False
+            emasCrossedSMA200 = False
+            silverCross = False
+            while recentCurrentDay <= maxRecentDays:
+                # 8 ema>21 ema > 55 ema >200 sma each OF THE ema AND THE 200 sma SEPARATED BY LESS THAN 1%(ideally 0.1% TO 0.5%) DURING CONFLUENCE
+                if len(emas) >= 1:
+                    ema_8 = pktalib.EMA(reversedData["Close"],int(emas[0])).tail(recentCurrentDay).head(1).iloc[0]
+                    ema_8_prev = pktalib.EMA(reversedData["Close"],int(emas[0])).tail(recentCurrentDay+1).head(1).iloc[0]
+                if len(emas) >= 2:
+                    ema_21 = pktalib.EMA(reversedData["Close"],int(emas[1])).tail(recentCurrentDay).head(1).iloc[0]
+                    ema_21_prev = pktalib.EMA(reversedData["Close"],int(emas[1])).tail(recentCurrentDay+1).head(1).iloc[0]
+                if len(emas) >= 3:
+                    ema_55 = pktalib.EMA(reversedData["Close"],int(emas[2])).tail(recentCurrentDay).head(1).iloc[0]
+                    ema_55_prev = pktalib.EMA(reversedData["Close"],int(emas[2])).tail(recentCurrentDay+1).head(1).iloc[0]
+                sma_200 = pktalib.SMA(reversedData["Close"],200).tail(recentCurrentDay).head(1).iloc[0]
+                ema9 = pktalib.EMA(reversedData["Close"],9).tail(recentCurrentDay).head(1).iloc[0]
+                # smaRange = sma_200 * percentage
+                ema8CrossedEMA21 = (ema_8 >= ema_21 and ema_8_prev <= ema_21_prev) or ema8CrossedEMA21
+                ema8CrossedEMA55 = (ema_8 >= ema_55 and ema_8_prev <= ema_55_prev) or ema8CrossedEMA55
+                ema21CrossedEMA55 = (ema_21 >= ema_55 and ema_21_prev <= ema_55_prev) or ema21CrossedEMA55
+                superConfluenceEnforce200SMA = self.configManager.superConfluenceEnforce200SMA
+                ema_min = min(ema_8, ema_21, ema_55)
+                ema55_percentage = abs(ema_55 - sma_200) / ema_55
+                emasCrossedSMA200 = ((ema55_percentage <= percentage)) or emasCrossedSMA200 # (sma_200 <= ema_min and sma_200 <= ema_55)
+                if not superConfluenceEnforce200SMA:
+                    emasCrossedSMA200 = True
+                superbConfluence = sum([ema8CrossedEMA21, emasCrossedSMA200]) >= 2 # ema8CrossedEMA55, ema21CrossedEMA55
+                if superbConfluence:
+                    indexDate = PKDateUtilities.dateFromYmdString(str(data.index[recentCurrentDay-1]).split(" ")[0])
+                    dayDate = f"{indexDate.day}/{indexDate.month}"
+                    screenDict["MA-Signal"] = (
+                        saved[0] 
+                        + (colorText.GREEN)
+                        + f"SuperGoldenConf.({dayDate})"
+                        + colorText.END
+                    )
+                    saveDict["MA-Signal"] = saved[1] + f"SuperGoldenConf(-{dayDate})"
+                    screenDict[f"Latest EMA-{self.configManager.superConfluenceEMAPeriods}, SMA-200 (EMA55 %)"] = f"{colorText.GREEN if (ema_8>=ema_21 and ema_8>=ema_55) else (colorText.WARN if (ema_8>=ema_21 or ema_8>=ema_55) else colorText.FAIL)}{round(ema_8,1)}{colorText.END},{colorText.GREEN if ema_21>=ema_55 else colorText.FAIL}{round(ema_21,1)}{colorText.END},{round(ema_55,1)}, {colorText.GREEN if sma_200<= ema_55 and emasCrossedSMA200 else (colorText.WARN if sma_200<= ema_55 else colorText.FAIL)}{round(sma_200,1)} ({round(ema55_percentage*100,1)}%){colorText.END}"
+                    saveDict[f"Latest EMA-{self.configManager.superConfluenceEMAPeriods}, SMA-200 (EMA55 %)"] = f"{round(ema_8,1)},{round(ema_21,1)},{round(ema_55,1)}, {round(sma_200,1)} ({round(ema55_percentage*100,1)}%)"
+                    saveDict[f"SuperConfSort"] = 0 if ema_8>=ema_21 and ema_8>=ema_55 and ema_21>=ema_55 and sma_200<=ema_55 else (1 if (ema_8>=ema_21 or ema_8>=ema_55) else (2 if sma_200<=ema_55 else 3))
+                    screenDict[f"SuperConfSort"] = saveDict[f"SuperConfSort"]
+                    return superbConfluence
+                elif ema8CrossedEMA21 and ema8CrossedEMA55 and ema21CrossedEMA55:
+                    indexDate = PKDateUtilities.dateFromYmdString(str(data.index[recentCurrentDay-1]).split(" ")[0])
+                    dayDate = f"{indexDate.day}/{indexDate.month}"
+                    screenDict["MA-Signal"] = (
+                        saved[0] 
+                        + (colorText.WHITE)
+                        + f"SilverCrossConf.({dayDate})"
+                        + colorText.END
+                    )
+                    saveDict["MA-Signal"] = saved[1] + f"SilverCrossConf.({dayDate})"
+                    screenDict[f"Latest EMA-{self.configManager.superConfluenceEMAPeriods}, SMA-200 (EMA55 %)"] = f"{colorText.GREEN if (ema_8>=ema_21 and ema_8>=ema_55) else (colorText.WARN if (ema_8>=ema_21 or ema_8>=ema_55) else colorText.FAIL)}{round(ema_8,1)}{colorText.END},{colorText.GREEN if ema_21>=ema_55 else colorText.FAIL}{round(ema_21,1)}{colorText.END},{round(ema_55,1)}, {colorText.GREEN if sma_200<= ema_55 and emasCrossedSMA200 else (colorText.WARN if sma_200<= ema_55 else colorText.FAIL)}{round(sma_200,1)} ({round(ema55_percentage*100,1)}%){colorText.END}"
+                    saveDict[f"Latest EMA-{self.configManager.superConfluenceEMAPeriods}, SMA-200 (EMA55 %)"] = f"{round(ema_8,1)},{round(ema_21,1)},{round(ema_55,1)}, {round(sma_200,1)} ({round(ema55_percentage*100,1)}%)"
+                    saveDict[f"SuperConfSort"] = 0 if ema_8>=ema_21 and ema_8>=ema_55 and ema_21>=ema_55 and sma_200<=ema_55 else (1 if (ema_8>=ema_21 or ema_8>=ema_55) else (2 if sma_200<=ema_55 else 3))
+                    screenDict[f"SuperConfSort"] = saveDict[f"SuperConfSort"]
+                    silverCross = True
+                
+                recentCurrentDay += 1
+            
+            if silverCross:
+                return True
+        is20DMACrossover50DMA = (recent["SSMA20"].iloc[0] >= recent["SMA"].iloc[0]) and \
+                            (recent["SSMA20"].iloc[1] <= recent["SMA"].iloc[1])
+        is50DMACrossover200DMA = (recent["SMA"].iloc[0] >= recent["LMA"].iloc[0]) and \
                             (recent["SMA"].iloc[1] <= recent["LMA"].iloc[1])
-        isDeadCrossOver = (recent["SMA"].iloc[0] <= recent["LMA"].iloc[0]) and \
+        isGoldenCrossOver = is20DMACrossover50DMA or is50DMACrossover200DMA
+        is50DMACrossover200DMADown = (recent["SMA"].iloc[0] <= recent["LMA"].iloc[0]) and \
                             (recent["SMA"].iloc[1] >= recent["LMA"].iloc[1])
-        is50DMA = (recent["SMA"].iloc[0] <= recent["Close"].iloc[0])
-        is200DMA = (recent["LMA"].iloc[0] <= recent["Close"].iloc[0])
-        difference = round((recent["SMA"].iloc[0] - recent["LMA"].iloc[0])
+        is20DMACrossover50DMADown = (recent["SSMA20"].iloc[0] <= recent["SMA"].iloc[0]) and \
+                            (recent["SSMA20"].iloc[1] >= recent["SMA"].iloc[1])
+        isDeadCrossOver = is20DMACrossover50DMADown or is50DMACrossover200DMADown
+        deadxOverText = f'DeadCrossover{"(20)" if is20DMACrossover50DMADown else ("(50)" if is50DMACrossover200DMADown else "")}'
+        goldenxOverText = f'GoldenCrossover{"(20)" if is20DMACrossover50DMA else ("(50)" if is50DMACrossover200DMA else "")}'
+        if is20DMACrossover50DMA or is20DMACrossover50DMADown:
+            key1 = "SSMA20"
+            key2 = "SMA"
+            key3 = "20DMA"
+            key4 = "50DMA"
+        is50DMAUpTrend = (recent[key1].iloc[0] > recent[key2].iloc[1])
+        is50DMADownTrend = (recent[key1].iloc[0] < recent[key1].iloc[1])
+        is50DMA = (recent[key1].iloc[0] <= recent["Close"].iloc[0])
+        is200DMA = (recent[key2].iloc[0] <= recent["Close"].iloc[0])
+        difference = round((recent[key1].iloc[0] - recent[key2].iloc[0])
                 / recent["Close"].iloc[0]
                 * 100,
                 2,
             )
         saveDict["ConfDMADifference"] = difference
         screenDict["ConfDMADifference"] = difference
-        saved = self.findCurrentSavedValue(screenDict,saveDict,"MA-Signal")
         # difference = abs(difference)
-        confText = f"{'GoldenCrossover' if isGoldenCrossOver else ('DeadCrossover' if isDeadCrossOver else ('Conf.Up' if is50DMAUpTrend else ('Conf.Down' if is50DMADownTrend else ('50DMA' if is50DMA else ('200DMA' if is200DMA else 'Unknown')))))}"
-        if abs(recent["SMA"].iloc[0] - recent["LMA"].iloc[0]) <= (
-            recent["SMA"].iloc[0] * percentage
+        confText = f"{goldenxOverText if isGoldenCrossOver else (deadxOverText if isDeadCrossOver else ('Conf.Up' if is50DMAUpTrend else ('Conf.Down' if is50DMADownTrend else (key3 if is50DMA else (key4 if is200DMA else 'Unknown')))))}"
+        if abs(recent[key1].iloc[0] - recent[key2].iloc[0]) <= (
+            recent[key1].iloc[0] * percentage
         ):
-            if recent["SMA"].iloc[0] >= recent["LMA"].iloc[0]:
+            if recent[key1].iloc[0] >= recent[key2].iloc[0]:
                 screenDict["MA-Signal"] = (
                     saved[0] 
                     + colorText.BOLD
@@ -1367,8 +2631,8 @@ class ScreeningStatistics:
                 )
                 saveDict["MA-Signal"] = saved[1] + f"{confText} ({difference}%)"
             return confFilter == 3 or \
-                (confFilter == 1 and (is50DMAUpTrend or (isGoldenCrossOver or 'Up' in confText))) or \
-                (confFilter == 2 and (is50DMADownTrend or isDeadCrossOver or 'Down' in confText))
+                (confFilter == 1 and not isDeadCrossOver and (is50DMAUpTrend or (isGoldenCrossOver or 'Up' in confText))) or \
+                (confFilter == 2 and not isGoldenCrossOver and (is50DMADownTrend or isDeadCrossOver or 'Down' in confText))
         # Maybe the difference is not within the range, but we'd still like to keep the stock in
         # the list if it's a golden crossover or dead crossover
         if isGoldenCrossOver or isDeadCrossOver:
@@ -1385,9 +2649,56 @@ class ScreeningStatistics:
                 (confFilter == 2 and isDeadCrossOver)
         return False
 
+    # - 200 MA is rising for at least 3 months.
+    # - 50 MA is above 200MA
+    # - Current price is above 20Osma and preferably above 50 to 100
+    # - Current price is at least above 100 % from 52week low
+    # - The stock should have made a 52 week high at least once every 4 to 6 month
+    def findPotentialProfitableEntries(self, df, full_df, saveDict, screenDict):
+        if df is None or len(df) == 0:
+            return False
+        data = full_df.copy()
+        one_week = 5
+        if len(data) < 45 * one_week:
+            return False
+        reversedData = data[::-1]  # Reverse the dataframe
+        lma_200 = reversedData["LMA"]
+        sma_50 = reversedData["SMA"]
+        full52Week = reversedData.tail(50 * one_week)
+        full52WeekLow = full52Week["Low"].min()
+        #200 MA is rising for at least 3 months
+        today = 1
+        while today <= one_week * 12: # last 3 months
+            if lma_200.tail(today).head(1).iloc[0] < lma_200.tail(today + 1).head(1).iloc[0]:
+                return False
+            today += 1
+        # 50 MA is above 200MA
+        if sma_50.tail(1).head(1).iloc[0] <= lma_200.tail(1).head(1).iloc[0]:
+            return False
+        # Current price is above 20Osma and preferably above 50 to 100
+        recentClose = reversedData["Close"].tail(1).head(1).iloc[0]
+        if recentClose < lma_200.tail(1).head(1).iloc[0] or recentClose < 50 or recentClose > 100:
+            return False
+        # Current price is at least above 100 % from 52week low
+        if recentClose <= 2*full52WeekLow:
+            return False
+        # The stock should have made a 52 week high at least once every 4 to 6 month
+        highAsc = reversedData.sort_values(by=["High"], ascending=True)
+        highs = highAsc.tail(13)
+        dateDiffs = highs.index.to_series().diff().dt.days
+        index = 0
+        while index < 12:
+            if abs(dateDiffs.tail(12).iloc[index]) >= 120: # max 6 months = 120 days
+                return False
+            index += 1
+        return True
+
+    
     #@measure_time
     # Validate if share prices are consolidating
     def validateConsolidation(self, df, screenDict, saveDict, percentage=10):
+        if df is None or len(df) == 0:
+            return False
         data = df.copy()
         data = data.fillna(0)
         data = data.replace([np.inf, -np.inf], 0)
@@ -1417,11 +2728,15 @@ class ScreeningStatistics:
     # validate if the stock has been having higher highs, higher lows
     # and higher close with latest close > supertrend and 8-EMA.
     def validateHigherHighsHigherLowsHigherClose(self, df):
+        if df is None or len(df) == 0:
+            return False
         data = df.copy()
         day0 = data
         day1 = data[1:]
         day2 = data[2:]
         day3 = data[3:]
+        if len(day1) < 1 or len(day2) < 1 or len(day3) < 1:
+            return False
         higherHighs = (
             (day0["High"].iloc[0] > day1["High"].iloc[0])
             and (day1["High"].iloc[0] > day2["High"].iloc[0])
@@ -1456,10 +2771,12 @@ class ScreeningStatistics:
     def validateInsideBar(
         self, df, screenDict, saveDict, chartPattern=1, daysToLookback=5
     ):
+        if df is None or len(df) == 0:
+            return False
         data = df.copy()
         orgData = data
         saved = self.findCurrentSavedValue(screenDict, saveDict, "Pattern")
-        for i in range(daysToLookback, round(daysToLookback * 0.5) - 1, -1):
+        for i in range(int(daysToLookback), int(round(daysToLookback * 0.5)) - 1, -1):
             if i == 2:
                 return 0  # Exit if only last 2 candles are left
             if chartPattern == 1:
@@ -1513,6 +2830,8 @@ class ScreeningStatistics:
 
     # Find IPO base
     def validateIpoBase(self, stock, df, screenDict, saveDict, percentage=0.3):
+        if df is None or len(df) == 0:
+            return False
         data = df.copy()
         listingPrice = data[::-1].head(1)["Open"].iloc[0]
         currentPrice = data.head(1)["Close"].iloc[0]
@@ -1551,6 +2870,8 @@ class ScreeningStatistics:
     #@measure_time
     # Validate Lorentzian Classification signal
     def validateLorentzian(self, df, screenDict, saveDict, lookFor=3):
+        if df is None or len(df) == 0:
+            return False
         data = df.copy()
         # lookFor: 1-Buy, 2-Sell, 3-Any
         data = data[::-1]  # Reverse the dataframe
@@ -1564,7 +2885,8 @@ class ScreeningStatistics:
             }
         )
         try:
-            lc = ata.LorentzianClassification(data=data)
+            with SuppressOutput(suppress_stdout=True, suppress_stderr=True):
+                lc = ata.LorentzianClassification(data=data)
             saved = self.findCurrentSavedValue(screenDict, saveDict, "Pattern")
             if lc.df.iloc[-1]["isNewBuySignal"]:
                 screenDict["Pattern"] = (
@@ -1595,6 +2917,8 @@ class ScreeningStatistics:
 
     # validate if the stock has been having lower lows, lower highs
     def validateLowerHighsLowerLows(self, df):
+        if df is None or len(df) == 0:
+            return False
         data = df.copy()
         day0 = data
         day1 = data[1:]
@@ -1620,6 +2944,8 @@ class ScreeningStatistics:
 
     # Validate if recent volume is lowest of last 'N' Days
     def validateLowestVolume(self, df, daysForLowestVolume):
+        if df is None or len(df) == 0:
+            return False
         data = df.copy()
         data = data.fillna(0)
         data = data.replace([np.inf, -np.inf], 0)
@@ -1629,6 +2955,8 @@ class ScreeningStatistics:
             return False
         data = data.head(daysForLowestVolume)
         recent = data.head(1)
+        if len(recent) < 1:
+            return False
         if (recent["Volume"].iloc[0] <= data.describe()["Volume"]["min"]) and recent[
             "Volume"
         ][0] != np.nan:
@@ -1636,7 +2964,7 @@ class ScreeningStatistics:
         return False
 
     # Validate LTP within limits
-    def validateLTP(self, df, screenDict, saveDict, minLTP=None, maxLTP=None):
+    def validateLTP(self, df, screenDict, saveDict, minLTP=None, maxLTP=None,minChange=0):
         data = df.copy()
         ltpValid = False
         if minLTP is None:
@@ -1648,6 +2976,8 @@ class ScreeningStatistics:
         recent = data.head(1)
 
         pct_change = (data[::-1]["Close"].pct_change() * 100).iloc[-1]
+        if pct_change == np.inf or pct_change == -np.inf:
+            pct_change = 0
         pct_save = "%.1f%%" % pct_change
         if pct_change > 0.2:
             pct_change = colorText.GREEN + ("%.1f%%" % pct_change) + colorText.END
@@ -1667,8 +2997,11 @@ class ScreeningStatistics:
                 screenDict["Stock"] = colorText.FAIL + saveDict["Stock"] + colorText.END
         if ltp >= minLTP and ltp <= maxLTP:
             ltpValid = True
+            if minChange != 0:
+                # User has supplied some filter for percentage change
+                ltpValid = float(str(pct_save).replace("%","")) >= minChange
             saveDict["LTP"] = round(ltp, 2)
-            screenDict["LTP"] = colorText.GREEN + ("%.2f" % ltp) + colorText.END
+            screenDict["LTP"] = (colorText.GREEN if ltpValid else colorText.FAIL) + ("%.2f" % ltp) + colorText.END
             return ltpValid, verifyStageTwo
         screenDict["LTP"] = colorText.FAIL + ("%.2f" % ltp) + colorText.END
         saveDict["LTP"] = round(ltp, 2)
@@ -1703,8 +3036,22 @@ class ScreeningStatistics:
                 saveDict[f"Growth{prd}"] = round(ltpTdy - prevLtp, 2)
                 if prd == 22 or (prd == requestedPeriod):
                     changePercent = round(((prevLtp-ltpTdy) if requestedPeriod ==0 else (ltpTdy - prevLtp))*100/ltpTdy, 2)
-                    saveDict[f"{prd}-Pd %"] = f"{changePercent}%"
-                    screenDict[f"{prd}-Pd %"] = (colorText.GREEN if changePercent >=0 else colorText.FAIL) + f"{changePercent}%" + colorText.END
+                    saveDict[f"{prd}-Pd"] = f"{changePercent}%" if not pd.isna(changePercent) else '-'
+                    screenDict[f"{prd}-Pd"] = ((colorText.GREEN if changePercent >=0 else colorText.FAIL) + f"{changePercent}%" + colorText.END) if not pd.isna(changePercent) else '-'
+                    if (prd == requestedPeriod):
+                        maxLTPPotential = max(data["High"].head(prd))
+                        screenDict[f"MaxLTP"] = (
+                            (colorText.GREEN if (maxLTPPotential >= prevLtp) else (colorText.FAIL))
+                            + str("{:.2f}".format(maxLTPPotential))
+                            + colorText.END
+                        )
+                        screenDict[f"Pot.Grw"] = (
+                            (colorText.GREEN if (maxLTPPotential >= prevLtp) else (colorText.FAIL))
+                            + str("{:.2f}%".format((maxLTPPotential - prevLtp)*100/prevLtp))
+                            + colorText.END
+                        )
+                        saveDict[f"MaxLTP"] = round(maxLTPPotential, 2)
+                        saveDict[f"Pot.Grw"] = f"{round((maxLTPPotential - prevLtp)*100/prevLtp, 2)}%"
                 screenDict["Date"] = calc_date
                 saveDict["Date"] = calc_date
             else:
@@ -1715,6 +3062,8 @@ class ScreeningStatistics:
 
     # Find stocks that are bearish intraday: Macd Histogram negative
     def validateMACDHistogramBelow0(self, df):
+        if df is None or len(df) == 0:
+            return False
         data = df.copy()
         data = data.fillna(0)
         data = data.replace([np.inf, -np.inf], 0)
@@ -1725,6 +3074,8 @@ class ScreeningStatistics:
     #@measure_time
     # Find if stock gaining bullish momentum
     def validateMomentum(self, df, screenDict, saveDict):
+        if df is None or len(df) == 0:
+            return False
         data = df.copy()
         try:
             data = data.head(3)
@@ -1735,9 +3086,9 @@ class ScreeningStatistics:
                 yc = row[1]["Close"]
                 yo = row[1]["Open"]
                 if yc <= yo:
-                    self.default_logger.info(
-                        f'Stock:{saveDict["Stock"]}, is not a momentum-gainer because yesterday-close ({yc}) <= yesterday-open ({yo})'
-                    )
+                    # self.default_logger.info(
+                    #     f'Stock:{saveDict["Stock"]}, is not a momentum-gainer because yesterday-close ({yc}) <= yesterday-open ({yo})'
+                    # )
                     return False
             openDesc = data.sort_values(by=["Open"], ascending=False)
             closeDesc = data.sort_values(by=["Close"], ascending=False)
@@ -1748,17 +3099,17 @@ class ScreeningStatistics:
                     and data.equals(closeDesc)
                     and data.equals(volDesc)
                 ):
-                    self.default_logger.info(
-                        f'Stock:{saveDict["Stock"]}, open,close and volume equal from day before yesterday. A potential momentum-gainer!'
-                    )
+                    # self.default_logger.info(
+                    #     f'Stock:{saveDict["Stock"]}, open,close and volume equal from day before yesterday. A potential momentum-gainer!'
+                    # )
                     to = data["Open"].iloc[0]
                     yc = data["Close"].iloc[1]
                     yo = data["Open"].iloc[1]
                     dyc = data["Close"].iloc[2]
                     if (to >= yc) and (yo >= dyc):
-                        self.default_logger.info(
-                            f'Stock:{saveDict["Stock"]}, is a momentum-gainer because today-open ({to}) >= yesterday-close ({yc}) and yesterday-open({yo}) >= day-before-close({dyc})'
-                        )
+                        # self.default_logger.info(
+                        #     f'Stock:{saveDict["Stock"]}, is a momentum-gainer because today-open ({to}) >= yesterday-close ({yc}) and yesterday-open({yo}) >= day-before-close({dyc})'
+                        # )
                         saved = self.findCurrentSavedValue(screenDict, saveDict, "Pattern")
                         screenDict["Pattern"] = (
                             saved[0]
@@ -1769,11 +3120,11 @@ class ScreeningStatistics:
                         )
                         saveDict["Pattern"] = saved[1] + "Momentum Gainer"
                         return True
-                    self.default_logger.info(
-                        f'Stock:{saveDict["Stock"]}, is not a momentum-gainer because either today-open ({to}) < yesterday-close ({yc}) or yesterday-open({yo}) < day-before-close({dyc})'
-                    )
+                    # self.default_logger.info(
+                    #     f'Stock:{saveDict["Stock"]}, is not a momentum-gainer because either today-open ({to}) < yesterday-close ({yc}) or yesterday-open({yo}) < day-before-close({dyc})'
+                    # )
             except IndexError as e: # pragma: no cover
-                self.default_logger.debug(e, exc_info=True)
+                # self.default_logger.debug(e, exc_info=True)
                 # self.default_logger.debug(data)
                 pass
             return False
@@ -1783,38 +3134,46 @@ class ScreeningStatistics:
 
     #@measure_time
     # Validate Moving averages and look for buy/sell signals
-    def validateMovingAverages(self, df, screenDict, saveDict, maRange=2.5):
+    def validateMovingAverages(self, df, screenDict, saveDict, maRange=2.5,maLength=0):
         data = df.copy()
         data = data.fillna(0)
         data = data.replace([np.inf, -np.inf], 0)
         recent = data.head(1)
-        saved = self.findCurrentSavedValue(screenDict,saveDict,"MA-Signal")
-        if (
-            recent["SMA"].iloc[0] > recent["LMA"].iloc[0]
-            and recent["Close"].iloc[0] > recent["SMA"].iloc[0]
-        ):
-            screenDict["MA-Signal"] = (
-                saved[0] + colorText.BOLD + colorText.GREEN + "Bullish" + colorText.END
-            )
-            saveDict["MA-Signal"] = saved[1] + "Bullish"
-        elif recent["SMA"].iloc[0] < recent["LMA"].iloc[0]:
-            screenDict["MA-Signal"] = (
-                saved[0] + colorText.BOLD + colorText.FAIL + "Bearish" + colorText.END
-            )
-            saveDict["MA-Signal"] = saved[1] + "Bearish"
-        elif recent["SMA"].iloc[0] == 0:
-            screenDict["MA-Signal"] = (
-                saved[0] + colorText.BOLD + colorText.WARN + "Unknown" + colorText.END
-            )
-            saveDict["MA-Signal"] = saved[1] + "Unknown"
-        else:
-            screenDict["MA-Signal"] = (
-                saved[0] + colorText.BOLD + colorText.WARN + "Neutral" + colorText.END
-            )
-            saveDict["MA-Signal"] = saved[1] + "Neutral"
-
+        maSignals = []
+        if str(maLength) in ["0","2","3"]:
+            saved = self.findCurrentSavedValue(screenDict,saveDict,"MA-Signal")
+            if (
+                recent["SMA"].iloc[0] > recent["LMA"].iloc[0]
+                and recent["Close"].iloc[0] > recent["SMA"].iloc[0]
+            ):
+                screenDict["MA-Signal"] = (
+                    saved[0] + colorText.BOLD + colorText.GREEN + "Bullish" + colorText.END
+                )
+                saveDict["MA-Signal"] = saved[1] + "Bullish"
+                maSignals.append("3")
+            elif recent["SMA"].iloc[0] < recent["LMA"].iloc[0]:
+                screenDict["MA-Signal"] = (
+                    saved[0] + colorText.BOLD + colorText.FAIL + "Bearish" + colorText.END
+                )
+                saveDict["MA-Signal"] = saved[1] + "Bearish"
+                maSignals.append("2")
+            elif recent["SMA"].iloc[0] == 0:
+                screenDict["MA-Signal"] = (
+                    saved[0] + colorText.BOLD + colorText.WARN + "Unknown" + colorText.END
+                )
+                saveDict["MA-Signal"] = saved[1] + "Unknown"
+            else:
+                screenDict["MA-Signal"] = (
+                    saved[0] + colorText.BOLD + colorText.WARN + "Neutral" + colorText.END
+                )
+                saveDict["MA-Signal"] = saved[1] + "Neutral"
+        reversedData = data[::-1]  # Reverse the dataframe
+        ema_20 = pktalib.EMA(reversedData["Close"],20).tail(1).iloc[0]
+        vwap = pktalib.VWAP(reversedData["High"],reversedData["Low"],reversedData["Close"],reversedData["Volume"]).tail(1).iloc[0]
         smaDev = data["SMA"].iloc[0] * maRange / 100
         lmaDev = data["LMA"].iloc[0] * maRange / 100
+        emaDev = ema_20 * maRange / 100
+        vwapDev = vwap * maRange / 100
         open, high, low, close, sma, lma = (
             data["Open"].iloc[0],
             data["High"].iloc[0],
@@ -1823,71 +3182,66 @@ class ScreeningStatistics:
             data["SMA"].iloc[0],
             data["LMA"].iloc[0],
         )
+        mas = [sma,lma,ema_20,vwap] #if maLength==0 else [sma,lma,ema_20]
+        maDevs = [smaDev, lmaDev, emaDev, vwapDev] #if maLength==0 else [smaDev, lmaDev, emaDev]
+        maTexts = ["50MA","200MA","20EMA","VWAP"] #if maLength==0 else ["50MA","200MA","20EMA"]
         maReversal = 0
-        # Taking Support 50
-        if close > sma and low <= (sma + smaDev):
-            screenDict["MA-Signal"] = (
-                saved[0] + colorText.BOLD + colorText.GREEN + "50MA-Support" + colorText.END
-            )
-            saveDict["MA-Signal"] = saved[1] + "50MA-Support"
-            maReversal = 1
-        # Validating Resistance 50
-        elif close < sma and high >= (sma - smaDev):
-            screenDict["MA-Signal"] = (
-                saved[0] + colorText.BOLD + colorText.FAIL + "50MA-Resist" + colorText.END
-            )
-            saveDict["MA-Signal"] = saved[1] + "50MA-Resist"
-            maReversal = -1
-        # Taking Support 200
-        elif close > lma and low <= (lma + lmaDev):
-            screenDict["MA-Signal"] = (
-                saved[0] + colorText.BOLD + colorText.GREEN + "200MA-Support" + colorText.END
-            )
-            saveDict["MA-Signal"] = saved[1] + "200MA-Support"
-            maReversal = 1
-        # Validating Resistance 200
-        elif close < lma and high >= (lma - lmaDev):
-            screenDict["MA-Signal"] = (
-                saved[0] + colorText.BOLD + colorText.FAIL + "200MA-Resist" + colorText.END
-            )
-            saveDict["MA-Signal"] = saved[1] + "200MA-Resist"
-            maReversal = -1
-        # For a Bullish Candle
-        if self.getCandleType(data):
-            # Crossing up 50
-            if open < sma and close > sma:
-                screenDict["MA-Signal"] = (
-                    saved[0] + colorText.BOLD + colorText.GREEN + "BullCross-50MA" + colorText.END
-                )
-                saveDict["MA-Signal"] = saved[1] + "BullCross-50MA"
-                maReversal = 1
-            # Crossing up 200
-            elif open < lma and close > lma:
-                screenDict["MA-Signal"] = (
-                    saved[0] + colorText.BOLD + colorText.GREEN + "BullCross-200MA" + colorText.END
-                )
-                saveDict["MA-Signal"] = saved[1] + "BullCross-200MA"
-                maReversal = 1
-        # For a Bearish Candle
-        elif not self.getCandleType(data):
-            # Crossing down 50
-            if open > sma and close < sma:
-                screenDict["MA-Signal"] = (
-                    saved[0] + colorText.BOLD + colorText.FAIL + "BearCross-50MA" + colorText.END
-                )
-                saveDict["MA-Signal"] = saved[1] + "BearCross-50MA"
-                maReversal = -1
-            # Crossing up 200
-            elif open > lma and close < lma:
-                screenDict["MA-Signal"] = (
-                    saved[0] + colorText.BOLD + colorText.FAIL + "BearCross-200MA" + colorText.END
-                )
-                saveDict["MA-Signal"] = saved[1] + "BearCross-200MA"
-                maReversal = -1
-        return maReversal
+        index = 0
+        bullishCandle = self.getCandleType(data)
+        if str(maLength) not in ["2","3"]:
+            for ma in mas:
+                saved = self.findCurrentSavedValue(screenDict,saveDict,"MA-Signal")
+                # Taking Support
+                if close > ma and low <= (ma + maDevs[index]) and str(maLength) in ["0","1"]:
+                    screenDict["MA-Signal"] = (
+                        saved[0] + colorText.BOLD + colorText.GREEN + f"{maTexts[index]}-Support" + colorText.END
+                    )
+                    saveDict["MA-Signal"] = saved[1] + f"{maTexts[index]}-Support"
+                    maReversal = 1
+                    maSignals.append("1")
+                # Validating Resistance
+                elif close < ma and high >= (ma - maDevs[index]) and str(maLength) in ["0","6"]:
+                    screenDict["MA-Signal"] = (
+                        saved[0] + colorText.BOLD + colorText.FAIL + f"{maTexts[index]}-Resist" + colorText.END
+                    )
+                    saveDict["MA-Signal"] = saved[1] + f"{maTexts[index]}-Resist"
+                    maReversal = -1
+                    maSignals.append("6")
+                    
+                saved = self.findCurrentSavedValue(screenDict,saveDict,"MA-Signal")
+                # For a Bullish Candle
+                if bullishCandle:
+                    # Crossing up
+                    if open < ma and close > ma:
+                        if (str(maLength) in ["0","5"]) or (str(maLength) in ["7"] and index == maTexts.index("VWAP")):
+                            screenDict["MA-Signal"] = (
+                                saved[0] + colorText.BOLD + colorText.GREEN + f"BullCross-{maTexts[index]}" + colorText.END
+                            )
+                            saveDict["MA-Signal"] = saved[1] + f"BullCross-{maTexts[index]}"
+                            maReversal = 1
+                            maSignals.append(str(maLength))
+                # For a Bearish Candle
+                elif not bullishCandle:
+                    # Crossing down
+                    if open > sma and close < sma and str(maLength) in ["0","4"]:
+                        screenDict["MA-Signal"] = (
+                            saved[0] + colorText.BOLD + colorText.FAIL + f"BearCross-{maTexts[index]}" + colorText.END
+                        )
+                        saveDict["MA-Signal"] = saved[1] + f"BearCross-{maTexts[index]}"
+                        maReversal = -1
+                        maSignals.append("4")
+                index += 1
+        returnValue = maReversal
+        if maLength != 0:
+            hasRespectiveMAInList = str(maLength) in maSignals
+            hasVWAP = "BullCross-VWAP" in saveDict["MA-Signal"]
+            returnValue = (hasVWAP and hasRespectiveMAInList) if maLength == 7 else hasRespectiveMAInList
+        return returnValue
 
     # Find NRx range for Reversal
     def validateNarrowRange(self, df, screenDict, saveDict, nr=4):
+        if df is None or len(df) == 0:
+            return False
         data = df.copy()
         saved = self.findCurrentSavedValue(screenDict, saveDict, "Pattern")
         if PKDateUtilities.isTradingTime():
@@ -1920,7 +3274,7 @@ class ScreeningStatistics:
             return False
         else:
             rangeData = data.head(nr)
-            rangeData["Range"] = abs(rangeData["Close"] - rangeData["Open"])
+            rangeData.loc[:,'Range'] = abs(rangeData["Close"] - rangeData["Open"])
             recent = rangeData.head(1)
             if recent["Range"].iloc[0] == rangeData.describe()["Range"]["min"]:
                 screenDict["Pattern"] = (
@@ -1932,9 +3286,15 @@ class ScreeningStatistics:
 
     # Find if stock is newly listed
     def validateNewlyListed(self, df, daysToLookback):
+        if df is None or len(df) == 0 or len(df) > 220:
+            return False
         data = df.copy()
+        if str(daysToLookback).endswith("y"):
+            daysToLookback = '220d'
         daysToLookback = int(daysToLookback[:-1])
         recent = data.head(1)
+        if len(recent) < 1:
+            return False
         if len(data) < daysToLookback and (
             recent["Close"].iloc[0] != np.nan and recent["Close"].iloc[0] > 0
         ):
@@ -1943,6 +3303,8 @@ class ScreeningStatistics:
 
     # Validate if the stock prices are at least rising by 2% for the last 3 sessions
     def validatePriceRisingByAtLeast2Percent(self, df, screenDict, saveDict):
+        if df is None or len(df) == 0:
+            return False
         data = df.copy()
         data = data.fillna(0)
         data = data.replace([np.inf, -np.inf], 0)
@@ -1970,23 +3332,30 @@ class ScreeningStatistics:
 
     #@measure_time
     # validate if RSI is within given range
-    def validateRSI(self, df, screenDict, saveDict, minRSI, maxRSI):
+    def validateRSI(self, df, screenDict, saveDict, minRSI, maxRSI,rsiKey="RSI"):
+        if df is None or len(df) == 0:
+            return False
+        if rsiKey not in df.columns:
+            return False
         data = df.copy()
         data = data.fillna(0)
         data = data.replace([np.inf, -np.inf], 0)
-        rsi = int(data.head(1)["RSI"].iloc[0])
-        saveDict["RSI"] = rsi
+        rsi = int(data.head(1)[rsiKey].iloc[0])
+        saveDict[rsiKey] = rsi
         # https://chartink.com/screener/rsi-screening
-        if rsi >= minRSI and rsi <= maxRSI:  # or (rsi <= 71 and rsi >= 67):
-            screenDict["RSI"] = (
+        if rsi> 0 and rsi >= minRSI and rsi <= maxRSI:  # or (rsi <= 71 and rsi >= 67):
+            screenDict[rsiKey] = (
                 colorText.BOLD + colorText.GREEN + str(rsi) + colorText.END
             )
-            return True
-        screenDict["RSI"] = colorText.BOLD + colorText.FAIL + str(rsi) + colorText.END
-        return False
+            return True if (rsiKey == "RSIi") else (self.validateRSI(df, screenDict, saveDict, minRSI, maxRSI,rsiKey="RSIi") or True)
+        screenDict[rsiKey] = colorText.BOLD + colorText.FAIL + str(rsi) + colorText.END
+        # If either daily or intraday RSI comes within range?
+        return False if (rsiKey == "RSIi") else (self.validateRSI(df, screenDict, saveDict, minRSI, maxRSI,rsiKey="RSIi"))
 
     # Validate if the stock is bullish in the short term
     def validateShortTermBullish(self, df, screenDict, saveDict):
+        if df is None or len(df) == 0:
+            return False
         data = df.copy()
         # https://chartink.com/screener/short-term-bullish
         data = data.fillna(0)
@@ -2052,38 +3421,20 @@ class ScreeningStatistics:
                         saveDict["MA-Signal"] = saved[1] + "Bullish"
                         return True
         return False
-
-    # Validate VPC
+    
+    # Validate VCP
     def validateVCP(
         self, df, screenDict, saveDict, stockName=None, window=3, percentageFromTop=3
     ):
+        if df is None or len(df) == 0:
+            return False
         data = df.copy()
         try:
             percentageFromTop /= 100
             data.reset_index(inplace=True)
             data.rename(columns={"index": "Date"}, inplace=True)
-            data["tops"] = (
-                data["High"]
-                .iloc[
-                    list(
-                        pktalib.argrelextrema(
-                            np.array(data["High"]), np.greater_equal, order=window
-                        )[0]
-                    )
-                ]
-                .head(4)
-            )
-            data["bots"] = (
-                data["Low"]
-                .iloc[
-                    list(
-                        pktalib.argrelextrema(
-                            np.array(data["Low"]), np.less_equal, order=window
-                        )[0]
-                    )
-                ]
-                .head(4)
-            )
+            data["tops"] = (data["High"].iloc[list(pktalib.argrelextrema(np.array(data["High"]), np.greater_equal, order=window)[0])].head(4))
+            data["bots"] = (data["Low"].iloc[list(pktalib.argrelextrema(np.array(data["Low"]), np.less_equal, order=window)[0])].head(4))
             data = data.fillna(0)
             data = data.replace([np.inf, -np.inf], 0)
             tops = data[data.tops > 0]
@@ -2092,11 +3443,6 @@ class ScreeningStatistics:
             filteredTops = tops[
                 tops.tops > (highestTop - (highestTop * percentageFromTop))
             ]
-            # print(tops)
-            # print(filteredTops)
-            # print(tops.sort_values(by=['tops'], ascending=False))
-            # print(tops.describe())
-            # print(f"Till {highestTop-(highestTop*percentageFromTop)}")
             if filteredTops.equals(tops):  # Tops are in the range
                 lowPoints = []
                 for i in range(len(tops) - 1):
@@ -2110,6 +3456,8 @@ class ScreeningStatistics:
                 lowPointsOrg = lowPoints
                 lowPoints.sort(reverse=True)
                 lowPointsSorted = lowPoints
+                if data.empty or len(lowPoints) < 1:
+                    return False
                 ltp = data.head(1)["Close"].iloc[0]
                 if (
                     lowPointsOrg == lowPointsSorted
@@ -2130,10 +3478,82 @@ class ScreeningStatistics:
             self.default_logger.debug(e, exc_info=True)
         return False
 
+    # Validate VCP as per Mark Minervini
+    # https://chartink.com/screener/volatility-compression
+    def validateVCPMarkMinervini(self, df:pd.DataFrame, screenDict, saveDict):
+        if df is None or len(df) == 0:
+            return False
+        data = df.copy()
+        ohlc_dict = {
+            'Open':'first',
+            'High':'max',
+            'Low':'min',
+            'Close':'last',
+            'Volume':'sum'
+        }
+        # final_df = df.resample('W-FRI', closed='left').agg(ohlc_dict).shift('1d')
+        weeklyData = data.resample('W').agg(ohlc_dict)
+        reversedData = data[::-1]  # Reverse the dataframe
+        recent_close = data["Close"].head(1).iloc[0]
+        w_ema_13 = pktalib.EMA(weeklyData["Close"],timeperiod=13).tail(1).iloc[0]
+        w_ema_26 = pktalib.EMA(weeklyData["Close"],timeperiod=26).tail(1).iloc[0]
+        w_sma_50 = pktalib.SMA(weeklyData["Close"],timeperiod=50).tail(1).iloc[0]
+        w_sma_40 = pktalib.SMA(weeklyData["Close"],timeperiod=40).tail(1).iloc[0]
+        w_sma_40_5w_ago = pktalib.SMA(weeklyData.head(len(weeklyData)-5)["Close"],timeperiod=40).tail(1).iloc[0]
+        w_min_50 = min(1.3*weeklyData.tail(50)["Low"])
+        w_max_50 = max(0.75*weeklyData.tail(50)["High"])
+        w_ema_26_20w_ago = pktalib.EMA(weeklyData.head(len(weeklyData)-20)["Close"],timeperiod=26).tail(1).iloc[0]
+        recent_ema_13_20d_ago = pktalib.EMA(reversedData.head(len(reversedData)-20)["Close"],timeperiod=13).tail(1).iloc[0]
+        w_sma_40_5w_ago = pktalib.SMA(weeklyData.head(len(weeklyData)-5)["Close"],timeperiod=40).tail(1).iloc[0]
+        w_sma_40_10w_ago = pktalib.SMA(weeklyData.head(len(weeklyData)-10)["Close"],timeperiod=40).tail(1).iloc[0]
+        recent_sma_50 = pktalib.SMA(reversedData["Close"],timeperiod=50).tail(1).iloc[0]
+        w_wma_8 = pktalib.WMA(weeklyData["Close"],timeperiod=8).tail(1).iloc[0]
+        w_sma_8 = pktalib.SMA(weeklyData["Close"],timeperiod=8).tail(1).iloc[0]
+        numPreviousCandles = 20
+        pullbackData = data.head(numPreviousCandles)
+        pullbackData.loc[:,'PullBack'] = pullbackData["Close"].lt(pullbackData["Open"]) #.shift(periods=1)) #& data["Low"].lt(data["Low"].shift(periods=1))
+        shrinkedVolData = pullbackData[pullbackData["PullBack"] == True].head(numPreviousCandles)
+        recentLargestVolume = max(pullbackData[pullbackData["PullBack"] == False].head(3)["Volume"])
+        # pullbackData.loc[:,'PBVolRatio'] = pullbackData["Volume"]/recentLargestVolume
+        volInPreviousPullbacksShrinked = False
+        if not shrinkedVolData.empty:
+            index = 0
+            while index < len(shrinkedVolData):
+                volInPreviousPullbacksShrinked = shrinkedVolData["Volume"].iloc[index] < self.configManager.vcpVolumeContractionRatio * recentLargestVolume
+                if not volInPreviousPullbacksShrinked:
+                    break
+                index += 1
+        recentVolumeHasAboveAvgVol = recentLargestVolume >= self.configManager.volumeRatio * data["VolMA"].iloc[0]
+        isVCP = w_ema_13 > w_ema_26 and \
+                w_ema_26 > w_sma_50 and \
+                w_sma_40 > w_sma_40_5w_ago and \
+                recent_close >= w_min_50 and \
+                recent_close >= w_max_50 and \
+                recent_ema_13_20d_ago > w_ema_26_20w_ago and \
+                w_sma_40_5w_ago > w_sma_40_10w_ago and \
+                recent_close > recent_sma_50 and \
+                (w_wma_8 - w_sma_8)*6/29 < 0.5 and \
+                volInPreviousPullbacksShrinked and \
+                recentVolumeHasAboveAvgVol and \
+                recent_close > 10
+        if isVCP:
+            saved = self.findCurrentSavedValue(screenDict, saveDict, "Pattern")
+            screenDict["Pattern"] = (
+                saved[0] 
+                + colorText.BOLD
+                + colorText.GREEN
+                + f"VCP(Minervini)"
+                + colorText.END
+            )
+            saveDict["Pattern"] = saved[1] + f"VCP(Minervini)"
+        return isVCP
+
     # Validate if volume of last day is higher than avg
     def validateVolume(
         self, df, screenDict, saveDict, volumeRatio=2.5, minVolume=100
     ):
+        if df is None or len(df) == 0:
+            return False, False
         data = df.copy()
         data = data.fillna(0)
         data = data.replace([np.inf, -np.inf], 0)
@@ -2158,6 +3578,8 @@ class ScreeningStatistics:
     # Find if stock is validating volume spread analysis
     def validateVolumeSpreadAnalysis(self, df, screenDict, saveDict):
         try:
+            if df is None or len(df) == 0:
+                return False
             data = df.copy()
             data = data.head(2)
             if len(data) < 2:
@@ -2208,58 +3630,20 @@ class ScreeningStatistics:
                         saveDict["Pattern"] = saved[1] + "Demand Rise"
                         return True
             except IndexError as e: # pragma: no cover
-                self.default_logger.debug(e, exc_info=True)
+                # self.default_logger.debug(e, exc_info=True)
                 pass
             return False
         except Exception as e:  # pragma: no cover
             self.default_logger.debug(e, exc_info=True)
             return False
 
-    """
-    # Find out trend for days to lookback
-    def validateVCP(df, screenDict, saveDict, daysToLookback=ConfigManager.daysToLookback, stockName=None):
-        // De-index date
-        data = df.copy()
-        data.reset_index(inplace=True)
-        data.rename(columns={'index':'Date'}, inplace=True)
-        data = data.head(daysToLookback)
-        data = data[::-1]
-        data = data.set_index(np.arange(len(data)))
-        data = data.fillna(0)
-        data = data.replace([np.inf, -np.inf], 0)
-        data['tops'] = data['Close'].iloc[list(pktalib.argrelextrema(np.array(data['Close']), np.greater_equal, order=3)[0])]
-        data['bots'] = data['Close'].iloc[list(pktalib.argrelextrema(np.array(data['Close']), np.less_equal, order=3)[0])]
-        try:
-            try:
-                top_slope,top_c = np.polyfit(data.index[data.tops > 0], data['tops'][data.tops > 0], 1)
-                bot_slope,bot_c = np.polyfit(data.index[data.bots > 0], data['bots'][data.bots > 0], 1)
-                topAngle = math.degrees(math.atan(top_slope))
-                vcpAngle = math.degrees(math.atan(bot_slope) - math.atan(top_slope))
-
-                # print(math.degrees(math.atan(top_slope)))
-                # print(math.degrees(math.atan(bot_slope)))
-                # print(vcpAngle)
-                # print(topAngle)
-                # print(data.max()['bots'])
-                # print(data.max()['tops'])
-                if (vcpAngle > 20 and vcpAngle < 70) and (topAngle > -10 and topAngle < 10) and (data['bots'].max() <= data['tops'].max()) and (len(data['bots'][data.bots > 0]) > 1):
-                    print("---> GOOD VCP %s at %sRs" % (stockName, top_c))
-                    import os
-                    os.system("echo %s >> vcp_plots\VCP.txt" % stockName)
-
-                    import matplotlib.pyplot as plt                
-                    plt.scatter(data.index[data.tops > 0], data['tops'][data.tops > 0], c='g')
-                    plt.scatter(data.index[data.bots > 0], data['bots'][data.bots > 0], c='r')
-                    plt.plot(data.index, data['Close'])
-                    plt.plot(data.index, top_slope*data.index+top_c,'g--')
-                    plt.plot(data.index, bot_slope*data.index+bot_c,'r--')
-                    if stockName != None:
-                        plt.title(stockName)
-                    # plt.show()
-                    plt.savefig('vcp_plots\%s.png' % stockName)
-                    plt.clf()
-            except np.RankWarning:
-                pass
-        except np.linalg.LinAlgError:
-            return False
-    """
+    # Function to compute ATRTrailingStop
+    def xATRTrailingStop_func(self,close, prev_close, prev_atr, nloss):
+        if close > prev_atr and prev_close > prev_atr:
+            return max(prev_atr, close - nloss)
+        elif close < prev_atr and prev_close < prev_atr:
+            return min(prev_atr, close + nloss)
+        elif close > prev_atr:
+            return close - nloss
+        else:
+            return close + nloss

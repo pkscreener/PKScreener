@@ -22,6 +22,12 @@ window.addEventListener('load', function() {
           .sort(comparer(Array.from(th.parentNode.children).indexOf(th), this.asc = !this.asc))
           .forEach(tr => tbody.appendChild(tr) );
   })));
+
+  document.querySelectorAll('table tr td').forEach(function(e, i) {
+    if (e.textContent.trim().length == 0) { // if row is empty which means the report did not get generated
+        e.parentNode.remove();
+    }
+  });
 })
 const searchReportsByAny = () => {
   const trs = document.querySelectorAll('#resultsTable tr:not(.header)')

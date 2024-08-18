@@ -33,7 +33,7 @@ def changelog():
         colorText.BOLD
         + "[ChangeLog]\n"
         + colorText.END
-        + colorText.BLUE
+        + colorText.GREEN
         + OTAUpdater.showWhatsNew()
         + """
 

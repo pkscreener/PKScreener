@@ -24,6 +24,8 @@
 """
 import os
 from PKDevTools.classes.Telegram import get_secrets
+from PKDevTools.classes.OutputControls import OutputControls
+from PKDevTools.classes.PKDateUtilities import PKDateUtilities
 
 import pkscreener.classes.ConfigManager as ConfigManager
 from pkscreener.classes.Fetcher import screenerStockDataFetcher
@@ -35,6 +37,7 @@ def run_workflow(command, user, options, workflowType="B"):
     owner = os.popen('git ls-remote --get-url origin | cut -d/ -f4').read().replace("\n","")
     repo = os.popen('git ls-remote --get-url origin | cut -d/ -f5').read().replace(".git","").replace("\n","")
     branch = "main"
+    timestamp = int(PKDateUtilities.currentDateTimestamp())
     if workflowType == "B":
         workflow_name = "w13-workflow-backtest_generic.yml"
         options = f'{options.replace("B:","")}:D:D:D:D:D'.replace("::",":")
@@ -49,7 +52,7 @@ def run_workflow(command, user, options, workflowType="B"):
             + f"{command}"
             + '"}}'
         )
-    elif workflowType == "X" or workflowType == "G":
+    elif workflowType == "X" or workflowType == "G" or workflowType == "P":
         workflow_name = "w8-workflow-alert-scan_generic.yml"
         if user is None or len(user) == 0:
             user = ""
@@ -59,7 +62,7 @@ def run_workflow(command, user, options, workflowType="B"):
                 + '","inputs":{"user":"'
                 + f"{user}"
                 + '","params":"'
-                + f'-a Y -e -p -o {options.replace("_",":")}:D:D:D:D:D'.replace("::",":")
+                + f'-a Y -e --triggertimestamp {timestamp} -p -o {options.replace("_",":")}:D:D:D:D:D'.replace("::",":")
                 + '","ref":"main"}}'
             )
         else:
@@ -69,10 +72,16 @@ def run_workflow(command, user, options, workflowType="B"):
                 + '","inputs":{"user":"'
                 + f"{user}"
                 + '","params":"'
-                + f'-a Y -e -p -u {user} -o {options.replace("_",":")}:D:D:D:D:D'.replace("::",":")
+                + f'-a Y -e --triggertimestamp {timestamp} -p -u {user} -o {options.replace("_",":")}:D:D:D:D:D'.replace("::",":")
                 + '","ref":"main"}}'
             )
-
+    elif workflowType == "R": #Restart bot
+        workflow_name = "w3-workflow-bot.yml"
+        data = (
+                '{"ref":"'
+                + branch
+                + '","inputs":{"branch-name":"main","cliOptions":""}}'
+            )
     _, _, _, ghp_token = get_secrets()
     url = f"https://api.github.com/repos/{owner}/{repo}/actions/workflows/{workflow_name}/dispatches"
 
@@ -85,9 +94,9 @@ def run_workflow(command, user, options, workflowType="B"):
     fetcher = screenerStockDataFetcher(configManager)
     resp = fetcher.postURL(url, data=data, headers=headers)
     if resp.status_code == 204:
-        print(f"Workflow {workflow_name} Triggered!")
+        OutputControls().printOutput(f"Workflow {workflow_name} Triggered!")
     else:
-        print(f"Something went wrong while triggering {workflow_name}")
+        OutputControls().printOutput(f"Something went wrong while triggering {workflow_name}")
     return resp
 
 

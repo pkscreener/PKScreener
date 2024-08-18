@@ -59,20 +59,28 @@ def draw_menu(menuItems, selectedIndex):
     window.clear()
 
     # Print a vertical menu.
+    line = 1
     for i in range(len(menuItems)):
         window.addstr(' ')
-        window.addstr(menuItems[i], black if i == selectedIndex else white)
-        window.addstr('\n\n')
+        newLines = ""
+        menu = menuItems[i]
+        menuText = menu.keyTextLabel()
+        if line != menu.line:
+          window.addstr('\n')
+          line += 1
+        window.addstr(f"{menuText}\n", black if i == selectedIndex else white)
+        #   line += 1
+        line += 1
 
-    # Print a dividing line.
-    window.addstr(('-' * 80) + '\n')
+    # # Print a dividing line.
+    # window.addstr(('-' * 80) + '\n')
 
-    # Print a horizontal menu.
-    for i in range(len(menuItems)):
-        window.addstr(' ')
-        window.addstr(menuItems[i], black if i == selectedIndex else white)
+    # # Print a horizontal menu.
+    # for i in range(len(menuItems)):
+    #     window.addstr(' ')
+    #     window.addstr(menuItems[i], black if i == selectedIndex else white)
 
-    window.addstr('\n')
+    # window.addstr('\n')
 
 # -----
 
@@ -96,11 +104,11 @@ def process_input(menuItems, selectedIndex):
             exit(0)
 
         window.addstr('\n Selected index: {}\n'.format(selectedIndex))
-        wait_for_any_keypress()
+        # wait_for_any_keypress()
 
     else:
         window.addstr("\n The pressed key '{}' {} is not associated with a menu function.\n".format(chr(userInput), userInput))
-        wait_for_any_keypress()
+        # wait_for_any_keypress()
 
     return selectedIndex
 
@@ -118,12 +126,16 @@ def main():
         draw_menu(MENU_ITEMS, selectedIndex)
         selectedIndex = process_input(MENU_ITEMS, selectedIndex)
 
-MENU_ITEMS = [
-    ' Option 1 ',
-    ' Option 2 ',
-    ' Option 3 ',
-    ' Exit ',
-]
+from pkscreener.classes.MenuOptions import menus
+m = menus()
+
+MENU_ITEMS = m.renderForMenu(asList=True)
+#[
+#     ' Option 1 ',
+#     ' Option 2 ',
+#     ' Option 3 ',
+#     ' Exit ',
+# ]
 
 if __name__ == '__main__':
     main()

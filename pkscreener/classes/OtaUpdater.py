@@ -32,6 +32,7 @@ from datetime import timedelta
 from PKDevTools.classes import Archiver
 from PKDevTools.classes.ColorText import colorText
 from PKDevTools.classes.log import default_logger
+from PKDevTools.classes.OutputControls import OutputControls
 
 import pkscreener.classes.ConfigManager as ConfigManager
 import pkscreener.classes.Fetcher as Fetcher
@@ -137,28 +138,27 @@ rm updater.sh
     def get_latest_release_info():
         resp = OTAUpdater.fetcher.fetchURL(
             "https://api.github.com/repos/pkjmesra/PKScreener/releases/latest"
-        )
+        )  
+
         if "Windows" in platform.system():
-            OTAUpdater.checkForUpdate.url = resp.json()["assets"][1][
-                "browser_download_url"
-            ]
-            size = int(resp.json()["assets"][1]["size"] / (1024 * 1024))
+            exe_name = "pkscreenercli.exe"
         elif "Darwin" in platform.system():
-            OTAUpdater.checkForUpdate.url = resp.json()["assets"][2][
-                "browser_download_url"
-            ]
-            size = int(resp.json()["assets"][2]["size"] / (1024 * 1024))
+            exe_name = "pkscreenercli.run"
         else:
-            OTAUpdater.checkForUpdate.url = resp.json()["assets"][0][
-                "browser_download_url"
-            ]
-            size = int(resp.json()["assets"][0]["size"] / (1024 * 1024))
+            exe_name = "pkscreenercli.bin"
+        for asset in resp.json()["assets"]:
+            url = asset["browser_download_url"]
+            if url.endswith(exe_name):
+                OTAUpdater.checkForUpdate.url = url
+                size = int(asset["size"] / (1024 * 1024))
+                break
         return resp, size
 
     # Check for update and download if available
     def checkForUpdate(VERSION=VERSION, skipDownload=False):
         OTAUpdater.checkForUpdate.url = None
         resp = None
+        updateType = "minor"
         try:
             now_components = str(VERSION).split(".")
             now_major_minor = ".".join([now_components[0], now_components[1]])
@@ -170,6 +170,7 @@ rm updater.sh
             last_release = float(major_minor)
             prod_update = False
             if last_release > now:
+                updateType = "major"
                 prod_update = True
             elif last_release == now and (
                 len(now_components) < len(version_components)
@@ -184,48 +185,69 @@ rm updater.sh
                 elif float(now_components[2]) == float(version_components[2]):
                     if float(now_components[3]) < float(version_components[3]):
                         prod_update = True
+            inContainer = os.environ.get("PKSCREENER_DOCKER", "").lower() in ("yes", "y", "on", "true", "1")
+            if inContainer:
+                # We're running in docker container
+                size = 90
             if prod_update:
-                print(
+                if skipDownload:
+                    OutputControls().printOutput(
+                        colorText.BOLD
+                        + colorText.GREEN
+                        + f"    [+] A {updateType} software update (v{tag} [{size} MB]) is available. Check out with the menu option U."
+                        + colorText.END
+                    )
+                    return
+                OutputControls().printOutput(
                     colorText.BOLD
                     + colorText.WARN
                     + "[+] What's New in this Update?\n"
+                    + colorText.END
+                    + colorText.GREEN
                     + OTAUpdater.showWhatsNew()
                     + colorText.END
                 )
-                if skipDownload:
-                    return
                 try:
                     action = input(
                             colorText.BOLD
-                            + colorText.GREEN
+                            + colorText.FAIL
                             + (
-                                "\n[+] New Software update (v%s) available. Download Now (Size: %dMB)? [Y/N]: "
-                                % (str(resp.json()["tag_name"]), size)
+                                f"\n[+] New {updateType} Software update (v%s) available. Download Now (Size: %dMB)? [Y/N]: "
+                                % (str(tag), size)
                             )
-                        )
+                        ) or "y"
                 except EOFError: # user pressed enter
                     action = "y"
                     pass
                 if action is not None and action.lower() == "y":
-                    try:
-                        if "Windows" in platform.system():
-                            OTAUpdater.updateForWindows(OTAUpdater.checkForUpdate.url)
-                        elif "Darwin" in platform.system():
-                            OTAUpdater.updateForMac(OTAUpdater.checkForUpdate.url)
-                        else:
-                            OTAUpdater.updateForLinux(OTAUpdater.checkForUpdate.url)
-                    except Exception as e:  # pragma: no cover
-                        default_logger().debug(e, exc_info=True)
-                        print(
-                            colorText.BOLD
-                            + colorText.WARN
-                            + "[+] Error occured while updating!"
-                            + colorText.END
-                        )
-                        raise (e)
-            elif not prod_update:
+                    if inContainer:
+                        OutputControls().printOutput(
+                                colorText.WARN
+                                + f"[+] You are running in docker. Please use\n[+]{colorText.END} {colorText.GREEN}docker pull pkjmesra/pkscreener:latest{colorText.END} {colorText.WARN}to pull the latest image, followed by\n[+]{colorText.END} {colorText.GREEN}docker run -it pkjmesra/pkscreener:latest{colorText.END} {colorText.WARN}to run in the container.{colorText.END}"
+                            )
+                        from time import sleep
+                        sleep(5)
+                        sys.exit(0)
+                    else:
+                        try:
+                            if "Windows" in platform.system():
+                                OTAUpdater.updateForWindows(OTAUpdater.checkForUpdate.url)
+                            elif "Darwin" in platform.system():
+                                OTAUpdater.updateForMac(OTAUpdater.checkForUpdate.url)
+                            else:
+                                OTAUpdater.updateForLinux(OTAUpdater.checkForUpdate.url)
+                        except Exception as e:  # pragma: no cover
+                            default_logger().debug(e, exc_info=True)
+                            OutputControls().printOutput(
+                                colorText.BOLD
+                                + colorText.WARN
+                                + "[+] Error occured while updating!"
+                                + colorText.END
+                            )
+                            raise (e)
+            elif not prod_update and not skipDownload:
                 if tag.lower() == VERSION.lower():
-                    print(
+                    OutputControls().printOutput(
                         colorText.BOLD
                         + colorText.GREEN
                         + (
@@ -235,21 +257,32 @@ rm updater.sh
                         + colorText.END
                     )
                 else:
-                    print(
+                    if float(now_components[0]) > float(version_components[0]) or \
+                        float(now_components[1]) > float(version_components[1]) or \
+                        float(now_components[2]) > float(version_components[2]) or \
+                        float(now_components[3]) > float(version_components[3]):
+                        OutputControls().printOutput(
+                            colorText.BOLD
+                            + colorText.FAIL
+                            + (f"[+] This version (v{VERSION}) is in Development! Thanks for trying out!")
+                            + colorText.END
+                        )
+                        return OTAUpdater.developmentVersion
+                    else:
+                        OutputControls().printOutput(
                         colorText.BOLD
-                        + colorText.FAIL
+                        + colorText.GREEN
                         + (
-                            "[+] This version (v%s) is in Development mode and unreleased!"
+                            "[+] No new update available. You have the latest version (v%s) !"
                             % VERSION
                         )
                         + colorText.END
                     )
-                    return OTAUpdater.developmentVersion
         except Exception as e:  # pragma: no cover
             default_logger().debug(e, exc_info=True)
             if OTAUpdater.checkForUpdate.url is not None:
-                print(e)
-                print(
+                OutputControls().printOutput(e)
+                OutputControls().printOutput(
                     colorText.BOLD
                     + colorText.BLUE
                     + (
@@ -263,17 +296,18 @@ rm updater.sh
                     "[+] No exe/bin/run file as an update available!"
                 )
             if resp is not None and resp.json()["message"] == "Not Found":
-                print(
+                OutputControls().printOutput(
                     colorText.BOLD
                     + colorText.FAIL
                     + OTAUpdater.checkForUpdate.url
                     + colorText.END
                 )
-            print(e)
-            print(
-                colorText.BOLD
-                + colorText.FAIL
-                + "[+] Failure while checking update!"
-                + colorText.END
-            )
+            if not skipDownload:
+                OutputControls().printOutput(e)
+                OutputControls().printOutput(
+                    colorText.BOLD
+                    + colorText.FAIL
+                    + "[+] Failure while checking update!"
+                    + colorText.END
+                )
         return
