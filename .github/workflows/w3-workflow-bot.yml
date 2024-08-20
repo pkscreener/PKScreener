@@ -186,7 +186,7 @@ jobs:
         RUNNER : "GitHub_Actions"
         MONITORING_BOT_RUNNER: "MONITORING_BOT_RUNNER"
       run: |
-        pkscreenercli.exe --bot ${{ inputs.cliOptions || '' }}
+        pkscreenercli.exe --bot --botavailable ${{ inputs.cliOptions || '' }}
 
     - name: Telegram Bot on Ubuntu
       timeout-minutes: 350
@@ -197,7 +197,7 @@ jobs:
         RUNNER : "GitHub_Actions"
         MONITORING_BOT_RUNNER: "MONITORING_BOT_RUNNER"
       run: |
-        /home/runner/work/PKScreener/PKScreener/pkscreenercli.bin --bot ${{ inputs.cliOptions || '' }}
+        /home/runner/work/PKScreener/PKScreener/pkscreenercli.bin --bot --botavailable ${{ inputs.cliOptions || '' }}
 
     - name: Delete this repo workflow run
       shell: bash
