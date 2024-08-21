@@ -188,13 +188,13 @@ original__stdout = sys.__stdout__
 # args.reScanForZeroSize = True
 # args.user = "-1001785195297"
 # args.skiplistlevel0 = "S,T,E,U,Z,H,Y,B,G,C,M,D,I,L,P"
-# args.skiplistlevel1 = "W,N,E,M,Z,0,2,3,4,6,7,9,10,13,14,15"
-# args.skiplistlevel2 = "0,22,29,42,M,Z"
+# args.skiplistlevel1 = "W,N,E,M,Z,S,0,2,3,4,6,7,9,10,13,14,15"
+# args.skiplistlevel2 = "0,22,29,42,50,M,Z"
 # args.skiplistlevel3 = "0"
 # args.skiplistlevel4 = "0"
 # args.branchname = "actions-data-download"
 
-from pkscreener.classes.MenuOptions import MenuRenderStyle, menus, PREDEFINED_SCAN_MENU_KEYS
+from pkscreener.classes.MenuOptions import MenuRenderStyle, menus, PREDEFINED_SCAN_ALERT_MENU_KEYS
 
 m0 = menus()
 m1 = menus()
@@ -243,7 +243,7 @@ if __name__ == '__main__':
     if args.skiplistlevel1 is None:
         args.skiplistlevel1 = ",".join(["W,N,E,M,Z,S,0,1,2,3,4,5,6,7,8,9,10,11,13,14,15"])
     if args.skiplistlevel2 is None:
-        args.skiplistlevel2 = ",".join(["0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,M,Z"])
+        args.skiplistlevel2 = ",".join(["0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,50,M,Z"])
     if args.skiplistlevel3 is None:
         args.skiplistlevel3 = ",".join(["0,1,2,3,4,5,6,7,8,9,10"])
     if args.skiplistlevel4 is None:
@@ -254,7 +254,7 @@ if __name__ == '__main__':
         args.report = True
         args.skiplistlevel0 = "S,T,E,U,Z,H,Y,X,G,C,M,D,I,L,P" 
         args.skiplistlevel1 = "W,N,E,M,Z,S,0,2,3,4,6,7,9,10,13,14,15"
-        args.skiplistlevel2 = "0,21,22,29,42,M,Z"
+        args.skiplistlevel2 = "0,21,22,29,42,50,M,Z"
         args.skiplistlevel3 = "0"
         args.skiplistlevel4 = "0"
 
@@ -452,7 +452,7 @@ def generateBacktestReportMainPage():
         oneline_summary_file = (
             f"PKScreener_{td3}{'_i' if args.intraday else ''}_OneLine_Summary.html"
         )
-        oneline_summary = "<td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td>"
+        oneline_summary = f"<td>0% of (0)</td><td>0% of (0)</td><td>0% of (0)</td><td>0% of (0)</td><td>0% of (0)</td><td>0% of (0)</td><td>0% of (0)</td><td>0% of (0)</td><td>0% of (0)</td><td>0% of (0)</td><td class='w'>{PKDateUtilities.currentDateTime().strftime('%Y/%m/%d')}</td><td class='w'>-1</td>"
         if os.path.isfile(f"Backtest-Reports/{oneline_summary_file}"):
             try:
                 with open(f"Backtest-Reports/{oneline_summary_file}", "r") as sf:
@@ -543,11 +543,8 @@ def triggerScanWorkflowActions(launchLocal=False, scanDaysInPast=0):
         sleep(60) # Wait for alert time
     # Trigger intraday pre-defined piped scanners
     if PKDateUtilities.currentDateTime() <= PKDateUtilities.currentDateTime(simulate=True,hour=MarketHours().closeHour,minute=MarketHours().closeMinute):
-        scanIndex = 1
-        MAX_INDEX = len(PREDEFINED_SCAN_MENU_KEYS)
-        while scanIndex <= MAX_INDEX:
+        for scanIndex in PREDEFINED_SCAN_ALERT_MENU_KEYS:
             triggerRemoteScanAlertWorkflow(f"P:1:{scanIndex}:", branch)
-            scanIndex += 1
 
     for key in objectDictionary.keys():
         scanOptions = f'{objectDictionary[key]["td3"]}_D_D_D_D_D'
@@ -625,7 +622,7 @@ def triggerRemoteScanAlertWorkflow(scanOptions, branch):
     return resp
 
 def triggerHistoricalScanWorkflowActions(scanDaysInPast=0):
-    defaultS1 = "W,N,E,M,Z,0,2,3,4,6,7,9,10,13,15" if args.skiplistlevel1 is None else args.skiplistlevel1
+    defaultS1 = "W,N,E,M,Z,S,0,2,3,4,6,7,9,10,13,15" if args.skiplistlevel1 is None else args.skiplistlevel1
     defaultS2 = "42,0,22,29,M,Z,S,50" if args.skiplistlevel2 is None else args.skiplistlevel2
     runForIndices = [12,5,8,1,11,14]
     runForOptions = [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39]
@@ -757,7 +754,7 @@ def triggerBacktestWorkflowActions(launchLocal=False):
     # backtestKeys = sorted(list(backtestKeys),reverse=True)
     for key in backtestKeys:
         scanOptions = objectDictionary[key]["td3"]
-        options = f'{scanOptions.replace("_",":").replace("B:","")}:D:D:D'.replace("::",":")
+        options = f'{scanOptions.replace("_",":").replace("B:","").replace("X:","")}:D:D:D'.replace("::",":")
         if not shouldRunBacktests(scanOptions,existing_df):
             continue
         if launchLocal:
