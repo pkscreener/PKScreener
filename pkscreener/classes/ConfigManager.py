@@ -68,6 +68,7 @@ class tools(SingletonMixin, metaclass=SingletonType):
         self.longTimeout = 4
         self.maxNetworkRetryCount = 10
         self.maxdisplayresults = 100
+        self.baseIndex = "^NSEI"
         self.backtestPeriod = 120
         self.marketOpen = "09:15"
         self.marketClose = "15:30"
@@ -91,7 +92,7 @@ class tools(SingletonMixin, metaclass=SingletonType):
         self.maxDashboardWidgetsPerRow = 7
         self.maxNumResultRowsInMonitor = 3
         self.calculatersiintraday = False
-        self.defaultMonitorOptions = "X:12:9:2.5:>|X:0:31:>|X:0:23:>|X:0:27:~X:12:9:2.5:>|X:0:31:>|X:0:27:~X:12:9:2.5:>|X:0:31:~X:12:9:2.5:>|X:0:27:~X:12:9:2.5:>|X:0:29:~X:12:9:2.5:>|X:0:27:>|X:12:30:1:~X:12:9:2.5:>|X:12:30:1:~X:12:31:>|X:0:27:~X:12:31:>|X:0:30:1:~X:12:27:>|X:0:30:1:~X:12:7:8:>|X:12:7:9:1:1:~X:12:7:4:>|X:12:7:9:1:1:~X:12:2:>|X:12:7:8:>|X:12:7:9:1:1:~X:12:30:1:>|X:12:7:8:~X:12:7:9:5:>|X:12:21:8:~X:12:7:4:~X:12:9:2.5~X:12:23~X:12:28~X:12:31~|{1}X:0:23:>|X:0:27:>|X:0:31:~|{2}X:0:31:~|{3}X:0:27:~X:12:7:3:.01:1~|{5}X:0:5:0:35:~X:12:7:6:1~X:12:11:~X:12:12:i 5m~X:12:17~X:12:24~X:12:6:7:1~X:12:6:3~X:12:6:8~X:12:6:9~X:12:2:>|X:12:7:8:>|X:12:7:9:1:1:~X:12:6:10:1~X:12:7:4:>|X:12:30:1:~X:12:7:3:.02:1~X:12:13:i 1m~X:12:2~|{1}X:0:29:"
+        self.defaultMonitorOptions = "X:12:9:2.5:>|X:0:31:>|X:0:23:>|X:0:27:~X:12:9:2.5:>|X:0:31:>|X:0:27:~X:12:9:2.5:>|X:0:31:~X:12:9:2.5:>|X:0:27:~X:12:9:2.5:>|X:0:29:~X:12:9:2.5:>|X:0:27:>|X:12:30:1:~X:12:9:2.5:>|X:12:30:1:~X:12:31:>|X:0:27:~X:12:31:>|X:0:30:1:~X:12:27:>|X:0:30:1:~X:12:7:8:>|X:12:7:9:1:1:~X:12:7:4:>|X:12:7:9:1:1:~X:12:2:>|X:12:7:8:>|X:12:7:9:1:1:~X:12:30:1:>|X:12:7:8:~X:12:7:9:5:>|X:12:21:8:~X:12:7:4:~X:12:7:9:7:>|X:0:9:2.5:~X:12:7:9:7:>|X:0:31:>|X:0:30:1:~X:12:7:3:0.008:4:>|X:0:30:1:~X:12:7:3:0.008:4:>|X:12:7:9:7:>|X:0:7:3:0.008:4:~X:12:9:2.5~X:12:23~X:12:28~X:12:31~|{1}X:0:23:>|X:0:27:>|X:0:31:~|{2}X:0:31:~|{3}X:0:27:~X:12:7:3:.01:1~|{5}X:0:5:0:35:~X:12:7:6:1~X:12:11:~X:12:12:i 5m~X:12:17~X:12:24~X:12:6:7:1~X:12:6:3~X:12:6:8~X:12:6:9~X:12:2:>|X:12:7:8:>|X:12:7:9:1:1:~X:12:6:10:1~X:12:7:4:>|X:12:30:1:~X:12:7:3:.02:1~X:12:13:i 1m~X:12:2~|{1}X:0:29:"
         self.minimumChangePercentage = 0
         self.daysToLookback = 22 * self.backtestPeriodFactor  # 1 month
         self.periods = [1,2,3,4,5,10,15,22,30]
@@ -170,6 +171,7 @@ class tools(SingletonMixin, metaclass=SingletonType):
             parser.set("config", "atrtrailingstopsensitivity", str(self.atrTrailingStopSensitivity))
             parser.set("config", "backtestPeriod", str(self.backtestPeriod))
             parser.set("config", "backtestPeriodFactor", str(self.backtestPeriodFactor))
+            parser.set("config", "baseIndex", str(self.baseIndex))
             parser.set("config", "cacheStockData", "y" if self.cacheEnabled else "n")
             parser.set("config", "calculatersiintraday", "y" if self.calculatersiintraday else "n")
             parser.set("config", "daysToLookback", str(self.daysToLookback))
@@ -403,6 +405,7 @@ class tools(SingletonMixin, metaclass=SingletonType):
                 parser.set("config", "atrtrailingstopsensitivity", str(self.atrTrailingStopSensitivity))
                 parser.set("config", "backtestPeriod", str(self.backtestPeriod))
                 parser.set("config", "backtestPeriodFactor", str(self.backtestPeriodFactor))
+                parser.set("config", "baseIndex", str(self.baseIndex))
                 parser.set("config", "cacheStockData", str(self.cacheStockData))
                 parser.set("config", "calculatersiintraday", str(self.calculatersiintraday))
                 parser.set("config", "daysToLookback", str(self.daysToLookback))
@@ -585,6 +588,7 @@ class tools(SingletonMixin, metaclass=SingletonType):
                 self.vcpVolumeContractionRatio = float(parser.get("config", "vcpVolumeContractionRatio"))
                 self.soundAlertForMonitorOptions = str(parser.get("config", "soundAlertForMonitorOptions"))
                 self.superConfluenceEMAPeriods = str(parser.get("config", "superConfluenceEMAPeriods"))
+                self.baseIndex = str(parser.get("config", "baseIndex"))
                 self.superConfluenceEnforce200SMA = (
                     False
                     if "y" not in str(parser.get("config", "superConfluenceEnforce200SMA")).lower()

@@ -260,6 +260,7 @@ class PKScanRunner:
                     log_queue_reader.start()
             except:
                 pass
+
         # if executeOption == 29: # Intraday Bid/Ask, for which we need to fetch data from NSE instead of yahoo
         #     intradayFetcher = Intra_Day("SBINEQN") # This will initialise the cookies etc.
         #     for consumer in consumers:
@@ -303,6 +304,12 @@ class PKScanRunner:
         scr = ScreeningStatistics.ScreeningStatistics(PKScanRunner.configManager, default_logger())
         exists, cache_file = Utility.tools.afterMarketStockDataExists(intraday=PKScanRunner.configManager.isIntradayConfig())
         sec_cache_file = cache_file if "intraday_" in cache_file else f"intraday_{cache_file}"
+        # Get RS rating stock value of the index
+        from pkscreener.classes.Fetcher import screenerStockDataFetcher
+        nsei_df = screenerStockDataFetcher().fetchStockData(PKScanRunner.configManager.baseIndex,'1y','1d',None,0,0,0,exchangeSuffix="")
+        rs_score_index = -1
+        if nsei_df is not None:
+            rs_score_index = scr.calc_relative_strength(nsei_df[::-1])
         consumers = [
                     PKMultiProcessorClient(
                         StockScreener().screenStocks,
@@ -326,6 +333,7 @@ class PKScanRunner:
                         # None
                         (cache_file if (exists and menuOption in ["C"]) else None),
                         (sec_cache_file if (exists and menuOption in ["C"]) else None),
+                        rs_strange_index=rs_score_index
                     )
                     for _ in range(totalConsumers)
                 ]

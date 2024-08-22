@@ -110,6 +110,7 @@ level1_P_MenuDict = {
     "3": "Run Piped Scans Saved So Far",
     "M": "Back to the Top/Main menu",
 }
+PREDEFINED_SCAN_ALERT_MENU_KEYS = ["1","5","6","8","18","22","25","27"]
 PREDEFINED_SCAN_MENU_KEYS = ["1","2","3","4","5","6","7","8","9","10","11","12","13","14","15","16","17","18","19","20", "21", "22", "23", "24", "25","26","27"]
 PREDEFINED_SCAN_MENU_TEXTS = [
     "Volume Scanners | High Momentum | Breaking Out Now | ATR Cross     ",  # 1

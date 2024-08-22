@@ -554,6 +554,7 @@ class tools:
         draw.text((startColValue, rowPixelRunValue), artText+ f" | {tools.removeAllColorStyles(marketStatus())}", font=artfont, fill=artColor)
         rowPixelRunValue += artfont_arttext_height + 1
         # Report title
+        # reportTitle = tools.wrapFitLegendText(table,backtestSummary, reportTitle)
         draw.text((startColValue, rowPixelRunValue), reportTitle, font=stdfont, fill=menuColor)
         rowPixelRunValue += stdFont_oneLinelabel_height + 1
         counter = -1
@@ -912,6 +913,9 @@ class tools:
         isTrading = PKDateUtilities.isTradingTime() and (PKDateUtilities.wasTradedOn() or not PKDateUtilities.isTodayHoliday()[0])
         if userDownloadOption is not None and "B" in userDownloadOption: # Backtests
             isTrading = False
+        # Check if NSEI data is requested
+        if configManager.baseIndex not in stockCodes:
+            stockCodes.insert(0,configManager.baseIndex)
         # stockCodes is not None mandates that we start our work based on the downloaded data from yesterday
         if (stockCodes is not None and len(stockCodes) > 0) and (isTrading or downloadOnly):
             recentDownloadFromOriginAttempted = True

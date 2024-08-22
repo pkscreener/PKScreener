@@ -84,10 +84,9 @@ def decorator(func):
 
 # print = decorator(print) # current file
 def disableSysOut(input=True, disable=True):
-    global printenabled
+    global printenabled,originalStdOut, original__stdout
     printenabled = not disable
     if disable:
-        global originalStdOut, original__stdout
         if originalStdOut is None:
             builtins.print = decorator(builtins.print)  # all files
             if input:
@@ -98,204 +97,212 @@ def disableSysOut(input=True, disable=True):
         sys.__stdout__ = open(os.devnull, "w")
     else:
         try:
-            sys.stdout.close()
-            sys.__stdout__.close()
+            if originalStdOut is not None and original__stdout is not None:
+                sys.stdout.close()
+                sys.__stdout__.close()
         except Exception as e:# pragma: no cover
             default_logger().debug(e, exc_info=True)
             pass
-        sys.stdout = originalStdOut
-        sys.__stdout__ = original__stdout
+        sys.stdout = originalStdOut if originalStdOut is not None else sys.stdout
+        sys.__stdout__ = original__stdout if original__stdout is not None else sys.__stdout__
 
-if __name__ == "__main__":
-    # Argument Parsing for test purpose
-    argParser = argparse.ArgumentParser()
-    argParser.add_argument(
-        "-a",
-        "--answerdefault",
-        help="Pass default answer to questions/choices in the application. Example Y, N",
-        required=False,
-    )
-    argParser.add_argument(
-        "--backtestdaysago",
-        help="Run scanner for -b days ago from today.",
-        required=False,
-    )
-    argParser.add_argument(
-        "--barometer",
-        action="store_true",
-        help="Send global market barometer to telegram channel or a user",
-        required=False,
-    )
-    argParser.add_argument(
-        "--bot",
-        action="store_true",
-        help="Run only in telegram bot mode",
-        required=False,
-    )
-    argParser.add_argument(
-        "--botavailable",
-        action="store_true",
-        help="Enforce whether bot is going to be available or not.",
-        required=False,
-    )
-    argParser.add_argument(
-        "-c",
-        "--croninterval",
-        help="Pass interval in seconds to wait before the program is run again with same parameters",
-        required=False,
-    )
-    argParser.add_argument(
-        "-d",
-        "--download",
-        action="store_true",
-        help="Only download Stock data in .pkl file (No analysis will be run)",
-        required=False,
-    )
-    argParser.add_argument(
-        "-e",
-        "--exit",
-        action="store_true",
-        help="Exit right after executing just once",
-        required=False,
-    )
-    argParser.add_argument(
-        "--forceBacktestsForZeroResultDays",
-        help="Force run the backtests even for those days when we already have zero results saved in the repo",
-        action=argparse.BooleanOptionalAction,
-    )
-    argParser.add_argument(
-        "-i",
-        "--intraday",
-        help="Use Intraday configurations and use the candlestick duration that is passed. Acceptable values 1m, 5m, 10m, 15m, 1h etc.",
-        required=False,
-    )
-    argParser.add_argument(
-        "-m",
-        "--monitor",
-        help="Monitor for intraday scanners and their results.",
-        nargs='?',
-        const='X',
-        type=str,
-        required=False,
-    )
-    argParser.add_argument(
-        "--maxdisplayresults",
-        help="Maximum number of results to display.",
-        required=False,
-    )
-    argParser.add_argument(
-        "--maxprice",
-        help="Maximum Price for the stock to be considered.",
-        required=False,
-    )
-    argParser.add_argument(
-        "--minprice",
-        help="Minimum Price for the stock to be considered.",
-        required=False,
-    )
-    argParser.add_argument(
-        "-o",
-        "--options",
-        help="Pass selected options in the <MainMenu>:<SubMenu>:<SubMenu>:etc. format. For example: ./pkscreenercli.py -a Y -o X:12:10 -e will run the screener with answer Y as default choice to questions and scan with menu choices: Scanners > Nifty (All Stocks) > Closing at least 2%% up since last 3 day",
-        required=False,
-    )
-    argParser.add_argument(
-        "-p",
-        "--prodbuild",
-        action="store_true",
-        help="Run in production-build mode",
-        required=False,
-    )
-    argParser.add_argument(
-        "--progressstatus",
-        help="Pass default progress status that you'd like to get displayed when running the scans",
-        required=False,
-    )
-    argParser.add_argument(
-        "--runintradayanalysis",
-        action="store_true",
-        help="Run analysis for morning vs EoD LTP values",
-        required=False,
-    )
-    argParser.add_argument(
-        "--simulate",
-        type=json.loads, # '{"isTrading":true,"currentDateTime":"2024-04-29 09:35:38"}'
-        help="Simulate various conditions",
-        required=False,
-    )
-    argParser.add_argument(
-        "--singlethread",
-        action="store_true",
-        help="Run analysis for debugging purposes in a single process, single threaded environment",
-        required=False,
-    )
-    argParser.add_argument(
-        "--systemlaunched",
-        action="store_true",
-        help="Indicator to show that this is a system launched screener, using os.system",
-        required=False,
-    )
-    argParser.add_argument(
-        "-t",
-        "--testbuild",
-        action="store_true",
-        help="Run in test-build mode",
-        required=False,
-    )
-    argParser.add_argument(
-        "--telegram",
-        action="store_true",
-        help="Run with an assumption that this instance is launched via telegram bot",
-        required=False,
-    )
-    argParser.add_argument(
-        "--triggertimestamp",
-        help="Optionally, send the timestamp value when this was triggered",
-        required=False,
-    )
-    argParser.add_argument(
-        "-u",
-        "--user",
-        help="Telegram user ID to whom the results must be sent.",
-        required=False,
-    )
-    argParser.add_argument(
-        "-l",
-        "--log",
-        action="store_true",
-        help="Run with full logging enabled",
-        required=False,
-    )
-    argParser.add_argument("-v", action="store_true")  # Dummy Arg for pytest -v
-    argParser.add_argument(
-        "--pipedtitle",
-        help="Piped Titles",
-        required=False,
-    )
-    argParser.add_argument(
-        "--pipedmenus",
-        help="Piped Menus",
-        required=False,
-    )
+# Argument Parsing for test purpose
+argParser = argparse.ArgumentParser()
+argParser.add_argument(
+    "-a",
+    "--answerdefault",
+    help="Pass default answer to questions/choices in the application. Example Y, N",
+    required=False,
+)
+argParser.add_argument(
+    "--backtestdaysago",
+    help="Run scanner for -b days ago from today.",
+    required=False,
+)
+argParser.add_argument(
+    "--barometer",
+    action="store_true",
+    help="Send global market barometer to telegram channel or a user",
+    required=False,
+)
+argParser.add_argument(
+    "--bot",
+    action="store_true",
+    help="Run only in telegram bot mode",
+    required=False,
+)
+argParser.add_argument(
+    "--botavailable",
+    action="store_true",
+    help="Enforce whether bot is going to be available or not.",
+    required=False,
+)
+argParser.add_argument(
+    "-c",
+    "--croninterval",
+    help="Pass interval in seconds to wait before the program is run again with same parameters",
+    required=False,
+)
+argParser.add_argument(
+    "-d",
+    "--download",
+    action="store_true",
+    help="Only download Stock data in .pkl file (No analysis will be run)",
+    required=False,
+)
+argParser.add_argument(
+    "-e",
+    "--exit",
+    action="store_true",
+    help="Exit right after executing just once",
+    required=False,
+)
+argParser.add_argument(
+    "--forceBacktestsForZeroResultDays",
+    help="Force run the backtests even for those days when we already have zero results saved in the repo",
+    action=argparse.BooleanOptionalAction,
+)
+argParser.add_argument(
+    "-i",
+    "--intraday",
+    help="Use Intraday configurations and use the candlestick duration that is passed. Acceptable values 1m, 5m, 10m, 15m, 1h etc.",
+    required=False,
+)
+argParser.add_argument(
+    "-m",
+    "--monitor",
+    help="Monitor for intraday scanners and their results.",
+    nargs='?',
+    const='X',
+    type=str,
+    required=False,
+)
+argParser.add_argument(
+    "--maxdisplayresults",
+    help="Maximum number of results to display.",
+    required=False,
+)
+argParser.add_argument(
+    "--maxprice",
+    help="Maximum Price for the stock to be considered.",
+    required=False,
+)
+argParser.add_argument(
+    "--minprice",
+    help="Minimum Price for the stock to be considered.",
+    required=False,
+)
+argParser.add_argument(
+    "-o",
+    "--options",
+    help="Pass selected options in the <MainMenu>:<SubMenu>:<SubMenu>:etc. format. For example: ./pkscreenercli.py -a Y -o X:12:10 -e will run the screener with answer Y as default choice to questions and scan with menu choices: Scanners > Nifty (All Stocks) > Closing at least 2%% up since last 3 day",
+    required=False,
+)
+argParser.add_argument(
+    "-p",
+    "--prodbuild",
+    action="store_true",
+    help="Run in production-build mode",
+    required=False,
+)
+argParser.add_argument(
+    "--progressstatus",
+    help="Pass default progress status that you'd like to get displayed when running the scans",
+    required=False,
+)
+argParser.add_argument(
+    "--runintradayanalysis",
+    action="store_true",
+    help="Run analysis for morning vs EoD LTP values",
+    required=False,
+)
+argParser.add_argument(
+    "--simulate",
+    type=json.loads, # '{"isTrading":true,"currentDateTime":"2024-04-29 09:35:38"}'
+    help="Simulate various conditions",
+    required=False,
+)
+argParser.add_argument(
+    "--singlethread",
+    action="store_true",
+    help="Run analysis for debugging purposes in a single process, single threaded environment",
+    required=False,
+)
+argParser.add_argument(
+    "--systemlaunched",
+    action="store_true",
+    help="Indicator to show that this is a system launched screener, using os.system",
+    required=False,
+)
+argParser.add_argument(
+    "-t",
+    "--testbuild",
+    action="store_true",
+    help="Run in test-build mode",
+    required=False,
+)
+argParser.add_argument(
+    "--telegram",
+    action="store_true",
+    help="Run with an assumption that this instance is launched via telegram bot",
+    required=False,
+)
+argParser.add_argument(
+    "--triggertimestamp",
+    help="Optionally, send the timestamp value when this was triggered",
+    required=False,
+)
+argParser.add_argument(
+    "-u",
+    "--user",
+    help="Telegram user ID to whom the results must be sent.",
+    required=False,
+)
+argParser.add_argument(
+    "-l",
+    "--log",
+    action="store_true",
+    help="Run with full logging enabled",
+    required=False,
+)
+argParser.add_argument("-v", action="store_true")  # Dummy Arg for pytest -v
+argParser.add_argument(
+    "--pipedtitle",
+    help="Piped Titles",
+    required=False,
+)
+argParser.add_argument(
+    "--pipedmenus",
+    help="Piped Menus",
+    required=False,
+)
 
-    def get_debug_args():
+def get_debug_args():
+    global args
+    try:
+        if args is not None:
+            # make sure that args are mutable
+            args = list(args)
+        return args
+    except NameError as e:
+        return None
+    except TypeError as e: # NameSpace object is not iterable
+        return args
+    except Exception as e:
         return None
         # return " -a Y -e -l -o X:12:30:D:D:D:D:D".split(" ")
 
-    args = get_debug_args()
-    argsv = argParser.parse_known_args(args=args)
-    # argsv = argParser.parse_known_args()
-    args = argsv[0]
-    # if sys.argv[0].endswith(".py"):
-    #     args.monitor = 'X'
-    #     args.answerdefault = 'Y'
-    results = None
-    resultStocks = None
-    plainResults = None
-    start_time = None
-    dbTimestamp = None
-    elapsed_time = None
-    configManager = ConfigManager.tools()
+args = get_debug_args()
+argsv = argParser.parse_known_args(args=args)
+# argsv = argParser.parse_known_args()
+args = argsv[0]
+results = None
+resultStocks = None
+plainResults = None
+start_time = None
+dbTimestamp = None
+elapsed_time = None
+configManager = ConfigManager.tools()
 
 
 def exitGracefully():
@@ -337,8 +344,9 @@ def logFilePath():
 
         filePath = os.path.join(Archiver.get_user_outputs_dir(), "pkscreener-logs.txt")
         f = open(filePath, "w")
-        f.write("Logger file for pkscreener!")
-        f.close()
+        if f is not None:
+            f.write("Logger file for pkscreener!")
+            f.close()
     except Exception:# pragma: no cover
         filePath = os.path.join(tempfile.gettempdir(), "pkscreener-logs.txt")
     return filePath
@@ -403,12 +411,16 @@ def runApplication():
         savedPipedArgs = args.pipedmenus if args is not None and args.pipedmenus is not None else None
     except:
         pass
-    global results, resultStocks, plainResults, dbTimestamp, elapsed_time, start_time
+    global results, resultStocks, plainResults, dbTimestamp, elapsed_time, start_time,argParser
     from pkscreener.classes.MenuOptions import menus, PREDEFINED_PIPED_MENU_OPTIONS,PREDEFINED_SCAN_MENU_VALUES
     args = get_debug_args()
-    argsv = argParser.parse_known_args(args=args)
-    # argsv = argParser.parse_known_args()
-    args = argsv[0]
+    if not isinstance(args,argparse.Namespace):
+        argsv = argParser.parse_known_args(args=args)
+        # argsv = argParser.parse_known_args()
+        args = argsv[0]
+    if args is not None and not args.exit:
+        argsv = argParser.parse_known_args()
+        args = argsv[0]
     if args.user is None:
         from PKDevTools.classes.Telegram import get_secrets
         Channel_Id, _, _, _ = get_secrets()
@@ -461,11 +473,12 @@ def runApplication():
         analysis_index = 1
         for runOption in runOptions:
             try:
-                runOptionName = f"--systemlaunched -a y -e -o '{runOption.replace('C:','X:').replace('D:','D:')}'"
+                runOptionName = f"--systemlaunched -a y -e -o '{runOption.replace('C:','X:').replace('D:','')}'"
                 indexNum = PREDEFINED_SCAN_MENU_VALUES.index(runOptionName)
                 runOptionName = f"{'[+] P_1_'+str(indexNum +1) if '>|' in runOption else runOption}"
-            except:
-                runOptionName = ""
+            except Exception as e:
+                default_logger().debug(e,exc_info=True)
+                runOptionName = f"[+] {runOption.replace('D:','').replace(':D','').replace(':','_').replace('_D','').replace('C_','X_')}"
                 pass
             args.progressstatus = f"{runOptionName} => Running Intraday Analysis: {analysis_index} of {len(runOptions)}..."
             analysisOptions = runOption.split("|")
@@ -490,8 +503,8 @@ def runApplication():
                     optionalFinalOutcome_df = results
                 if optionalFinalOutcome_df is not None and "EoDDiff" not in optionalFinalOutcome_df.columns:
                     # Somehow the file must have been corrupted. Let's re-download
-                    configManager.deleteFileWithPattern(pattern="stock_data_*.pkl")
-                    configManager.deleteFileWithPattern(pattern="intraday_stock_data_*.pkl")
+                    configManager.deleteFileWithPattern(pattern="*stock_data_*.pkl")
+                    configManager.deleteFileWithPattern(pattern="*intraday_stock_data_*.pkl")
                 if isInterrupted():
                     break
             except Exception as e:
@@ -500,55 +513,11 @@ def runApplication():
                     traceback.print_exc()
             resetUserMenuChoiceOptions()
             analysis_index += 1
+            saveSendFinalOutcomeDataframe(optionalFinalOutcome_df)
 
         configManager.maxdisplayresults = maxdisplayresults
         configManager.setConfig(ConfigManager.parser, default=True, showFileCreatedText=False)
-        if optionalFinalOutcome_df is not None and not optionalFinalOutcome_df.empty:
-            final_df = None
-            try:
-                optionalFinalOutcome_df.drop('FairValue', axis=1, inplace=True, errors="ignore")
-                df_grouped = optionalFinalOutcome_df.groupby("Stock")
-                for stock, df_group in df_grouped:
-                    if stock == "BASKET":
-                        if final_df is None:
-                            final_df = df_group[["Pattern","LTP","LTP@Alert","SqrOffLTP","SqrOffDiff","EoDDiff","DayHigh","DayHighDiff"]]
-                        else:
-                            final_df = pd.concat([final_df, df_group[["Pattern","LTP","LTP@Alert","SqrOffLTP","SqrOffDiff","EoDDiff","DayHigh","DayHighDiff"]]], axis=0)
-            except:
-                pass
-            if final_df is not None and not final_df.empty:
-                with pd.option_context('mode.chained_assignment', None):
-                    final_df = final_df[["Pattern","LTP@Alert","LTP","EoDDiff","SqrOffLTP","SqrOffDiff","DayHigh","DayHighDiff"]]
-                    final_df.rename(
-                        columns={
-                            "Pattern": "Scan Name",
-                            "LTP@Alert": "Basket Value@Alert",
-                            "LTP": "Basket Value@EOD",
-                            "SqrOffLTP": "Basket Value@SqrOff",
-                            "DayHigh": "Basket Value@DayHigh",
-                            },
-                            inplace=True,
-                        )
-                    final_df.dropna(inplace=True)
-                mark_down = colorText.miniTabulator().tabulate(
-                                    final_df,
-                                    headers="keys",
-                                    tablefmt=colorText.No_Pad_GridFormat,
-                                    showindex = False
-                                ).encode("utf-8").decode(Utility.STD_ENCODING)
-                OutputControls().printOutput(mark_down)
-                from PKDevTools.classes.Telegram import get_secrets
-                Channel_Id, _, _, _ = get_secrets()
-                if Channel_Id is not None and len(str(Channel_Id)) > 0:
-                    sendQuickScanResult(menuChoiceHierarchy="IntradayAnalysis",
-                                        user=int(f"-{Channel_Id}"),
-                                        tabulated_results=mark_down,
-                                        markdown_results=mark_down,
-                                        caption="IntradayAnalysis - Morning alert vs Market Close",
-                                        pngName= f"PKS_IA_{PKDateUtilities.currentDateTime().strftime('%Y-%m-%d_%H:%M:%S')}",
-                                        pngExtension= ".png",
-                                        forceSend=True
-                                        )
+        saveSendFinalOutcomeDataframe(optionalFinalOutcome_df)
     else:
         if args.barometer:
             sendGlobalMarketBarometer(userArgs=args)
@@ -658,6 +627,59 @@ def runApplication():
                 if results is not None and len(monitorOption_org) > 0:
                     chosenMenu = args.pipedtitle if args.pipedtitle is not None else updateMenuChoiceHierarchy()
                     MarketMonitor().refresh(screen_df=results,screenOptions=monitorOption_org, chosenMenu=chosenMenu[:120],dbTimestamp=f"{dbTimestamp} | CycleTime:{elapsed_time}s",telegram=args.telegram)
+
+def saveSendFinalOutcomeDataframe(optionalFinalOutcome_df):
+    import pandas as pd
+    from pkscreener.classes import Utility
+    from pkscreener.globals import sendQuickScanResult,showBacktestResults
+
+    if optionalFinalOutcome_df is not None and not optionalFinalOutcome_df.empty:
+        final_df = None
+        try:
+            optionalFinalOutcome_df.drop('FairValue', axis=1, inplace=True, errors="ignore")
+            df_grouped = optionalFinalOutcome_df.groupby("Stock")
+            for stock, df_group in df_grouped:
+                if stock == "BASKET":
+                    if final_df is None:
+                        final_df = df_group[["Pattern","LTP","LTP@Alert","SqrOffLTP","SqrOffDiff","EoDDiff","DayHigh","DayHighDiff"]]
+                    else:
+                        final_df = pd.concat([final_df, df_group[["Pattern","LTP","LTP@Alert","SqrOffLTP","SqrOffDiff","EoDDiff","DayHigh","DayHighDiff"]]], axis=0)
+        except:
+            pass
+        if final_df is not None and not final_df.empty:
+            with pd.option_context('mode.chained_assignment', None):
+                final_df = final_df[["Pattern","LTP@Alert","LTP","EoDDiff","SqrOffLTP","SqrOffDiff","DayHigh","DayHighDiff"]]
+                final_df.rename(
+                        columns={
+                            "Pattern": "Scan Name",
+                            "LTP@Alert": "Basket Value@Alert",
+                            "LTP": "Basket Value@EOD",
+                            "SqrOffLTP": "Basket Value@SqrOff",
+                            "DayHigh": "Basket Value@DayHigh",
+                            },
+                            inplace=True,
+                        )
+                final_df.dropna(inplace=True)
+            mark_down = colorText.miniTabulator().tabulate(
+                                    final_df,
+                                    headers="keys",
+                                    tablefmt=colorText.No_Pad_GridFormat,
+                                    showindex = False
+                                ).encode("utf-8").decode(Utility.STD_ENCODING)
+            showBacktestResults(final_df,optionalName="Intraday_Backtest_Result_Summary",choices="Summary")
+            OutputControls().printOutput(mark_down)
+            from PKDevTools.classes.Telegram import get_secrets
+            Channel_Id, _, _, _ = get_secrets()
+            if Channel_Id is not None and len(str(Channel_Id)) > 0:
+                sendQuickScanResult(menuChoiceHierarchy="IntradayAnalysis",
+                                        user=int(f"-{Channel_Id}"),
+                                        tabulated_results=mark_down,
+                                        markdown_results=mark_down,
+                                        caption="IntradayAnalysis - Morning alert vs Market Close",
+                                        pngName= f"PKS_IA_{PKDateUtilities.currentDateTime().strftime('%Y-%m-%d_%H:%M:%S')}",
+                                        pngExtension= ".png",
+                                        forceSend=True
+                                        )
 
 def checkIntradayComponent(args, monitorOption):
     lastComponent = monitorOption.split(":")[-1]

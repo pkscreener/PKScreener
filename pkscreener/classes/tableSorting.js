@@ -24,8 +24,9 @@ window.addEventListener('load', function() {
   })));
 
   document.querySelectorAll('table tr td').forEach(function(e, i) {
-    if (e.textContent.trim().length == 0) { // if row is empty which means the report did not get generated
-        e.parentNode.remove();
+    if (e.textContent.trim().length == 0 || e.textContent.trim() == "NaN") { // if row is empty which means the report did not get generated
+        // e.parentNode.remove();
+        e.textContent = "-"
     }
   });
 })
