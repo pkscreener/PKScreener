@@ -271,6 +271,48 @@ class pktalib:
             )
 
     @classmethod
+    def highest(self, df,columnName, timeperiod):
+        return df.rolling(timeperiod, min_periods=1)[columnName].max()
+
+    @classmethod
+    def lowest(self, df,columnName, timeperiod):
+        return df.rolling(timeperiod, min_periods=1)[columnName].min()
+    
+    @classmethod
+    def RVM(self, high, low, close, timeperiod):
+        # Relative Volatality Measure
+        #Short-term ATRs
+        short1    = pktalib.ATR(high, low, close,3)
+        short2    = pktalib.ATR(high, low, close,5)
+        short3    = pktalib.ATR(high, low, close,8)
+        shortAvg  = (short1 + short2 + short3) / 3
+
+        #Long-term ATRs
+        long1   = pktalib.ATR(high, low, close,55)
+        long2   = pktalib.ATR(high, low, close,89)
+        long3   = pktalib.ATR(high, low, close,144)
+        longAvg = (long1 + long2 + long3) / 3
+
+        #Combined ATR value
+        combinedATR = (shortAvg + longAvg) / 2
+
+        #Highest and lowest combined ATR over lookback period
+        df_catr = pd.DataFrame(data=combinedATR,columns=["combinedATR"])
+        highestCombinedATR = pktalib.highest(df_catr,"combinedATR", timeperiod)
+        lowestCombinedATR = pktalib.lowest(df_catr,"combinedATR", timeperiod)
+
+        #RVM Calculation
+        diffLowest = (combinedATR - lowestCombinedATR)
+        diffLowest = [x for x in diffLowest if ~np.isnan(x)]
+        diffHighLow = (highestCombinedATR - lowestCombinedATR)
+        diffHighLow = [x for x in diffHighLow if ~np.isnan(x)]
+        df_diff_lowest = pd.DataFrame(data=diffLowest,columns=["diffLowest"])
+        df_diff_highLow = pd.DataFrame(data=diffHighLow,columns=["diffHighLow"])
+        maxHighLow = max(df_diff_highLow["diffHighLow"])
+        rvm =  df_diff_lowest["diffLowest"]/ maxHighLow * 100
+        return round(rvm.tail(1),1)
+
+    @classmethod
     def ichimoku(
         self, df, tenkan=None, kijun=None, senkou=None, include_chikou=True, offset=None
     ):

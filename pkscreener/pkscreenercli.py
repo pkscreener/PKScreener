@@ -229,6 +229,12 @@ argParser.add_argument(
     required=False,
 )
 argParser.add_argument(
+    "--stocklist",
+    type=str,
+    help="Comma separated list of stocks passed from previous scan results",
+    required=False,
+)
+argParser.add_argument(
     "--systemlaunched",
     action="store_true",
     help="Indicator to show that this is a system launched screener, using os.system",
@@ -274,6 +280,11 @@ argParser.add_argument(
 argParser.add_argument(
     "--pipedmenus",
     help="Piped Menus",
+    required=False,
+)
+argParser.add_argument(
+    "--usertag",
+    help="User defined tag value(s)",
     required=False,
 )
 
@@ -327,7 +338,7 @@ def exitGracefully():
         argsv = argParser.parse_known_args()
         args = argsv[0]
         if args is not None and args.options is not None and not args.options.upper().startswith("T"):
-            resetConfigToDefault()
+            resetConfigToDefault(force=True)
             
         if "PKDevTools_Default_Log_Level" in os.environ.keys():
             if args is None or (args is not None and args.options is not None and "|" not in args.options):
@@ -412,7 +423,7 @@ def runApplication():
     except:
         pass
     global results, resultStocks, plainResults, dbTimestamp, elapsed_time, start_time,argParser
-    from pkscreener.classes.MenuOptions import menus, PREDEFINED_PIPED_MENU_OPTIONS,PREDEFINED_SCAN_MENU_VALUES
+    from pkscreener.classes.MenuOptions import menus, PREDEFINED_SCAN_MENU_TEXTS, PREDEFINED_PIPED_MENU_OPTIONS,PREDEFINED_SCAN_MENU_VALUES
     args = get_debug_args()
     if not isinstance(args,argparse.Namespace):
         argsv = argParser.parse_known_args(args=args)
@@ -447,6 +458,7 @@ def runApplication():
                 indexNum = PREDEFINED_SCAN_MENU_VALUES.index(choices)
                 choices = f"{'P_1_'+str(indexNum +1) if '>|' in choices else choices}"
                 args.progressstatus = f"[+] {choices} => Running {choices}"
+                args.usertag = PREDEFINED_SCAN_MENU_TEXTS[indexNum]
         except:
             choices = ""
             pass
@@ -461,7 +473,7 @@ def runApplication():
             runOptions = [args.options]
         else:
             runOptions = PREDEFINED_PIPED_MENU_OPTIONS
-            otherMenus =  menus.allMenus(topLevel="C", index=12)
+            # otherMenus =  menus.allMenus(topLevel="C", index=12)
             if len(otherMenus) > 0:
                 runOptions.extend(otherMenus)
         import pandas as pd
@@ -513,7 +525,7 @@ def runApplication():
                     traceback.print_exc()
             resetUserMenuChoiceOptions()
             analysis_index += 1
-            saveSendFinalOutcomeDataframe(optionalFinalOutcome_df)
+            # saveSendFinalOutcomeDataframe(optionalFinalOutcome_df)
 
         configManager.maxdisplayresults = maxdisplayresults
         configManager.setConfig(ConfigManager.parser, default=True, showFileCreatedText=False)
@@ -691,7 +703,7 @@ def checkIntradayComponent(args, monitorOption):
         configManager.toggleConfig(candleDuration=args.intraday, clearCache=False)
         # args.options = f"{monitorOption}:{args.options[len(lastComponent):]}"
     else:
-                    # We need to switch to daily scan
+        # We need to switch to daily scan
         args.intraday = None
         configManager.toggleConfig(candleDuration='1d', clearCache=False)
     return monitorOption
@@ -758,6 +770,13 @@ def pkscreenercli():
     try:
         OutputControls(enableMultipleLineOutput=(args is None or args.monitor is None or args.runintradayanalysis)).printOutput("",end="\r")
         configManager.getConfig(ConfigManager.parser)
+        try:
+            # Reset logging. If the user indeed passed the --log flag, it will be enabled later anyways
+            del os.environ['PKDevTools_Default_Log_Level']
+            configManager.logsEnabled = False
+            configManager.setConfig(ConfigManager.parser,default=True,showFileCreatedText=False)
+        except:
+            pass
         import atexit
         atexit.register(exitGracefully)
         # Set the trigger timestamp
@@ -849,8 +868,8 @@ def pkscreenercli():
         
         if args.intraday:
             configManager.toggleConfig(candleDuration=args.intraday, clearCache=False)
-        else:
-            configManager.toggleConfig(candleDuration='1d', clearCache=False)
+        # else:
+        #     configManager.toggleConfig(candleDuration='1d', clearCache=False)
         if args.options is not None:
             if str(args.options) == "0":
                 # Must be from unit tests to be able to break out of loops via eventing
@@ -879,8 +898,8 @@ def pkscreenercli():
                 + colorText.END
             )
             configManager.restartRequestsCache()
-            if args.intraday is None:
-                configManager.toggleConfig(candleDuration="1d", clearCache=False)
+            # if args.intraday is None:
+            #     configManager.toggleConfig(candleDuration="1d", clearCache=False)
             runApplication()
             from pkscreener.globals import closeWorkersAndExit
             closeWorkersAndExit()

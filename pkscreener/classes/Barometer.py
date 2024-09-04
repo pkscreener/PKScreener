@@ -66,9 +66,12 @@ async def takeScreenshot(page,saveFileName=None,text=""):
     await page.waitFor(selectorOrFunctionOrTimeout=QUERY_SELECTOR_TIMEOUT)
 
     # Take the screenshot
-    await page.screenshot({'path': os.path.join(folderPath,saveFileName), 'clip': {"x":clip_x,"y":clip_y,"width":clip_width,"height":clip_height}})
+    srcFilePath = os.path.join(folderPath,saveFileName)
+    await page.screenshot({'path': srcFilePath, 'clip': {"x":clip_x,"y":clip_y,"width":clip_width,"height":clip_height}})
     await page.click(dismissSelector)
     await page.waitFor(selectorOrFunctionOrTimeout=QUERY_SELECTOR_TIMEOUT)
+    srcFileSize = os.stat(srcFilePath).st_size if os.path.exists(srcFilePath) else 0
+    default_logger().debug(f"{saveFileName} saved at {srcFilePath} with size {srcFileSize} bytes")
 
 # Get the Global Market Barometer for global and Indian stock markets.
 # This captures the screenshot of the India market and its growth 
@@ -128,7 +131,6 @@ def getGlobalMarketBarometerValuation():
         gmbValuation = Image.open(os.path.join(folderPath,'gmbvaluation.png')) # 710 x 450
         gmbPerf_size = gmbPerformance.size
         gmbValue_size = gmbValuation.size
-        # watermark = Utility.tools.getWatermarkImage(gmbPerformance)
         gmbPerformance = Utility.tools.addQuickWatermark(gmbPerformance, dataSrc="Morningstar, Inc")
         gmbValuation = Utility.tools.addQuickWatermark(gmbValuation, dataSrc="Morningstar, Inc")
         gmbCombined = Image.new('RGB',(gmbPerf_size[0], gmbPerf_size[1]+gmbValue_size[1]+gapHeight), bgColor)
@@ -143,8 +145,9 @@ def getGlobalMarketBarometerValuation():
         gmbCombined.paste(gmbValuation,(0,gmbPerf_size[1]+gapHeight))
         gmbCombined.save(os.path.join(folderPath,"gmb.png"),"PNG")
         gmbPath = os.path.join(folderPath,"gmb.png")
-        # gmbCombined.show()
-    except: #Exception as e:
-        # print(e)
+        srcFileSize = os.stat(gmbPath).st_size if os.path.exists(gmbPath) else 0
+        default_logger().debug(f"gmb.png saved at {gmbPath} with size {srcFileSize} bytes")
+    except Exception as e:
+        default_logger().debug(e, exc_info=True)
         pass
     return gmbPath

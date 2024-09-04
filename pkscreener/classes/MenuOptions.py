@@ -34,8 +34,6 @@ from pkscreener.classes import VERSION
 configManager = ConfigManager.tools()
 MENU_SEPARATOR = ""
 LINE_SEPARATOR = "\n"
-MAX_SUPPORTED_MENU_OPTION = 39
-MAX_MENU_OPTION = 50
 
 level0MenuDict = {
     "X": "Scanners",
@@ -46,8 +44,7 @@ level0MenuDict = {
     "C": "Analyse morning vs close outcomes",
     "P": "Piped Scanners",
     "T": "~",
-    "D": "Download Daily OHLC Data for the Past Year",
-    "I": "Download Intraday OHLC Data for the Last Trading Day",
+    "D": "Data Downloads",
     "E": "Edit user configuration",
     "Y": "View your user configuration",
     "U": "Check for software update",
@@ -110,8 +107,15 @@ level1_P_MenuDict = {
     "3": "Run Piped Scans Saved So Far",
     "M": "Back to the Top/Main menu",
 }
-PREDEFINED_SCAN_ALERT_MENU_KEYS = ["1","5","6","8","18","22","25","27"]
-PREDEFINED_SCAN_MENU_KEYS = ["1","2","3","4","5","6","7","8","9","10","11","12","13","14","15","16","17","18","19","20", "21", "22", "23", "24", "25","26","27"]
+LEVEL_1_DATA_DOWNLOADS = {
+    "D": "Download Daily OHLC Data for the Past Year",
+    "I": "Download Intraday OHLC Data for the Last Trading Day",
+    "N": "NSE Equity Symbols",
+    "S": "NSE Symbols with Sector/Industry Details",
+    "M": "Back to the Top/Main menu",
+}
+PREDEFINED_SCAN_ALERT_MENU_KEYS = ["1","5","6","8","18","22","25","27","28","29","30","31"]
+PREDEFINED_SCAN_MENU_KEYS = ["1","2","3","4","5","6","7","8","9","10","11","12","13","14","15","16","17","18","19","20", "21", "22", "23", "24", "25","26","27","28","29","30","31"]
 PREDEFINED_SCAN_MENU_TEXTS = [
     "Volume Scanners | High Momentum | Breaking Out Now | ATR Cross     ",  # 1
     "Volume Scanners | High Momentum | ATR Cross",                          # 2
@@ -140,6 +144,10 @@ PREDEFINED_SCAN_MENU_TEXTS = [
     "BullCross-VWAP | ATR Cross | ATR Trailing Stop                     ",  # 25
     "Super-Confluence | ATR Trailing Stop                               ",  # 26
     "BullCross-VWAP | Super-Confluence                                  ",  # 27
+    "VCP | Volume-Breakout                                              ",  # 28
+    "VCP | Volume-Breakout | Price Breakout                             ",  # 29
+    "VCP | Super-Confluence                                             ",  # 30
+    "Bullish Today x PDO/PDC | VCP                                      ",  # 31
 ]
 level2_P_MenuDict = {}
 for key in PREDEFINED_SCAN_MENU_KEYS:
@@ -175,6 +183,10 @@ PREDEFINED_SCAN_MENU_VALUES =[
     # Running super conf at the beginning will be faster because there will be less number of stocks.
     # Running it at the end is essential because we want to see the dates of super-conf
     "--systemlaunched -a y -e -o 'X:12:7:3:0.008:4:>|X:12:7:9:7:>|X:0:7:3:0.008:4:'", # 27
+    "--systemlaunched -a y -e -o 'X:12:7:4:>|X:0:9:2.5:'",                  # 28
+    "--systemlaunched -a y -e -o 'X:12:7:4:>|X:0:9:2.5:>|X:0:27:'",         # 29
+    "--systemlaunched -a y -e -o 'X:12:7:4:>|X:0:7:3:0.008:4:'",            # 30
+    "--systemlaunched -a y -e -o 'X:12:33:2:>|X:0:7:4:'",                   # 31
 ]
 PREDEFINED_PIPED_MENU_OPTIONS = []
 for option in PREDEFINED_SCAN_MENU_VALUES:
@@ -192,6 +204,7 @@ level1_T_MenuDict = {
     "L": "Long Term",
     "S": "Short Term (Intraday)",
     "B": "Quick Backtest for N-days/candles ago",
+
     "M": "Back to the Top/Main menu",
 }
 # Valid periods: 1d,5d,1mo,3mo,6mo,1y,2y,5y,10y,ytd,max
@@ -202,6 +215,7 @@ level2_T_MenuDict_L = {
     "3": "Monthly (1y, 1mo)",
     "4": "Hourly (1y, 1h)",
     "5": "Custom",
+
     "M": "Back to the Top/Main menu",
 }
 level2_T_MenuDict_S = {
@@ -210,12 +224,32 @@ level2_T_MenuDict_S = {
     "3": "15m (1d, 15m)",
     "4": "30m (1d, 30m)",
     "5": "Custom",
+
     "M": "Back to the Top/Main menu",
 }
 level1_S_MenuDict = {
     "S": "Summary",
+
     "M": "Back to the Top/Main menu",
     "Z": "Exit (Ctrl + C)",
+}
+INDICES_MAP = {
+    "1": "Nifty 50          ",
+    "2": "Nifty Next 50     ",
+    "3": "Nifty 100         ",
+    "4": "Nifty 200         ",
+    "5": "Nifty 500         ",
+    "6": "Nifty Smallcap 50 ",
+    "7": "Nifty Smallcap 100",
+    "8": "Nifty Smallcap 250",
+    "9": "Nifty Midcap 50   ",
+    "10": "Nifty Midcap 100",
+    "11": "Nifty Midcap 150 ",
+    "12": "Nifty (All Stocks)",
+    "14": "F&O Stocks Only", #Discontinued:  https://nsearchives.nseindia.com/content/circulars/FAOP61157.pdf
+    "15": "NASDAQ",
+
+    "M": "Back to the Top/Main menu",
 }
 level1_X_MenuDict = {
     "W": "Screen stocks from my own Watchlist",
@@ -238,6 +272,7 @@ level1_X_MenuDict = {
     "13": "Newly Listed (IPOs in last 1 Year)           ",
     "14": "F&O Stocks Only", #Discontinued:  https://nsearchives.nseindia.com/content/circulars/FAOP61157.pdf
     "15": "NASDAQ",
+
     "M": "Back to the Top/Main menu",
     "Z": "Exit (Ctrl + C)",
 }
@@ -282,10 +317,15 @@ level2_X_MenuDict = {
     "37": "Short Sell Candidates (Volume SMA)       ",
     "38": "Intraday Short Sell (PSAR / Volume SMA)  ",
     "39": "IPO-Lifetime First day bullish break     ",
+    "40": "Price Action                             ",
     "50": "Show Last Screened Results               ",
+
     "M": "Back to the Top/Main menu                 ",
     "Z": "Exit (Ctrl + C)                           ",
 }
+MAX_SUPPORTED_MENU_OPTION = 40
+MAX_MENU_OPTION = 50
+
 level3_X_Reversal_MenuDict = {
     "1": "Buy Signals (Bullish Reversal)",
     "2": "Sell Signals (Bearish Reversal)",
@@ -297,8 +337,16 @@ level3_X_Reversal_MenuDict = {
     "8": "PSAR and RSI reversal",
     "9": "Rising RSI",
     "10": "RSI MA Reversal",
+
     "0": "Cancel",
 }
+level3_X_PotentialProfitable_MenuDict = {
+    "1": "Frequent highs with bullish MAs",
+    "2": "Bullish Today for Previous Day Open/Close (PDO/PDC) with 1M Volume",
+
+    "0": "Cancel",
+}
+
 level3_X_ChartPattern_MenuDict = {
     "1": "Bullish Inside Bar (Flag) Pattern",
     "2": "Bearish Inside Bar (Flag) Pattern(Sell)",
@@ -309,6 +357,7 @@ level3_X_ChartPattern_MenuDict = {
     "7": "Candle-stick Patterns",
     "8": "VCP (Mark Minervini)",
     "9": "Moving Average Signals",
+
     "0": "Cancel",
 }
 
@@ -320,6 +369,7 @@ level4_X_ChartPattern_MASignalMenuDict = {
     "5": "BullCross MA",
     "6": "MA-Resist",
     "7": "BullCross VWAP",
+
     "0": "Cancel",
 }
 
@@ -328,6 +378,7 @@ level4_X_ChartPattern_BBands_SQZ_MenuDict = {
     "2": "TTM In-Squeeze",
     "3": "TTM Squeeze-Sell",
     "4": "All/Any",
+
     "0": "Cancel",
 }
 
@@ -336,6 +387,7 @@ level4_X_ChartPattern_Confluence_MenuDict = {
     "2": "Confluence Down / DeadCrossOver",
     "3": "Any/All (Confluence up/down/Crossovers)",
     "4": "8,21,55-EMA / 200-SMA Super-Confluence (BTST-Buy at close, Sell early next day)",
+
     "0": "Cancel",
 }
 
@@ -349,6 +401,7 @@ level3_X_PopularStocks_MenuDict = {
     "7": "MF/FIIs Net Ownership Decreased",
     "8": "Fair Value Buy Opportunities",
     "9": "Fair Value Sell Opportunities",
+
     "0": "Cancel",
 }
 
@@ -356,6 +409,7 @@ level3_X_StockPerformance_MenuDict = {
     "1": "Short term",
     "2": "Medium term",
     "3": "Long term",
+
     "0": "Cancel",
 }
 
@@ -363,12 +417,30 @@ level4_X_Lorenzian_MenuDict = {
     "1": "Buy",
     "2": "Sell",
     "3": "Any/All",
+
     "0": "Cancel",
 }
 Pin_MenuDict = {
     "1": "Pin this scan category or piped scan {0}",
     "2": "Pin these {0} stocks in the scan results (Just keep tracking only these {0} stocks)",
+    "3": "Use Sliding-Window-Timeframe to run this scan category or piped scan {0}",
+    # "4": "Use Sliding-Window-Timeframe to just keep track of only these {0} stocks",
+
     "M": "Back to the Top/Main menu",
+}
+
+PRICE_CROSS_SMA_EMA_TYPE_MENUDICT = {
+    "1": "SMA",
+    "2": "EMA",
+
+    "0": "Cancel"
+}
+
+PRICE_CROSS_SMA_EMA_DIRECTION_MENUDICT = {
+    "1": "Crosses From Above",
+    "2": "Crosses From Below",
+
+    "0": "Cancel"
 }
 
 class MenuRenderStyle(Enum):
@@ -568,9 +640,15 @@ class menus:
     def renderForMenu(self, selectedMenu:menu=None, skip=[], asList=False, renderStyle=None):
         if selectedMenu is None and self.level == 0:
             # Top level Application Main menu
-            return self.renderLevel0Menus(
-                skip=skip, asList=asList, renderStyle=renderStyle, parent=selectedMenu
-            )
+            return self.renderMenuFromDictionary(dict=level0MenuDict,
+                                                 exceptionKeys=["X", "T", "E", "U", "Z", "L", "D"],
+                                                 coloredValues=(["P"] if not asList else []),
+                                                 defaultMenu="P",
+                                                 skip=skip, 
+                                                 asList=asList, 
+                                                 renderStyle=renderStyle, 
+                                                 parent=selectedMenu,
+                                                 checkUpdate=True)
         elif selectedMenu is not None:
             if selectedMenu.menuKey == "S" and selectedMenu.level == 0:
                     return self.renderLevel1_S_Menus(
@@ -595,6 +673,16 @@ class menus:
                         renderStyle=renderStyle,
                         parent=selectedMenu,
                     )
+                elif selectedMenu.menuKey in ["D"]:
+                    return self.renderMenuFromDictionary(dict=LEVEL_1_DATA_DOWNLOADS,
+                                                         exceptionKeys=["M",],
+                                                         coloredValues=(["D"] if not asList else []),
+                                                         defaultMenu="D",
+                                                         skip=skip, 
+                                                         asList=asList, 
+                                                         renderStyle=renderStyle, 
+                                                         parent=selectedMenu,
+                                                         checkUpdate=False)
                 else:
                     # sub-menu of the top level main selected menu
                     return self.renderLevel1_X_Menus(
@@ -605,6 +693,16 @@ class menus:
                     )
             elif selectedMenu.level == 1:
                 self.level = 2
+                if selectedMenu.parent.menuKey in ["D"]:
+                    return self.renderMenuFromDictionary(dict=INDICES_MAP,
+                                                         exceptionKeys=["M","15"],
+                                                         coloredValues=(["12","15"] if not asList else []),
+                                                         defaultMenu="12",
+                                                         skip=skip, 
+                                                         asList=asList, 
+                                                         renderStyle=renderStyle, 
+                                                         parent=selectedMenu,
+                                                         checkUpdate=False)
                 if selectedMenu.parent.menuKey in ["T"]:
                     if selectedMenu.menuKey in ["L"]:
                         return self.level2_T_MenuDict_L(
@@ -680,6 +778,24 @@ class menus:
                         renderStyle=renderStyle,
                         parent=selectedMenu,
                     )
+                elif selectedMenu.menuKey in ["33"]:
+                    return self.renderMenuFromDictionary(dict=level3_X_PotentialProfitable_MenuDict,
+                                                         exceptionKeys=["0"],
+                                                         coloredValues=["2"],
+                                                         defaultMenu="2",
+                                                         asList=asList,
+                                                         renderStyle=renderStyle,
+                                                         skip=skip,
+                                                         parent=selectedMenu)
+                elif selectedMenu.menuKey in ["40"]:
+                    return self.renderMenuFromDictionary(dict=PRICE_CROSS_SMA_EMA_TYPE_MENUDICT,
+                                                         exceptionKeys=["0"],
+                                                         coloredValues=["2"],
+                                                         defaultMenu="2",
+                                                         asList=asList,
+                                                         renderStyle=renderStyle,
+                                                         skip=skip, 
+                                                         parent=selectedMenu)
             elif selectedMenu.level == 3:
                 self.level = 4
                 # next levelsub-menu of the selected sub-menu
@@ -711,7 +827,9 @@ class menus:
                         renderStyle=renderStyle,
                         parent=selectedMenu,
                     )
-                
+                if selectedMenu.parent.menuKey == "40" and selectedMenu.menuKey in PRICE_CROSS_SMA_EMA_TYPE_MENUDICT.keys():
+                    return self.renderMenuFromDictionary(dict=PRICE_CROSS_SMA_EMA_DIRECTION_MENUDICT,exceptionKeys=["0"],coloredValues=["2"],defaultMenu="2", parent=selectedMenu)
+
 
     def find(self, key=None):
         if key is not None:
@@ -722,6 +840,45 @@ class menus:
                 return None
         return None
 
+    def renderMenuFromDictionary(self, dict={},exceptionKeys=[],coloredValues=[], optionText="[+] Select a menu option:", defaultMenu="0", asList=False, renderStyle=None, parent=None, skip=None, substitutes=[],checkUpdate=False):
+        menuText = self.fromDictionary(
+            dict,
+            renderExceptionKeys=exceptionKeys,
+            renderStyle=renderStyle
+            if renderStyle is not None
+            else MenuRenderStyle.STANDALONE,
+            skip=skip,
+            parent=parent,
+            substitutes = substitutes
+        ).render(asList=asList,coloredValues=coloredValues)
+        if asList:
+            return menuText
+        else:
+            if OutputControls().enableMultipleLineOutput:
+                OutputControls().printOutput(
+                    colorText.BOLD
+                    + colorText.WARN
+                    + optionText
+                    + colorText.END
+                )
+                OutputControls().printOutput(
+                    colorText.BOLD
+                    + menuText
+                    + """
+
+    Enter your choice > (default is """
+                    + colorText.WARN
+                    + (self.find(defaultMenu) or menu().create('?','?')).keyTextLabel().strip()
+                    + ") "
+                    "" + colorText.END
+                )
+                if checkUpdate:
+                    try:
+                        OTAUpdater.checkForUpdate(VERSION, skipDownload=True)
+                    except:
+                        pass
+            return menuText
+        
     def renderPinSubmenus(self, asList=False, renderStyle=None, parent=None, skip=None, substitutes=[]):
         menuText = self.fromDictionary(
             Pin_MenuDict,
@@ -754,43 +911,6 @@ class menus:
                     + ") "
                     "" + colorText.END
                 )
-            return menuText
-        
-    def renderLevel0Menus(self, asList=False, renderStyle=None, parent=None, skip=None):
-        menuText = self.fromDictionary(
-            level0MenuDict,
-            renderExceptionKeys=["P", "T", "E", "U", "Z", "L", "D"],
-            renderStyle=renderStyle
-            if renderStyle is not None
-            else MenuRenderStyle.STANDALONE,
-            skip=skip,
-            parent=parent,
-        ).render(asList=asList,coloredValues=["X"] if not asList else [])
-        if asList:
-            return menuText
-        else:
-            if OutputControls().enableMultipleLineOutput:
-                OutputControls().printOutput(
-                    colorText.BOLD
-                    + colorText.WARN
-                    + "[+] Select a menu option:"
-                    + colorText.END
-                )
-                OutputControls().printOutput(
-                    colorText.BOLD
-                    + menuText
-                    + """
-
-    Enter your choice > (default is """
-                    + colorText.WARN
-                    + (self.find("X") or menu().create('?','?')).keyTextLabel().strip()
-                    + ") "
-                    "" + colorText.END
-                )
-                try:
-                    OTAUpdater.checkForUpdate(VERSION, skipDownload=True)
-                except:
-                    pass
             return menuText
 
     def renderLevel1_S_Menus(

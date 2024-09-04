@@ -128,7 +128,7 @@ class PKMarketOpenCloseAnalyser:
                 if copyFileSize >= 1024*1024*40:
                     shutil.copy(copyFilePath,srcFilePath) # copy is the saved source of truth
                     return True, cache_file
-            Utility.tools.loadStockData({},PKMarketOpenCloseAnalyser.configManager,False,'Y',False,False,[],isIntraday=True)
+            Utility.tools.loadStockData(stockDict={},configManager=PKMarketOpenCloseAnalyser.configManager,downloadOnly=False,defaultAnswer='Y',retrial=False,forceLoad=False,stockCodes=[],isIntraday=True)
             exists, cache_file = Utility.tools.afterMarketStockDataExists(intraday=True)
             if not exists:
                 OutputControls().printOutput(f"[+] {colorText.FAIL}{cache_file}{colorText.END} not found under {Archiver.get_user_outputs_dir()}/ !")
@@ -168,7 +168,7 @@ class PKMarketOpenCloseAnalyser:
                 if copyFileSize >= 1024*1024*40:
                     shutil.copy(copyFilePath,srcFilePath) # copy is the saved source of truth
                     return True, cache_file
-            Utility.tools.loadStockData({},PKMarketOpenCloseAnalyser.configManager,False,'Y',False,False,[],isIntraday=False,forceRedownload=True)
+            Utility.tools.loadStockData(stockDict={},configManager=PKMarketOpenCloseAnalyser.configManager,downloadOnly=False,defaultAnswer='Y',retrial=False,forceLoad=False,stockCodes=[],isIntraday=False,forceRedownload=True)
             exists, cache_file = Utility.tools.afterMarketStockDataExists(intraday=False)
             if not exists:
                 OutputControls().printOutput(f"[+] {colorText.FAIL}{cache_file}{colorText.END} not found under {Archiver.get_user_outputs_dir()}/ !")
@@ -352,7 +352,7 @@ class PKMarketOpenCloseAnalyser:
                 endOfDayLTP = allDailyCandles[stock]["data"][-1][3]
                 savedMorningLTP = updatedCandleData[stock]["data"][-1][3]
                 morningLTP = savedMorningLTP if pd.notna(savedMorningLTP) else round(save_df["LTP"][index],2)
-                morningTime = updatedCandleData[stock]["index"][-1].strftime("%H:%M")
+                morningTime = PKDateUtilities.utc_to_ist(updatedCandleData[stock]["index"][-1]).strftime("%H:%M")
                 morningTimestamps.append(morningTime)
                 morningCandles = PKMarketOpenCloseAnalyser.allIntradayCandles
                 df = pd.DataFrame(data=morningCandles[stock]["data"],
@@ -391,8 +391,8 @@ class PKMarketOpenCloseAnalyser:
                 # buySell_df = scrStats.computeBuySellSignals(updatedCandleData[stock]["data"])
                 # OutputControls().printOutput(buySell_df)
                 dayHighLTP = dayHighLTP if pd.notna(dayHighLTP) else highRow["High"][-1]
-                sellTimestamps.append(ts.strftime("%H:%M"))
-                dayHighTimestamps.append(highTS.strftime("%H:%M"))
+                sellTimestamps.append(PKDateUtilities.utc_to_ist(ts).strftime("%H:%M"))
+                dayHighTimestamps.append(PKDateUtilities.utc_to_ist(highTS).strftime("%H:%M"))
                 sellLTPs.append(row["High"][-1])
                 eodLTPs.append(round(endOfDayLTP,2))
                 dayHighLTPs.append(round(dayHighLTP,2))

@@ -84,6 +84,10 @@ class tools(SingletonMixin, metaclass=SingletonType):
         self.atrTrailingStopSensitivity = 1
         self.atrTrailingStopPeriod = 10
         self.atrTrailingStopEMAPeriod = 200
+        self.vcpRangePercentageFromTop = 20
+        self.vcpLegsToCheckForConsolidation = 3
+        self.enableAdditionalVCPFilters = True
+        self.enableUsageAnalytics = False
         # This determines how many days apart the backtest calculations are run.
         # For example, for weekly backtest calculations, set this to 5 (5 days = 1 week)
         # For fortnightly, set this to 10 and so on (10 trading sessions = 2 weeks)
@@ -178,7 +182,9 @@ class tools(SingletonMixin, metaclass=SingletonType):
             parser.set("config", "defaultIndex", str(self.defaultIndex))
             parser.set("config", "defaultMonitorOptions", str(self.defaultMonitorOptions))
             parser.set("config", "duration", self.duration)
+            parser.set("config", "enableAdditionalVCPFilters", "y" if (self.enableAdditionalVCPFilters) else "n")
             parser.set("config", "enablePortfolioCalculations", "y" if self.enablePortfolioCalculations else "n")
+            parser.set("config", "enableUsageAnalytics", "y" if self.enableUsageAnalytics else "n")
             parser.set("config", "generalTimeout", str(self.generalTimeout))
             parser.set("config", "logsEnabled", "y" if (self.logsEnabled or "PKDevTools_Default_Log_Level" in os.environ.keys()) else "n")
             parser.set("config", "longTimeout", str(self.longTimeout))
@@ -208,6 +214,8 @@ class tools(SingletonMixin, metaclass=SingletonType):
             parser.set("config", "telegramImageQualityPercentage", str(self.telegramImageQualityPercentage))
             parser.set("config", "telegramSampleNumberRows", str(self.telegramSampleNumberRows))
             parser.set("config", "useEMA", "y" if self.useEMA else "n")
+            parser.set("config", "vcpLegsToCheckForConsolidation", str(self.vcpLegsToCheckForConsolidation))
+            parser.set("config", "vcpRangePercentageFromTop", str(self.vcpRangePercentageFromTop))
             parser.set("config", "vcpVolumeContractionRatio", str(self.vcpVolumeContractionRatio))
 
             parser.set("filters", "consolidationPercentage", str(self.consolidationPercentage))
@@ -253,25 +261,25 @@ class tools(SingletonMixin, metaclass=SingletonType):
             )
             try:
                 self.period = input(
-                    f"[+] Valid periods: 1d,5d,1mo,3mo,6mo,1y,2y,5y,10y,ytd,max\n[+] Enter number of days for which stock data to be downloaded (Days).(Optimal = 1y, Current: {colorText.FAIL}{self.period}{colorText.END}): "
+                    f"[+] Valid periods: 1d,5d,1mo,3mo,6mo,1y,2y,5y,10y,ytd,max\n[+] Enter number of days for which stock data to be downloaded (Days).({colorText.GREEN}Optimal = 1y{colorText.END}, Current: {colorText.FAIL}{self.period}{colorText.END}): "
                 ) or self.period
                 self.daysToLookback = input(
-                    f"[+] Number of recent trading periods (TimeFrame) to screen for Breakout/Consolidation (Days)(Optimal = 22, Current: {colorText.FAIL}{self.daysToLookback}{colorText.END}): "
+                    f"[+] Number of recent trading periods (TimeFrame) to screen for Breakout/Consolidation (Days)({colorText.GREEN}Optimal = 22{colorText.END}, Current: {colorText.FAIL}{self.daysToLookback}{colorText.END}): "
                 ) or self.daysToLookback
                 self.duration = input(
-                    f"[+] Valid intervals: 1m,2m,5m,15m,30m,60m,90m,1h,1d,5d,1wk,1mo,3mo\n[+] Enter Duration of each candle (Days)(Optimal = 1, Current: {colorText.FAIL}{self.duration}{colorText.END}): "
+                    f"[+] Valid intervals: 1m,2m,5m,15m,30m,60m,90m,1h,1d,5d,1wk,1mo,3mo\n[+] Enter Duration of each candle (Days)({colorText.GREEN}Optimal = 1{colorText.END}, Current: {colorText.FAIL}{self.duration}{colorText.END}): "
                 ) or self.duration
                 self.minLTP = input(
-                    f"[+] Minimum Price of Stock to Buy (in RS)(Optimal = 20, Current: {colorText.FAIL}{self.minLTP}{colorText.END}): "
+                    f"[+] Minimum Price of Stock to Buy (in RS)({colorText.GREEN}Optimal = 20{colorText.END}, Current: {colorText.FAIL}{self.minLTP}{colorText.END}): "
                 ) or self.minLTP
                 self.maxLTP = input(
-                    f"[+] Maximum Price of Stock to Buy (in RS)(Optimal = 50000, Current: {colorText.FAIL}{self.maxLTP}{colorText.END}): "
+                    f"[+] Maximum Price of Stock to Buy (in RS)({colorText.GREEN}Optimal = 50000{colorText.END}, Current: {colorText.FAIL}{self.maxLTP}{colorText.END}): "
                 ) or self.maxLTP
                 self.volumeRatio = input(
-                    f"[+] How many times the volume should be more than average for the breakout? (Number)(Optimal = 2.5, Current: {colorText.FAIL}{self.volumeRatio}{colorText.END}): "
+                    f"[+] How many times the volume should be more than average for the breakout? (Number)({colorText.GREEN}Optimal = 2.5{colorText.END}, Current: {colorText.FAIL}{self.volumeRatio}{colorText.END}): "
                 ) or self.volumeRatio
                 self.consolidationPercentage = input(
-                    f"[+] How much % the price should be in range, to consider it as consolidation? (Number)(Optimal = 10, Current: {colorText.FAIL}{self.consolidationPercentage}{colorText.END}): "
+                    f"[+] How much % the price should be in range, to consider it as consolidation? (Number)({colorText.GREEN}Optimal = 10{colorText.END}, Current: {colorText.FAIL}{self.consolidationPercentage}{colorText.END}): "
                 ) or self.consolidationPercentage
                 self.shuffle = str(
                     input(
@@ -295,7 +303,7 @@ class tools(SingletonMixin, metaclass=SingletonType):
                 ).lower()
                 self.showunknowntrendsPrompt = str(
                     input(
-                        f"[+] Show even those results where trends are not known[Y/N] (Recommended Y, Current: {colorText.FAIL}{'y' if self.showunknowntrends else 'n'}{colorText.END}): "
+                        f"[+] Show even those results where trends are not known[Y/N] ({colorText.GREEN}Recommended Y{colorText.END}, Current: {colorText.FAIL}{'y' if self.showunknowntrends else 'n'}{colorText.END}): "
                     ) or ('y' if self.showunknowntrends else 'n')
                 ).lower()
                 self.logsEnabledPrompt = str(
@@ -324,67 +332,83 @@ class tools(SingletonMixin, metaclass=SingletonType):
                     ) or ('y' if self.calculatersiintraday else 'n')
                 ).lower()
                 self.generalTimeout = input(
-                    f"[+] General network timeout (in seconds)(Optimal = 2 for good networks, Current: {colorText.FAIL}{self.generalTimeout}{colorText.END}): "
+                    f"[+] General network timeout (in seconds)({colorText.GREEN}Optimal = 2 for good networks{colorText.END}, Current: {colorText.FAIL}{self.generalTimeout}{colorText.END}): "
                 ) or self.generalTimeout
                 self.longTimeout = input(
-                    f"[+] Long network timeout for heavier downloads(in seconds)(Optimal = 4 for good networks, Current: {colorText.FAIL}{self.longTimeout}{colorText.END}): "
+                    f"[+] Long network timeout for heavier downloads(in seconds)({colorText.GREEN}Optimal = 4 for good networks{colorText.END}, Current: {colorText.FAIL}{self.longTimeout}{colorText.END}): "
                 ) or self.longTimeout
                 self.marketOpen = input(
-                    f"[+] Market Open time(Optimal = 09:15, Current: {colorText.FAIL}{self.marketOpen}{colorText.END}): "
+                    f"[+] Market Open time({colorText.GREEN}Optimal = 09:15{colorText.END}, Current: {colorText.FAIL}{self.marketOpen}{colorText.END}): "
                 ) or self.marketOpen
                 self.marketClose = input(
-                    f"[+] Market Close time(Optimal = 15:30, Current: {colorText.FAIL}{self.marketClose}{colorText.END}): "
+                    f"[+] Market Close time({colorText.GREEN}Optimal = 15:30{colorText.END}, Current: {colorText.FAIL}{self.marketClose}{colorText.END}): "
                 ) or self.marketClose
                 self.maxdisplayresults = input(
-                    f"[+] Maximum number of display results(number)(Optimal = 100, Current: {colorText.FAIL}{self.maxdisplayresults}{colorText.END}): "
+                    f"[+] Maximum number of display results(number)({colorText.GREEN}Optimal = 100{colorText.END}, Current: {colorText.FAIL}{self.maxdisplayresults}{colorText.END}): "
                 ) or self.maxdisplayresults
                 self.maxNetworkRetryCount = input(
-                    f"[+] Maximum number of retries in case of network timeout(in seconds)(Optimal = 10 for slow networks, Current: {colorText.FAIL}{self.maxNetworkRetryCount}{colorText.END}): "
+                    f"[+] Maximum number of retries in case of network timeout(in seconds)({colorText.GREEN}Optimal = 10 for slow networks{colorText.END}, Current: {colorText.FAIL}{self.maxNetworkRetryCount}{colorText.END}): "
                 ) or self.maxNetworkRetryCount
                 self.defaultIndex = input(
-                    f"[+] Default Index(NSE=12, NASDAQ=15, Current: {colorText.FAIL}{self.defaultIndex}{colorText.END}): "
+                    f"[+] Default Index({colorText.GREEN}NSE=12, NASDAQ=15{colorText.END}, Current: {colorText.FAIL}{self.defaultIndex}{colorText.END}): "
                 ) or self.defaultIndex
                 self.backtestPeriod = input(
-                    f"[+] Number of days in the past for backtesting(in days)(Optimal = 30, Current: {colorText.FAIL}{self.backtestPeriod}{colorText.END}): "
+                    f"[+] Number of days in the past for backtesting(in days)({colorText.GREEN}Optimal = 30{colorText.END}, Current: {colorText.FAIL}{self.backtestPeriod}{colorText.END}): "
                 ) or self.backtestPeriod
                 self.maxBacktestWindow = input(
-                    f"[+] Number of days to show the results for backtesting(in days)(Optimal = 1 to 30, Current: {colorText.FAIL}{self.maxBacktestWindow}{colorText.END}): "
+                    f"[+] Number of days to show the results for backtesting(in days)({colorText.GREEN}Optimal = 1 to 30{colorText.END}, Current: {colorText.FAIL}{self.maxBacktestWindow}{colorText.END}): "
                 ) or self.maxBacktestWindow
                 self.morninganalysiscandlenumber = input(
-                    f"[+] Candle number since the market open time(Optimal = 15 to 60, Current: {colorText.FAIL}{self.morninganalysiscandlenumber}{colorText.END}): "
+                    f"[+] Candle number since the market open time({colorText.GREEN}Optimal = 15 to 60{colorText.END}, Current: {colorText.FAIL}{self.morninganalysiscandlenumber}{colorText.END}): "
                 ) or self.morninganalysiscandlenumber
                 self.morninganalysiscandleduration = input(
-                    f"[+] Valid intervals: 1m,2m,5m,15m,30m,60m,90m,1h,1d,5d,1wk,1mo,3mo\n[+] Enter Duration of each candle (minutes)(Optimal = 1 to 5, Current: {colorText.FAIL}{self.morninganalysiscandleduration}{colorText.END}): "
+                    f"[+] Valid intervals: 1m,2m,5m,15m,30m,60m,90m,1h,1d,5d,1wk,1mo,3mo\n[+] Enter Duration of each candle (minutes)({colorText.GREEN}Optimal = 1 to 5{colorText.END}, Current: {colorText.FAIL}{self.morninganalysiscandleduration}{colorText.END}): "
                 ) or self.morninganalysiscandleduration
                 self.minVolume = input(
-                    f"[+] Minimum per day traded volume of any stock (number)(Optimal = 100000, Current: {colorText.FAIL}{self.minVolume}{colorText.END}): "
+                    f"[+] Minimum per day traded volume of any stock (number)({colorText.GREEN}Optimal = 100000{colorText.END}, Current: {colorText.FAIL}{self.minVolume}{colorText.END}): "
                 ) or self.minVolume
                 self.pinnedMonitorSleepIntervalSeconds = input(
-                    f"[+] Minimum number of seconds to wait before refreshing the data again when in pinned monitor mode (seconds)(Optimal = 30, Current: {colorText.FAIL}{self.pinnedMonitorSleepIntervalSeconds}{colorText.END}): "
+                    f"[+] Minimum number of seconds to wait before refreshing the data again when in pinned monitor mode (seconds)({colorText.GREEN}Optimal = 30{colorText.END}, Current: {colorText.FAIL}{self.pinnedMonitorSleepIntervalSeconds}{colorText.END}): "
                 ) or self.pinnedMonitorSleepIntervalSeconds
                 self.backtestPeriodFactor = input(
-                    f"[+] Factor for backtest periods. If you choose 5, 1-Pd would mean 5-Pd returns. (number)(Optimal = 1, Current: {colorText.FAIL}{self.backtestPeriodFactor}{colorText.END}): "
+                    f"[+] Factor for backtest periods. If you choose 5, 1-Pd would mean 5-Pd returns. (number)({colorText.GREEN}Optimal = 1{colorText.END}, Current: {colorText.FAIL}{self.backtestPeriodFactor}{colorText.END}): "
                 ) or self.backtestPeriodFactor
                 self.minimumChangePercentage = input(
-                    f"[+] Minimun change in stock price (in percentage). (number)(Optimal = 0, Current: {colorText.FAIL}{self.minimumChangePercentage}{colorText.END}): "
+                    f"[+] Minimun change in stock price (in percentage). (number)({colorText.GREEN}Optimal = 0{colorText.END}, Current: {colorText.FAIL}{self.minimumChangePercentage}{colorText.END}): "
                 ) or self.minimumChangePercentage
                 self.atrTrailingStopPeriod = input(
-                    f"[+] ATR Trailing Stop Periods. (number)(Optimal = 10, Current: {colorText.FAIL}{self.atrTrailingStopPeriod}{colorText.END}): "
+                    f"[+] ATR Trailing Stop Periods. (number)({colorText.GREEN}Optimal = 10{colorText.END}, Current: {colorText.FAIL}{self.atrTrailingStopPeriod}{colorText.END}): "
                 ) or self.atrTrailingStopPeriod
                 self.atrTrailingStopSensitivity = input(
-                    f"[+] ATR Trailing Stop Sensitivity. (number)(Optimal = 1, Current: {colorText.FAIL}{self.atrTrailingStopSensitivity}{colorText.END}): "
+                    f"[+] ATR Trailing Stop Sensitivity. (number)({colorText.GREEN}Optimal = 1{colorText.END}, Current: {colorText.FAIL}{self.atrTrailingStopSensitivity}{colorText.END}): "
                 ) or self.atrTrailingStopSensitivity
                 self.atrTrailingStopEMAPeriod = input(
-                    f"[+] ATR Trailing Stop EMA Period. (number)(Optimal = 1 to 200, Current: {colorText.FAIL}{self.atrTrailingStopEMAPeriod}{colorText.END}): "
+                    f"[+] ATR Trailing Stop EMA Period. (number)({colorText.GREEN}Optimal = 1 to 200{colorText.END}, Current: {colorText.FAIL}{self.atrTrailingStopEMAPeriod}{colorText.END}): "
                 ) or self.atrTrailingStopEMAPeriod
+                self.vcpLegsToCheckForConsolidation = input(
+                    f"[+] Number of consolidation legs to check for VCP. (number)({colorText.GREEN}Optimal = 2{colorText.END}, Current: {colorText.FAIL}{self.vcpLegsToCheckForConsolidation}{colorText.END}): "
+                ) or self.vcpLegsToCheckForConsolidation
+                self.vcpRangePercentageFromTop = input(
+                    f"[+] Range percentage from the highest high(top) for VCP. (number)({colorText.GREEN}Optimal = 20 to 60{colorText.END}, Current: {colorText.FAIL}{self.vcpRangePercentageFromTop}{colorText.END}): "
+                ) or self.vcpRangePercentageFromTop
                 self.vcpVolumeContractionRatio = input(
-                    f"[+] Ratio of volume of recent largest to pullback candles for VCP. (number)(Optimal = 0.4, Current: {colorText.FAIL}{self.vcpVolumeContractionRatio}{colorText.END}): "
+                    f"[+] Ratio of volume of recent largest to pullback candles for VCP. (number)({colorText.GREEN}Optimal = 0.4{colorText.END}, Current: {colorText.FAIL}{self.vcpVolumeContractionRatio}{colorText.END}): "
                 ) or self.vcpVolumeContractionRatio
+                self.enableAdditionalVCPFilters = str(
+                    input(
+                        f"[+] Enable additional VCP filters like range and consolidation? [Y/N, Current: {colorText.FAIL}{'y' if self.enableAdditionalVCPFilters else 'n'}{colorText.END}]: "
+                    ) or ('y' if self.enableAdditionalVCPFilters else 'n')
+                ).lower()
+                self.enableUsageAnalytics = str(
+                    input(
+                        f"[+] Enable usage analytics to be captured? [Y/N, Current: {colorText.FAIL}{'y' if self.enableUsageAnalytics else 'n'}{colorText.END}]: "
+                    ) or ('y' if self.enableUsageAnalytics else 'n')
+                ).lower()
                 self.superConfluenceEMAPeriods = input(
-                    f"[+] Comma separated EMA periods for super-confluence-checks. (numbers)(Optimal = 8,21,55, Current: {colorText.FAIL}{self.superConfluenceEMAPeriods}{colorText.END}): "
+                    f"[+] Comma separated EMA periods for super-confluence-checks. (numbers)({colorText.GREEN}Optimal = 8,21,55{colorText.END}, Current: {colorText.FAIL}{self.superConfluenceEMAPeriods}{colorText.END}): "
                 ) or self.superConfluenceEMAPeriods
                 self.superConfluenceMaxReviewDays = input(
-                    f"[+] Max number of review days for super-confluence-checks. (number)(Optimal = 3, Current: {colorText.FAIL}{self.superConfluenceMaxReviewDays}{colorText.END}): "
+                    f"[+] Max number of review days for super-confluence-checks. (number)({colorText.GREEN}Optimal = 3{colorText.END}, Current: {colorText.FAIL}{self.superConfluenceMaxReviewDays}{colorText.END}): "
                 ) or self.superConfluenceMaxReviewDays
                 self.superConfluenceEnforce200SMA = str(
                     input(
@@ -415,7 +439,9 @@ class tools(SingletonMixin, metaclass=SingletonType):
                     endDuration = str(self.duration)[-1].lower()
                     endDuration = "d" if endDuration not in ["m","h","d","k","o"] else ""
                 parser.set("config", "duration", str(self.duration + endDuration))
+                parser.set("config", "enableAdditionalVCPFilters", str(self.enableAdditionalVCPFilters))
                 parser.set("config", "enablePortfolioCalculations", str(self.enablePortfolioCalculations))
+                parser.set("config", "enableUsageAnalytics", str(self.enableUsageAnalytics))
                 parser.set("config", "generalTimeout", str(self.generalTimeout))
                 parser.set("config", "logsEnabled", str(self.logsEnabledPrompt))
                 parser.set("config", "longTimeout", str(self.longTimeout))
@@ -450,7 +476,9 @@ class tools(SingletonMixin, metaclass=SingletonType):
                 parser.set("config", "telegramImageQualityPercentage", str(self.telegramImageQualityPercentage))
                 parser.set("config", "telegramSampleNumberRows", str(self.telegramSampleNumberRows))
                 parser.set("config", "useEMA", str(self.useEmaPrompt))
+                parser.set("config", "vcpLegsToCheckForConsolidation", str(self.vcpLegsToCheckForConsolidation))
                 parser.set("config", "vcpVolumeContractionRatio", str(self.vcpVolumeContractionRatio))
+                parser.set("config", "vcpRangePercentageFromTop", str(self.vcpRangePercentageFromTop))
 
                 parser.set("filters", "consolidationPercentage", str(self.consolidationPercentage))
                 parser.set("filters", "maxPrice", str(self.maxLTP))
@@ -570,6 +598,16 @@ class tools(SingletonMixin, metaclass=SingletonType):
                 self.atrTrailingStopSensitivity = float(parser.get("config", "atrtrailingstopsensitivity"))
                 self.generalTimeout = float(parser.get("config", "generalTimeout"))
                 self.defaultIndex = int(parser.get("config", "defaultIndex"))
+                self.enableAdditionalVCPFilters = (
+                    False
+                    if "y" not in str(parser.get("config", "enableAdditionalVCPFilters")).lower()
+                    else True
+                )
+                self.enableUsageAnalytics = (
+                    False
+                    if "y" not in str(parser.get("config", "enableUsageAnalytics")).lower()
+                    else True
+                )
                 self.longTimeout = float(parser.get("config", "longTimeout"))
                 self.maxdisplayresults = int(parser.get("config", "maxdisplayresults"))
                 self.maxNetworkRetryCount = int(parser.get("config", "maxNetworkRetryCount"))
@@ -585,7 +623,9 @@ class tools(SingletonMixin, metaclass=SingletonType):
                 self.marketClose = str(parser.get("config", "marketClose"))
                 self.maxDashboardWidgetsPerRow = int(parser.get("config", "maxDashboardWidgetsPerRow"))
                 self.maxNumResultRowsInMonitor = int(parser.get("config", "maxNumResultRowsInMonitor"))
+                self.vcpLegsToCheckForConsolidation = int(parser.get("config", "vcpLegsToCheckForConsolidation"))
                 self.vcpVolumeContractionRatio = float(parser.get("config", "vcpVolumeContractionRatio"))
+                self.vcpRangePercentageFromTop = float(parser.get("config", "vcpRangePercentageFromTop"))
                 self.soundAlertForMonitorOptions = str(parser.get("config", "soundAlertForMonitorOptions"))
                 self.superConfluenceEMAPeriods = str(parser.get("config", "superConfluenceEMAPeriods"))
                 self.baseIndex = str(parser.get("config", "baseIndex"))
