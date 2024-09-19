@@ -47,6 +47,10 @@ on:
         description: 'Enable Logging in the target app or pass any args to bot'
         required: false
         default: '-a Y -l'
+      DOWNLOAD_URL:
+        description: 'Download URL override for the bot. Provide full URL.'
+        required: false
+        default: ''
   push:
     branches: [ main ]
     # workflow_run:
@@ -154,7 +158,7 @@ jobs:
       shell: cmd
       if: startsWith(runner.os, 'Windows')
       env:
-        exe_path: ${{ steps.releaseurlsetter.outputs.DOWNLOAD_URL }}
+        exe_path: ${{ inputs.DOWNLOAD_URL || steps.releaseurlsetter.outputs.DOWNLOAD_URL }}
       run: |
         curl -o pkscreenercli.exe -JL %exe_path%
 
@@ -162,7 +166,7 @@ jobs:
       shell: bash
       if: startsWith(runner.os, 'Linux')
       env:
-        exe_path: ${{ steps.releaseurlsetter.outputs.DOWNLOAD_URL }}
+        exe_path: ${{ inputs.DOWNLOAD_URL || steps.releaseurlsetter.outputs.DOWNLOAD_URL }}
       run: |
         curl -o /home/runner/work/PKScreener/PKScreener/pkscreenercli.bin -JL $exe_path
         chmod +x /home/runner/work/PKScreener/PKScreener/pkscreenercli.bin
