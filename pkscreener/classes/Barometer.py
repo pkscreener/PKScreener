@@ -43,7 +43,7 @@ async def takeScreenshot(page,saveFileName=None,text=""):
     clip_y = 245
     clip_width = 1010
     clip_height = 650
-    folderPath = Archiver.get_user_outputs_dir()
+    folderPath = Archiver.get_user_data_dir()
     indiaElement = await page.querySelector(selector='#India')
     await page.waitFor(selectorOrFunctionOrTimeout=QUERY_SELECTOR_TIMEOUT)
     indiaPolygon = await page.evaluate('(indiaElement) => indiaElement.children[0]', indiaElement)
@@ -120,7 +120,7 @@ def getGlobalMarketBarometerValuation():
     except Exception as e:
         default_logger().debug(e, exc_info=True)
         pass
-    folderPath = Archiver.get_user_outputs_dir()
+    folderPath = Archiver.get_user_data_dir()
     gmbPath = None
     try:
         gapHeight = 65

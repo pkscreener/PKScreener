@@ -80,7 +80,7 @@ class PKAnalyticsService():
     
     def tryCommitAnalytics(self, userDict={},username="Unidentified"):
         repo_clone_url = "https://github.com/pkjmesra/PKUserAnalytics.git"
-        local_repo = os.path.join(Archiver.get_user_outputs_dir(),"PKUserAnalytics")
+        local_repo = os.path.join(Archiver.get_user_data_dir(),"PKUserAnalytics")
         try:
             test_branch = "main"
             repo = git.Repo.clone_from(repo_clone_url, local_repo)

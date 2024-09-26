@@ -34,6 +34,8 @@ from PKDevTools.classes.log import default_logger
 from PKDevTools.classes.Singleton import SingletonType, SingletonMixin
 from PKDevTools.classes.OutputControls import OutputControls
 from PKDevTools.classes.MarketHours import MarketHours
+import re
+
 parser = configparser.ConfigParser(strict=False)
 
 # Default attributes for Downloading Cache from Git repo
@@ -46,7 +48,7 @@ default_timeout = 2
 class tools(SingletonMixin, metaclass=SingletonType):
     def __init__(self):
         super(tools, self).__init__()
-        self.alwaysHiddenDisplayColumns = ",52Wk-L,RSI,22-Pd,Consol.,Pattern,CCI,Trend(22Prds)"
+        self.alwaysHiddenDisplayColumns = ",52Wk-L,RSI,22-Pd,Consol.,Pattern,CCI"
         self.consolidationPercentage = 10
         self.telegramImageFormat = "JPEG"
         self.telegramImageCompressionRatio = 0.6
@@ -57,6 +59,7 @@ class tools(SingletonMixin, metaclass=SingletonType):
         self.period = "1y"
         self.duration = "1d"
         self.shuffleEnabled = True
+        self.alwaysExportToExcel = False
         self.cacheEnabled = True
         self.stageTwo = True
         self.useEMA = False
@@ -87,6 +90,7 @@ class tools(SingletonMixin, metaclass=SingletonType):
         self.vcpRangePercentageFromTop = 20
         self.vcpLegsToCheckForConsolidation = 3
         self.enableAdditionalVCPFilters = True
+        self.enableAdditionalVCPEMAFilters = False
         self.enableUsageAnalytics = False
         # This determines how many days apart the backtest calculations are run.
         # For example, for weekly backtest calculations, set this to 5 (5 days = 1 week)
@@ -111,6 +115,42 @@ class tools(SingletonMixin, metaclass=SingletonType):
         MarketHours().setMarketCloseHourMinute(self.marketClose)
 
     @property
+    def candleDurationInt(self):
+        temp = re.compile("([0-9]+)([a-zA-Z]+)")
+        try:
+            res = temp.match(self.duration).groups()
+        except:
+            return self.duration
+        return int(res[0])
+    
+    @property
+    def candleDurationFrequency(self):
+        temp = re.compile("([0-9]+)([a-zA-Z]+)")
+        try:
+            res = temp.match(self.duration).groups()
+        except:
+            return self.duration
+        return res[1]
+
+    @property
+    def candlePeriodInt(self):
+        temp = re.compile("([0-9]+)([a-zA-Z]+)")
+        try:
+            res = temp.match(self.period).groups()
+        except:
+            return self.period
+        return int(res[0])
+    
+    @property
+    def candlePeriodFrequency(self):
+        temp = re.compile("([0-9]+)([a-zA-Z]+)")
+        try:
+            res = temp.match(self.period).groups()
+        except:
+            return self.period
+        return res[1]
+
+    @property
     def periodsRange(self):
         self._periodsRange = []
         if self.maxBacktestWindow > self.periods[-1]:
@@ -131,13 +171,13 @@ class tools(SingletonMixin, metaclass=SingletonType):
     def default_logger(self, logger):
         self.logger = logger
 
-    def deleteFileWithPattern(self, pattern=None, excludeFile=None, rootDir=None, recursive=False):
+    def deleteFileWithPattern(self, pattern=None, excludeFile=None, rootDir=None, recursive=True):
         if pattern is None:
             pattern = (
                 f"{'intraday_' if self.isIntradayConfig() else ''}stock_data_*.pkl"
             )
         if rootDir is None:
-            rootDir = [Archiver.get_user_outputs_dir(),Archiver.get_user_outputs_dir().replace("results","actions-data-download")]
+            rootDir = [Archiver.get_user_outputs_dir(),Archiver.get_user_data_dir(), Archiver.get_user_outputs_dir().replace("results","actions-data-download")]
         else:
             rootDir = [rootDir]
         for dir in rootDir:
@@ -168,6 +208,7 @@ class tools(SingletonMixin, metaclass=SingletonType):
                 pass
             parser.add_section("config")
             parser.add_section("filters")
+            parser.set("config", "alwaysExportToExcel", "y" if self.alwaysExportToExcel else "n")
             parser.set("config", "alwaysHiddenDisplayColumns", str(self.alwaysHiddenDisplayColumns))
             parser.set("config", "anchoredAVWAPPercentage", str(self.anchoredAVWAPPercentage))
             parser.set("config", "atrtrailingstopemaperiod", str(self.atrTrailingStopEMAPeriod))
@@ -182,6 +223,7 @@ class tools(SingletonMixin, metaclass=SingletonType):
             parser.set("config", "defaultIndex", str(self.defaultIndex))
             parser.set("config", "defaultMonitorOptions", str(self.defaultMonitorOptions))
             parser.set("config", "duration", self.duration)
+            parser.set("config", "enableAdditionalVCPEMAFilters", "y" if (self.enableAdditionalVCPEMAFilters) else "n")
             parser.set("config", "enableAdditionalVCPFilters", "y" if (self.enableAdditionalVCPFilters) else "n")
             parser.set("config", "enablePortfolioCalculations", "y" if self.enablePortfolioCalculations else "n")
             parser.set("config", "enableUsageAnalytics", "y" if self.enableUsageAnalytics else "n")
@@ -231,9 +273,8 @@ class tools(SingletonMixin, metaclass=SingletonType):
                 fp.close()
                 if showFileCreatedText:
                     OutputControls().printOutput(
-                        colorText.BOLD
-                        + colorText.GREEN
-                        + "[+] Default configuration generated as user configuration is not found!"
+                        colorText.GREEN
+                        + "  [+] Default configuration generated as user configuration is not found!"
                         + colorText.END
                     )
                     input("Press <Enter> to continue...")
@@ -241,9 +282,8 @@ class tools(SingletonMixin, metaclass=SingletonType):
             except IOError as e:  # pragma: no cover
                 self.default_logger.debug(e, exc_info=True)
                 OutputControls().printOutput(
-                    colorText.BOLD
-                    + colorText.FAIL
-                    + "[+] Failed to save user config. Exiting.."
+                    colorText.FAIL
+                    + "  [+] Failed to save user config. Exiting.."
                     + colorText.END
                 )
                 input("Press <Enter> to continue...")
@@ -254,165 +294,175 @@ class tools(SingletonMixin, metaclass=SingletonType):
             parser.add_section("filters")
             OutputControls().printOutput("")
             OutputControls().printOutput(
-                colorText.BOLD
-                + colorText.GREEN
-                + "[+] PKScreener User Configuration:"
+                colorText.GREEN
+                + "  [+] PKScreener User Configuration:"
                 + colorText.END
             )
             try:
                 self.period = input(
-                    f"[+] Valid periods: 1d,5d,1mo,3mo,6mo,1y,2y,5y,10y,ytd,max\n[+] Enter number of days for which stock data to be downloaded (Days).({colorText.GREEN}Optimal = 1y{colorText.END}, Current: {colorText.FAIL}{self.period}{colorText.END}): "
+                    f"  [+] Valid periods: 1d,5d,1mo,3mo,6mo,1y,2y,5y,10y,ytd,max\n  [+] Enter number of days for which stock data to be downloaded (Days).({colorText.GREEN}Optimal = 1y{colorText.END}, Current: {colorText.FAIL}{self.period}{colorText.END}): "
                 ) or self.period
                 self.daysToLookback = input(
-                    f"[+] Number of recent trading periods (TimeFrame) to screen for Breakout/Consolidation (Days)({colorText.GREEN}Optimal = 22{colorText.END}, Current: {colorText.FAIL}{self.daysToLookback}{colorText.END}): "
+                    f"  [+] Number of recent trading periods (TimeFrame) to screen for Breakout/Consolidation (Days)({colorText.GREEN}Optimal = 22{colorText.END}, Current: {colorText.FAIL}{self.daysToLookback}{colorText.END}): "
                 ) or self.daysToLookback
                 self.duration = input(
-                    f"[+] Valid intervals: 1m,2m,5m,15m,30m,60m,90m,1h,1d,5d,1wk,1mo,3mo\n[+] Enter Duration of each candle (Days)({colorText.GREEN}Optimal = 1{colorText.END}, Current: {colorText.FAIL}{self.duration}{colorText.END}): "
+                    f"  [+] Valid intervals: 1m,2m,5m,15m,30m,60m,90m,1h,1d,5d,1wk,1mo,3mo\n  [+] Enter Duration of each candle (Days)({colorText.GREEN}Optimal = 1{colorText.END}, Current: {colorText.FAIL}{self.duration}{colorText.END}): "
                 ) or self.duration
                 self.minLTP = input(
-                    f"[+] Minimum Price of Stock to Buy (in RS)({colorText.GREEN}Optimal = 20{colorText.END}, Current: {colorText.FAIL}{self.minLTP}{colorText.END}): "
+                    f"  [+] Minimum Price of Stock to Buy (in RS)({colorText.GREEN}Optimal = 20{colorText.END}, Current: {colorText.FAIL}{self.minLTP}{colorText.END}): "
                 ) or self.minLTP
                 self.maxLTP = input(
-                    f"[+] Maximum Price of Stock to Buy (in RS)({colorText.GREEN}Optimal = 50000{colorText.END}, Current: {colorText.FAIL}{self.maxLTP}{colorText.END}): "
+                    f"  [+] Maximum Price of Stock to Buy (in RS)({colorText.GREEN}Optimal = 50000{colorText.END}, Current: {colorText.FAIL}{self.maxLTP}{colorText.END}): "
                 ) or self.maxLTP
                 self.volumeRatio = input(
-                    f"[+] How many times the volume should be more than average for the breakout? (Number)({colorText.GREEN}Optimal = 2.5{colorText.END}, Current: {colorText.FAIL}{self.volumeRatio}{colorText.END}): "
+                    f"  [+] How many times the volume should be more than average for the breakout? (Number)({colorText.GREEN}Optimal = 2.5{colorText.END}, Current: {colorText.FAIL}{self.volumeRatio}{colorText.END}): "
                 ) or self.volumeRatio
                 self.consolidationPercentage = input(
-                    f"[+] How much % the price should be in range, to consider it as consolidation? (Number)({colorText.GREEN}Optimal = 10{colorText.END}, Current: {colorText.FAIL}{self.consolidationPercentage}{colorText.END}): "
+                    f"  [+] How much % the price should be in range, to consider it as consolidation? (Number)({colorText.GREEN}Optimal = 10{colorText.END}, Current: {colorText.FAIL}{self.consolidationPercentage}{colorText.END}): "
                 ) or self.consolidationPercentage
                 self.shuffle = str(
                     input(
-                        f"[+] Shuffle stocks rather than screening alphabetically? (Y/N, Current: {colorText.FAIL}{'y' if self.shuffleEnabled else 'n'}{colorText.END}): "
+                        f"  [+] Shuffle stocks rather than screening alphabetically? (Y/N, Current: {colorText.FAIL}{'y' if self.shuffleEnabled else 'n'}{colorText.END}): "
                     ) or ('y' if self.shuffleEnabled else 'n')
                 ).lower()
                 self.cacheStockData = str(
                     input(
-                        f"[+] Enable High-Performance and Data-Saver mode? (This uses little bit more CPU but performs High Performance Screening) (Y/N, Current: {colorText.FAIL}{('y' if self.cacheEnabled else 'n')}{colorText.END}): "
+                        f"  [+] Enable always exporting to Excel? (Y/N, Current: {colorText.FAIL}{('y' if self.alwaysExportToExcel else 'n')}{colorText.END}): "
+                    ) or ('y' if self.alwaysExportToExcel else 'n')
+                ).lower()
+                self.cacheStockData = str(
+                    input(
+                        f"  [+] Enable High-Performance and Data-Saver mode? (This uses little bit more CPU but performs High Performance Screening) (Y/N, Current: {colorText.FAIL}{('y' if self.cacheEnabled else 'n')}{colorText.END}): "
                     ) or ('y' if self.cacheEnabled else 'n')
                 ).lower()
                 self.stageTwoPrompt = str(
                     input(
-                        f"[+] Screen only for Stage-2 stocks?\n     (What are the stages? => https://www.investopedia.com/articles/trading/08/stock-cycle-trend-price.asp)\n     (Y/N, Current: {colorText.FAIL}{'y' if self.stageTwo else 'n'}{colorText.END}): "
+                        f"  [+] Screen only for Stage-2 stocks?\n     (What are the stages? => https://www.investopedia.com/articles/trading/08/stock-cycle-trend-price.asp)\n     (Y/N, Current: {colorText.FAIL}{'y' if self.stageTwo else 'n'}{colorText.END}): "
                     ) or ('y' if self.stageTwo else 'n')
                 ).lower()
                 self.useEmaPrompt = str(
                     input(
-                        f"[+] Use EMA instead of SMA? (EMA is good for Short-term & SMA for Mid/Long-term trades)[Y/N, Current: {colorText.FAIL}{'y' if self.useEMA else 'n'}{colorText.END}]: "
+                        f"  [+] Use EMA instead of SMA? (EMA is good for Short-term & SMA for Mid/Long-term trades)[Y/N, Current: {colorText.FAIL}{'y' if self.useEMA else 'n'}{colorText.END}]: "
                     ) or ('y' if self.useEMA else 'n')
                 ).lower()
                 self.showunknowntrendsPrompt = str(
                     input(
-                        f"[+] Show even those results where trends are not known[Y/N] ({colorText.GREEN}Recommended Y{colorText.END}, Current: {colorText.FAIL}{'y' if self.showunknowntrends else 'n'}{colorText.END}): "
+                        f"  [+] Show even those results where trends are not known[Y/N] ({colorText.GREEN}Recommended Y{colorText.END}, Current: {colorText.FAIL}{'y' if self.showunknowntrends else 'n'}{colorText.END}): "
                     ) or ('y' if self.showunknowntrends else 'n')
                 ).lower()
                 self.logsEnabledPrompt = str(
                     input(
-                        f"[+] Enable Viewing logs? You can enable if you are having problems.[Y/N, Current: {colorText.FAIL}{'y' if self.logsEnabled else 'n'}{colorText.END}]: "
+                        f"  [+] Enable Viewing logs? You can enable if you are having problems.[Y/N, Current: {colorText.FAIL}{'y' if self.logsEnabled else 'n'}{colorText.END}]: "
                     ) or ('y' if self.logsEnabled else 'n')
                 ).lower()
                 self.enablePortfolioCalculations = str(
                     input(
-                        f"[+] Enable calculating portfolio values? [Y/N, Current: {colorText.FAIL}{'y' if self.enablePortfolioCalculations else 'n'}{colorText.END}]: "
+                        f"  [+] Enable calculating portfolio values? [Y/N, Current: {colorText.FAIL}{'y' if self.enablePortfolioCalculations else 'n'}{colorText.END}]: "
                     ) or ('y' if self.enablePortfolioCalculations else 'n')
                 ).lower()
                 self.showPastStrategyData = str(
                     input(
-                        f"[+] Enable showing past strategy data? [Y/N, Current: {colorText.FAIL}{'y' if self.showPastStrategyData else 'n'}{colorText.END}]: "
+                        f"  [+] Enable showing past strategy data? [Y/N, Current: {colorText.FAIL}{'y' if self.showPastStrategyData else 'n'}{colorText.END}]: "
                     ) or ('y' if self.showPastStrategyData else 'n')
                 ).lower()
                 self.showPinnedMenuEvenForNoResult = str(
                     input(
-                        f"[+] Enable showing pinned menu even when there is no result? [Y/N, Current: {colorText.FAIL}{'y' if self.showPinnedMenuEvenForNoResult else 'n'}{colorText.END}]: "
+                        f"  [+] Enable showing pinned menu even when there is no result? [Y/N, Current: {colorText.FAIL}{'y' if self.showPinnedMenuEvenForNoResult else 'n'}{colorText.END}]: "
                     ) or ('y' if self.showPinnedMenuEvenForNoResult else 'n')
                 ).lower()
                 self.calculatersiintraday = str(
                     input(
-                        f"[+] Calculate intraday RSI during trading hours? [Y/N, Current: {colorText.FAIL}{'y' if self.calculatersiintraday else 'n'}{colorText.END}]: "
+                        f"  [+] Calculate intraday RSI during trading hours? [Y/N, Current: {colorText.FAIL}{'y' if self.calculatersiintraday else 'n'}{colorText.END}]: "
                     ) or ('y' if self.calculatersiintraday else 'n')
                 ).lower()
                 self.generalTimeout = input(
-                    f"[+] General network timeout (in seconds)({colorText.GREEN}Optimal = 2 for good networks{colorText.END}, Current: {colorText.FAIL}{self.generalTimeout}{colorText.END}): "
+                    f"  [+] General network timeout (in seconds)({colorText.GREEN}Optimal = 2 for good networks{colorText.END}, Current: {colorText.FAIL}{self.generalTimeout}{colorText.END}): "
                 ) or self.generalTimeout
                 self.longTimeout = input(
-                    f"[+] Long network timeout for heavier downloads(in seconds)({colorText.GREEN}Optimal = 4 for good networks{colorText.END}, Current: {colorText.FAIL}{self.longTimeout}{colorText.END}): "
+                    f"  [+] Long network timeout for heavier downloads(in seconds)({colorText.GREEN}Optimal = 4 for good networks{colorText.END}, Current: {colorText.FAIL}{self.longTimeout}{colorText.END}): "
                 ) or self.longTimeout
                 self.marketOpen = input(
-                    f"[+] Market Open time({colorText.GREEN}Optimal = 09:15{colorText.END}, Current: {colorText.FAIL}{self.marketOpen}{colorText.END}): "
+                    f"  [+] Market Open time({colorText.GREEN}Optimal = 09:15{colorText.END}, Current: {colorText.FAIL}{self.marketOpen}{colorText.END}): "
                 ) or self.marketOpen
                 self.marketClose = input(
-                    f"[+] Market Close time({colorText.GREEN}Optimal = 15:30{colorText.END}, Current: {colorText.FAIL}{self.marketClose}{colorText.END}): "
+                    f"  [+] Market Close time({colorText.GREEN}Optimal = 15:30{colorText.END}, Current: {colorText.FAIL}{self.marketClose}{colorText.END}): "
                 ) or self.marketClose
                 self.maxdisplayresults = input(
-                    f"[+] Maximum number of display results(number)({colorText.GREEN}Optimal = 100{colorText.END}, Current: {colorText.FAIL}{self.maxdisplayresults}{colorText.END}): "
+                    f"  [+] Maximum number of display results(number)({colorText.GREEN}Optimal = 100{colorText.END}, Current: {colorText.FAIL}{self.maxdisplayresults}{colorText.END}): "
                 ) or self.maxdisplayresults
                 self.maxNetworkRetryCount = input(
-                    f"[+] Maximum number of retries in case of network timeout(in seconds)({colorText.GREEN}Optimal = 10 for slow networks{colorText.END}, Current: {colorText.FAIL}{self.maxNetworkRetryCount}{colorText.END}): "
+                    f"  [+] Maximum number of retries in case of network timeout(in seconds)({colorText.GREEN}Optimal = 10 for slow networks{colorText.END}, Current: {colorText.FAIL}{self.maxNetworkRetryCount}{colorText.END}): "
                 ) or self.maxNetworkRetryCount
                 self.defaultIndex = input(
-                    f"[+] Default Index({colorText.GREEN}NSE=12, NASDAQ=15{colorText.END}, Current: {colorText.FAIL}{self.defaultIndex}{colorText.END}): "
+                    f"  [+] Default Index({colorText.GREEN}NSE=12, NASDAQ=15{colorText.END}, Current: {colorText.FAIL}{self.defaultIndex}{colorText.END}): "
                 ) or self.defaultIndex
                 self.backtestPeriod = input(
-                    f"[+] Number of days in the past for backtesting(in days)({colorText.GREEN}Optimal = 30{colorText.END}, Current: {colorText.FAIL}{self.backtestPeriod}{colorText.END}): "
+                    f"  [+] Number of days in the past for backtesting(in days)({colorText.GREEN}Optimal = 30{colorText.END}, Current: {colorText.FAIL}{self.backtestPeriod}{colorText.END}): "
                 ) or self.backtestPeriod
                 self.maxBacktestWindow = input(
-                    f"[+] Number of days to show the results for backtesting(in days)({colorText.GREEN}Optimal = 1 to 30{colorText.END}, Current: {colorText.FAIL}{self.maxBacktestWindow}{colorText.END}): "
+                    f"  [+] Number of days to show the results for backtesting(in days)({colorText.GREEN}Optimal = 1 to 30{colorText.END}, Current: {colorText.FAIL}{self.maxBacktestWindow}{colorText.END}): "
                 ) or self.maxBacktestWindow
                 self.morninganalysiscandlenumber = input(
-                    f"[+] Candle number since the market open time({colorText.GREEN}Optimal = 15 to 60{colorText.END}, Current: {colorText.FAIL}{self.morninganalysiscandlenumber}{colorText.END}): "
+                    f"  [+] Candle number since the market open time({colorText.GREEN}Optimal = 15 to 60{colorText.END}, Current: {colorText.FAIL}{self.morninganalysiscandlenumber}{colorText.END}): "
                 ) or self.morninganalysiscandlenumber
                 self.morninganalysiscandleduration = input(
-                    f"[+] Valid intervals: 1m,2m,5m,15m,30m,60m,90m,1h,1d,5d,1wk,1mo,3mo\n[+] Enter Duration of each candle (minutes)({colorText.GREEN}Optimal = 1 to 5{colorText.END}, Current: {colorText.FAIL}{self.morninganalysiscandleduration}{colorText.END}): "
+                    f"  [+] Valid intervals: 1m,2m,5m,15m,30m,60m,90m,1h,1d,5d,1wk,1mo,3mo\n  [+] Enter Duration of each candle (minutes)({colorText.GREEN}Optimal = 1 to 5{colorText.END}, Current: {colorText.FAIL}{self.morninganalysiscandleduration}{colorText.END}): "
                 ) or self.morninganalysiscandleduration
                 self.minVolume = input(
-                    f"[+] Minimum per day traded volume of any stock (number)({colorText.GREEN}Optimal = 100000{colorText.END}, Current: {colorText.FAIL}{self.minVolume}{colorText.END}): "
+                    f"  [+] Minimum per day traded volume of any stock (number)({colorText.GREEN}Optimal = 100000{colorText.END}, Current: {colorText.FAIL}{self.minVolume}{colorText.END}): "
                 ) or self.minVolume
                 self.pinnedMonitorSleepIntervalSeconds = input(
-                    f"[+] Minimum number of seconds to wait before refreshing the data again when in pinned monitor mode (seconds)({colorText.GREEN}Optimal = 30{colorText.END}, Current: {colorText.FAIL}{self.pinnedMonitorSleepIntervalSeconds}{colorText.END}): "
+                    f"  [+] Minimum number of seconds to wait before refreshing the data again when in pinned monitor mode (seconds)({colorText.GREEN}Optimal = 30{colorText.END}, Current: {colorText.FAIL}{self.pinnedMonitorSleepIntervalSeconds}{colorText.END}): "
                 ) or self.pinnedMonitorSleepIntervalSeconds
                 self.backtestPeriodFactor = input(
-                    f"[+] Factor for backtest periods. If you choose 5, 1-Pd would mean 5-Pd returns. (number)({colorText.GREEN}Optimal = 1{colorText.END}, Current: {colorText.FAIL}{self.backtestPeriodFactor}{colorText.END}): "
+                    f"  [+] Factor for backtest periods. If you choose 5, 1-Pd would mean 5-Pd returns. (number)({colorText.GREEN}Optimal = 1{colorText.END}, Current: {colorText.FAIL}{self.backtestPeriodFactor}{colorText.END}): "
                 ) or self.backtestPeriodFactor
                 self.minimumChangePercentage = input(
-                    f"[+] Minimun change in stock price (in percentage). (number)({colorText.GREEN}Optimal = 0{colorText.END}, Current: {colorText.FAIL}{self.minimumChangePercentage}{colorText.END}): "
+                    f"  [+] Minimun change in stock price (in percentage). (number)({colorText.GREEN}Optimal = 0{colorText.END}, Current: {colorText.FAIL}{self.minimumChangePercentage}{colorText.END}): "
                 ) or self.minimumChangePercentage
                 self.atrTrailingStopPeriod = input(
-                    f"[+] ATR Trailing Stop Periods. (number)({colorText.GREEN}Optimal = 10{colorText.END}, Current: {colorText.FAIL}{self.atrTrailingStopPeriod}{colorText.END}): "
+                    f"  [+] ATR Trailing Stop Periods. (number)({colorText.GREEN}Optimal = 10{colorText.END}, Current: {colorText.FAIL}{self.atrTrailingStopPeriod}{colorText.END}): "
                 ) or self.atrTrailingStopPeriod
                 self.atrTrailingStopSensitivity = input(
-                    f"[+] ATR Trailing Stop Sensitivity. (number)({colorText.GREEN}Optimal = 1{colorText.END}, Current: {colorText.FAIL}{self.atrTrailingStopSensitivity}{colorText.END}): "
+                    f"  [+] ATR Trailing Stop Sensitivity. (number)({colorText.GREEN}Optimal = 1{colorText.END}, Current: {colorText.FAIL}{self.atrTrailingStopSensitivity}{colorText.END}): "
                 ) or self.atrTrailingStopSensitivity
                 self.atrTrailingStopEMAPeriod = input(
-                    f"[+] ATR Trailing Stop EMA Period. (number)({colorText.GREEN}Optimal = 1 to 200{colorText.END}, Current: {colorText.FAIL}{self.atrTrailingStopEMAPeriod}{colorText.END}): "
+                    f"  [+] ATR Trailing Stop EMA Period. (number)({colorText.GREEN}Optimal = 1 to 200{colorText.END}, Current: {colorText.FAIL}{self.atrTrailingStopEMAPeriod}{colorText.END}): "
                 ) or self.atrTrailingStopEMAPeriod
                 self.vcpLegsToCheckForConsolidation = input(
-                    f"[+] Number of consolidation legs to check for VCP. (number)({colorText.GREEN}Optimal = 2{colorText.END}, Current: {colorText.FAIL}{self.vcpLegsToCheckForConsolidation}{colorText.END}): "
+                    f"  [+] Number of consolidation legs to check for VCP. (number)({colorText.GREEN}Optimal = 2{colorText.END},[Recommended: 3], Current: {colorText.FAIL}{self.vcpLegsToCheckForConsolidation}{colorText.END}): "
                 ) or self.vcpLegsToCheckForConsolidation
                 self.vcpRangePercentageFromTop = input(
-                    f"[+] Range percentage from the highest high(top) for VCP. (number)({colorText.GREEN}Optimal = 20 to 60{colorText.END}, Current: {colorText.FAIL}{self.vcpRangePercentageFromTop}{colorText.END}): "
+                    f"  [+] Range percentage from the highest high(top) for VCP:[Recommended: 20] (number)({colorText.GREEN}Optimal = 20 to 60{colorText.END}, Current: {colorText.FAIL}{self.vcpRangePercentageFromTop}{colorText.END}): "
                 ) or self.vcpRangePercentageFromTop
                 self.vcpVolumeContractionRatio = input(
-                    f"[+] Ratio of volume of recent largest to pullback candles for VCP. (number)({colorText.GREEN}Optimal = 0.4{colorText.END}, Current: {colorText.FAIL}{self.vcpVolumeContractionRatio}{colorText.END}): "
+                    f"  [+] Ratio of volume of recent largest to pullback candles for VCP. (number)({colorText.GREEN}Optimal = 0.4{colorText.END}, Current: {colorText.FAIL}{self.vcpVolumeContractionRatio}{colorText.END}): "
                 ) or self.vcpVolumeContractionRatio
                 self.enableAdditionalVCPFilters = str(
                     input(
-                        f"[+] Enable additional VCP filters like range and consolidation? [Y/N, Current: {colorText.FAIL}{'y' if self.enableAdditionalVCPFilters else 'n'}{colorText.END}]: "
+                        f"  [+] Enable additional VCP filters like range and consolidation? [Y/N, Current: {colorText.FAIL}{'y' if self.enableAdditionalVCPFilters else 'n'}{colorText.END}]: "
                     ) or ('y' if self.enableAdditionalVCPFilters else 'n')
                 ).lower()
+                self.enableAdditionalVCPEMAFilters = str(
+                    input(
+                        f"  [+] Enable additional 20/50-EMA filters? [Y/N, Current: {colorText.FAIL}{'y' if self.enableAdditionalVCPEMAFilters else 'n'}{colorText.END}]: "
+                    ) or ('y' if self.enableAdditionalVCPEMAFilters else 'n')
+                ).lower()
+                
                 self.enableUsageAnalytics = str(
                     input(
-                        f"[+] Enable usage analytics to be captured? [Y/N, Current: {colorText.FAIL}{'y' if self.enableUsageAnalytics else 'n'}{colorText.END}]: "
+                        f"  [+] Enable usage analytics to be captured? [Y/N, Current: {colorText.FAIL}{'y' if self.enableUsageAnalytics else 'n'}{colorText.END}]: "
                     ) or ('y' if self.enableUsageAnalytics else 'n')
                 ).lower()
                 self.superConfluenceEMAPeriods = input(
-                    f"[+] Comma separated EMA periods for super-confluence-checks. (numbers)({colorText.GREEN}Optimal = 8,21,55{colorText.END}, Current: {colorText.FAIL}{self.superConfluenceEMAPeriods}{colorText.END}): "
+                    f"  [+] Comma separated EMA periods for super-confluence-checks. (numbers)({colorText.GREEN}Optimal = 8,21,55{colorText.END}, Current: {colorText.FAIL}{self.superConfluenceEMAPeriods}{colorText.END}): "
                 ) or self.superConfluenceEMAPeriods
                 self.superConfluenceMaxReviewDays = input(
-                    f"[+] Max number of review days for super-confluence-checks. (number)({colorText.GREEN}Optimal = 3{colorText.END}, Current: {colorText.FAIL}{self.superConfluenceMaxReviewDays}{colorText.END}): "
+                    f"  [+] Max number of review days for super-confluence-checks. (number)({colorText.GREEN}Optimal = 3{colorText.END}, Current: {colorText.FAIL}{self.superConfluenceMaxReviewDays}{colorText.END}): "
                 ) or self.superConfluenceMaxReviewDays
                 self.superConfluenceEnforce200SMA = str(
                     input(
-                        f"[+] Enable enforcing SMA-200 check for super-confluence? When enabled, at least one of 8/21/55-EMA should be lower than SMA-200 [Y/N, Current: {colorText.FAIL}{'y' if self.superConfluenceEnforce200SMA else 'n'}{colorText.END}]: "
+                        f"  [+] Enable enforcing SMA-200 check for super-confluence? When enabled, at least one of 8/21/55-EMA should be lower than SMA-200 [Y/N, Current: {colorText.FAIL}{'y' if self.superConfluenceEnforce200SMA else 'n'}{colorText.END}]: "
                     ) or ('y' if self.superConfluenceEnforce200SMA else 'n')
                 ).lower()
             except Exception as e:
@@ -439,6 +489,7 @@ class tools(SingletonMixin, metaclass=SingletonType):
                     endDuration = str(self.duration)[-1].lower()
                     endDuration = "d" if endDuration not in ["m","h","d","k","o"] else ""
                 parser.set("config", "duration", str(self.duration + endDuration))
+                parser.set("config", "enableAdditionalVCPEMAFilters", str(self.enableAdditionalVCPEMAFilters))
                 parser.set("config", "enableAdditionalVCPFilters", str(self.enableAdditionalVCPFilters))
                 parser.set("config", "enablePortfolioCalculations", str(self.enablePortfolioCalculations))
                 parser.set("config", "enableUsageAnalytics", str(self.enableUsageAnalytics))
@@ -497,9 +548,8 @@ class tools(SingletonMixin, metaclass=SingletonType):
             # delete stock data due to config change
             self.deleteFileWithPattern()
             OutputControls().printOutput(
-                colorText.BOLD
-                + colorText.FAIL
-                + "[+] Cached Stock Data Deleted."
+                colorText.FAIL
+                + "  [+] Cached Stock Data Deleted."
                 + colorText.END
             )
 
@@ -509,9 +559,8 @@ class tools(SingletonMixin, metaclass=SingletonType):
                 fp.close()
                 self.getConfig(parser=parser)
                 OutputControls().printOutput(
-                    colorText.BOLD
-                    + colorText.GREEN
-                    + "[+] User configuration saved."
+                    colorText.GREEN
+                    + "  [+] User configuration saved."
                     + colorText.END
                 )
                 input("Press <Enter> to continue...")
@@ -519,9 +568,8 @@ class tools(SingletonMixin, metaclass=SingletonType):
             except IOError as e:  # pragma: no cover
                 self.default_logger.debug(e, exc_info=True)
                 OutputControls().printOutput(
-                    colorText.BOLD
-                    + colorText.FAIL
-                    + "[+] Failed to save user config. Exiting.."
+                    colorText.FAIL
+                    + "  [+] Failed to save user config. Exiting.."
                     + colorText.END
                 )
                 input("Press <Enter> to continue...")
@@ -545,6 +593,11 @@ class tools(SingletonMixin, metaclass=SingletonType):
                 self.shuffleEnabled = (
                     True
                     if "n" not in str(parser.get("config", "shuffle")).lower()
+                    else False
+                )
+                self.alwaysExportToExcel = (
+                    True
+                    if "n" not in str(parser.get("config", "alwaysExportToExcel")).lower()
                     else False
                 )
                 self.cacheEnabled = (
@@ -598,6 +651,11 @@ class tools(SingletonMixin, metaclass=SingletonType):
                 self.atrTrailingStopSensitivity = float(parser.get("config", "atrtrailingstopsensitivity"))
                 self.generalTimeout = float(parser.get("config", "generalTimeout"))
                 self.defaultIndex = int(parser.get("config", "defaultIndex"))
+                self.enableAdditionalVCPEMAFilters = (
+                    False
+                    if "y" not in str(parser.get("config", "enableAdditionalVCPEMAFilters")).lower()
+                    else True
+                )
                 self.enableAdditionalVCPFilters = (
                     False
                     if "y" not in str(parser.get("config", "enableAdditionalVCPFilters")).lower()
@@ -644,15 +702,15 @@ class tools(SingletonMixin, metaclass=SingletonType):
                 MarketHours().setMarketCloseHourMinute(self.marketClose)
             except configparser.NoOptionError as e:# pragma: no cover
                 self.default_logger.debug(e, exc_info=True)
-                # input(colorText.BOLD + colorText.FAIL +
-                #       '[+] pkscreener requires user configuration again. Press enter to continue..' + colorText.END)
+                # input(colorText.FAIL +
+                #       '  [+] pkscreener requires user configuration again. Press enter to continue..' + colorText.END)
                 parser.remove_section("config")
                 parser.remove_section("filters")
                 self.setConfig(parser, default=True, showFileCreatedText=False)
             except Exception as e:  # pragma: no cover
                 self.default_logger.debug(e, exc_info=True)
-                # input(colorText.BOLD + colorText.FAIL +
-                #       '[+] pkscreener requires user configuration again. Press enter to continue..' + colorText.END)
+                # input(colorText.FAIL +
+                #       '  [+] pkscreener requires user configuration again. Press enter to continue..' + colorText.END)
                 parser.remove_section("config")
                 parser.remove_section("filters")
                 self.setConfig(parser, default=True, showFileCreatedText=False)
@@ -666,20 +724,23 @@ class tools(SingletonMixin, metaclass=SingletonType):
         self.getConfig(parser)
         if candleDuration[-1] in ["d"]:
             self.period = "1y"
+            self.duration = candleDuration
             self.cacheEnabled = True
-        if candleDuration[-1] in ["m", "h"] and not self.isIntradayConfig():
+        if candleDuration[-1] in ["m", "h"]:
             self.period = "1d"
+            self.duration = candleDuration
             self.cacheEnabled = True
         if self.isIntradayConfig():
             self.duration = candleDuration if candleDuration[-1] in ["m", "h"] else "1m"
             candleType = candleDuration.replace("m","").replace("h","")
+            lookback = self.daysToLookback
             if candleDuration[-1] in ["m"]:
                 lookback = int(60/int(candleType)) * 6 # 6 hours
             elif candleDuration[-1] in ["h"]:
                 lookback = (int(24/int(candleType)) + 1 )*2 #  at least 24 hours
             self.daysToLookback = lookback  # At least the past 6 to 24 hours
         else:
-            self.duration = candleDuration if candleDuration[-1] == "d" else "1d"
+            self.duration = candleDuration if candleDuration[-1] in ["d","h","m"] else "1d"
             self.daysToLookback = 22  # At least the past 1.5 month
         self.setConfig(parser, default=True, showFileCreatedText=False)
         if clearCache:
@@ -698,14 +759,14 @@ class tools(SingletonMixin, metaclass=SingletonType):
             pass
 
     def isIntradayConfig(self):
-        return self.period == "1d"
+        return self.duration.endswith("m") or self.duration.endswith("h")
 
     # Print config file
     def showConfigFile(self, defaultAnswer=None):
         try:
-            prompt = "[+] PKScreener User Configuration:"
+            prompt = "  [+] PKScreener User Configuration:"
             f = open("pkscreener.ini", "r")
-            OutputControls().printOutput(colorText.BOLD + colorText.GREEN + prompt + colorText.END)
+            OutputControls().printOutput(colorText.GREEN + prompt + colorText.END)
             configData = f.read()
             f.close()
             OutputControls().printOutput("\n" + configData)
@@ -715,15 +776,13 @@ class tools(SingletonMixin, metaclass=SingletonType):
         except Exception as e:  # pragma: no cover
             self.default_logger.debug(e, exc_info=True)
             OutputControls().printOutput(
-                colorText.BOLD
-                + colorText.FAIL
-                + "[+] User Configuration not found!"
+                colorText.FAIL
+                + "  [+] User Configuration not found!"
                 + colorText.END
             )
             OutputControls().printOutput(
-                colorText.BOLD
-                + colorText.WARN
-                + "[+] Configure the limits to continue."
+                colorText.WARN
+                + "  [+] Configure the limits to continue."
                 + colorText.END
             )
             self.setConfig(parser, default=True, showFileCreatedText=False)

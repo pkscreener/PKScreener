@@ -43,6 +43,7 @@ import time
 import joblib
 import numpy as np
 import pytz
+from halo import Halo
 from genericpath import isfile
 from PKDevTools.classes.log import default_logger
 from PKDevTools.classes.ColorText import colorText
@@ -113,7 +114,7 @@ def marketStatus():
 art = colorText.GREEN + f"{getArtText()}\nv{VERSION}" + colorText.END + f" | {marketStatus()}"
 
 lastScreened = os.path.join(
-    Archiver.get_user_outputs_dir(), "last_screened_results.pkl"
+    Archiver.get_user_data_dir(), "last_screened_results.pkl"
 )
 
 # Class for managing misc and utility methods
@@ -176,19 +177,18 @@ class tools:
         if respPepyTech is not None and respPepyTech.status_code == 200:
             totalDownloads = respPepyTech.text.split("</text>")[-2].split(">")[-1]
         downloadsInfo = f"[🔥] Total Downloads: {totalDownloads}"
-        OutputControls().printOutput(colorText.BOLD + colorText.WARN + devInfo + colorText.END)
-        OutputControls().printOutput(colorText.BOLD + colorText.WARN + versionInfo + colorText.END)
-        OutputControls().printOutput(colorText.BOLD + colorText.GREEN + downloadsInfo + colorText.END)
-        OutputControls().printOutput(colorText.BOLD + homePage + colorText.END)
-        OutputControls().printOutput(colorText.BOLD + colorText.FAIL + issuesInfo + colorText.END)
-        OutputControls().printOutput(colorText.BOLD + colorText.GREEN + communityInfo + colorText.END)
-        OutputControls().printOutput(colorText.BOLD + colorText.BLUE + latestInfo + colorText.END)
-        OutputControls().printOutput(colorText.BOLD + colorText.FAIL + donationInfo + colorText.END)
+        OutputControls().printOutput(colorText.WARN + devInfo + colorText.END)
+        OutputControls().printOutput(colorText.WARN + versionInfo + colorText.END)
+        OutputControls().printOutput(colorText.GREEN + downloadsInfo + colorText.END)
+        OutputControls().printOutput(homePage + colorText.END)
+        OutputControls().printOutput(colorText.FAIL + issuesInfo + colorText.END)
+        OutputControls().printOutput(colorText.GREEN + communityInfo + colorText.END)
+        OutputControls().printOutput(colorText.BLUE + latestInfo + colorText.END)
+        OutputControls().printOutput(colorText.FAIL + donationInfo + colorText.END)
         if defaultAnswer is None:
             input(
-                colorText.BOLD
-                + colorText.FAIL
-                + "[+] Press <Enter> to continue!"
+                colorText.FAIL
+                + "  [+] Press <Enter> to continue!"
                 + colorText.END
             )
         return f"\n{Changelog.changelog()}\n\n{devInfo}\n{versionInfo}\n\n{downloadsInfo}\n{homePage}\n{issuesInfo}\n{communityInfo}\n{latestInfo}\n{donationInfo}"
@@ -231,9 +231,8 @@ class tools:
         except IOError as e:  # pragma: no cover
             default_logger().debug(e, exc_info=True)
             OutputControls().printOutput(
-                colorText.BOLD
-                + colorText.FAIL
-                + f"{e}\n[+] Failed to save recently screened result table on disk! Skipping.."
+                colorText.FAIL
+                + f"{e}\n  [+] Failed to save recently screened result table on disk! Skipping.."
                 + colorText.END
             )
         except Exception as e:# pragma: no cover
@@ -246,9 +245,8 @@ class tools:
             df = pd.read_pickle(lastScreened)
             if df is not None and len(df) > 0:
                 OutputControls().printOutput(
-                    colorText.BOLD
-                    + colorText.GREEN
-                    + "\n[+] Showing recently screened results..\n"
+                    colorText.GREEN
+                    + "\n  [+] Showing recently screened results..\n"
                     + colorText.END
                 )
                 df.sort_values(by=["Volume"], ascending=False, inplace=True)
@@ -259,9 +257,8 @@ class tools:
                     ).encode("utf-8").decode(STD_ENCODING)
                 )
                 OutputControls().printOutput(
-                    colorText.BOLD
-                    + colorText.WARN
-                    + "[+] Note: Trend calculation is based on number of recent days to screen as per your configuration."
+                    colorText.WARN
+                    + "  [+] Note: Trend calculation is based on number of recent days to screen as per your configuration."
                     + colorText.END
                 )
             else:
@@ -269,16 +266,14 @@ class tools:
         except FileNotFoundError as e:  # pragma: no cover
             default_logger().debug(e, exc_info=True)
             OutputControls().printOutput(
-                colorText.BOLD
-                + colorText.FAIL
-                + "[+] Failed to load recently screened result table from disk! Skipping.."
+                colorText.FAIL
+                + "  [+] Failed to load recently screened result table from disk! Skipping.."
                 + colorText.END
             )
         if defaultAnswer is None:
             input(
-                colorText.BOLD
-                + colorText.GREEN
-                + "[+] Press <Enter> to continue.."
+                colorText.GREEN
+                + "  [+] Press <Enter> to continue.."
                 + colorText.END
             )
 
@@ -315,8 +310,8 @@ class tools:
 
     def formatRatio(ratio, volumeRatio):
         if ratio >= volumeRatio and ratio != np.nan and (not math.isinf(ratio)):
-            return colorText.BOLD + colorText.GREEN + str(ratio) + "x" + colorText.END
-        return colorText.BOLD + colorText.FAIL + (f"{ratio}x" if pd.notna(ratio) else "") + colorText.END
+            return colorText.GREEN + str(ratio) + "x" + colorText.END
+        return colorText.FAIL + (f"{ratio}x" if pd.notna(ratio) else "") + colorText.END
 
     def getsize_multiline(font,srcText,x=0,y=0):
         zeroSizeImage = Image.new('RGB',(0, 0), (0,0,0))
@@ -394,6 +389,14 @@ class tools:
             pass
         return roundValue
     
+    def stockNameFromDecoratedName(stockName):
+        cleanName = tools.removeAllColorStyles(stockName.replace("\x1B]8;;","")).split("\x1B\\")[1]
+        return cleanName
+    
+    def stockDecoratedName(stockName,exchangeName):
+        decoratedName = f"{colorText.WHITE}\x1B]8;;https://in.tradingview.com/chart?symbol={'NSE' if exchangeName=='INDIA' else 'NASDAQ'}%3A{stockName}\x1B\\{stockName}\x1B]8;;\x1B\\{colorText.END}"
+        return decoratedName
+
     def removeAllColorStyles(styledText):
         styles = [
             colorText.HEAD,
@@ -402,8 +405,11 @@ class tools:
             colorText.UNDR,
             colorText.BLUE,
             colorText.GREEN,
+            colorText.BRIGHTGREEN,
             colorText.WARN,
+            colorText.BRIGHTYELLOW,
             colorText.FAIL,
+            colorText.BRIGHTRED,
             colorText.WHITE,
         ]
         cleanedUpStyledValue = str(styledText)
@@ -416,19 +422,25 @@ class tools:
         mainStyles = [
             colorText.BLUE,
             colorText.GREEN,
+            colorText.BRIGHTGREEN,
             colorText.WARN,
+            colorText.BRIGHTYELLOW,
             colorText.FAIL,
+            colorText.BRIGHTRED,
             colorText.WHITE,
         ]
         colorsDict = {
             colorText.BLUE: "blue",
-            colorText.GREEN: "darkgreen"
+            colorText.BRIGHTGREEN: "darkgreen",
+            colorText.GREEN: "green"
             if defaultCellFillColor == "black"
             else "lightgreen",
             colorText.WARN: "darkorange"
             if defaultCellFillColor == "black"
             else "yellow",
+            colorText.BRIGHTYELLOW: "darkyellow",
             colorText.FAIL: "red",
+            colorText.BRIGHTRED : "darkred",
             colorText.WHITE: "white" 
             if defaultCellFillColor == "white"
             else "black",
@@ -463,6 +475,7 @@ class tools:
             cleanedUpStyledValues = [cellStyledValue]
         return cellFillColors, cleanedUpStyledValues
 
+    @Halo(text='', spinner='dots')
     def tableToImage(
         table,
         styledTable,
@@ -491,11 +504,11 @@ class tools:
 
         dfs_to_print = [styledTable, backtestSummary, backtestDetail]
         unstyled_dfs = [table, backtestSummary, backtestDetail]
-        reportTitle = f"[+] As of {PKDateUtilities.currentDateTime().strftime('%d-%m-%y %H.%M.%S')} IST > You chose {label}"
+        reportTitle = f"  [+] As of {PKDateUtilities.currentDateTime().strftime('%d-%m-%y %H.%M.%S')} IST > You chose {label}"
         titleLabels = [
-            f"[+] Scan results for {label} :",
-            summaryLabel if summaryLabel is not None else "[+] For chosen scan, summary of correctness from past: [Example, 70% of (100) under 1-Pd, means out of 100 stocks that were in the scan result in the past, 70% of them gained next day.)",
-            detailLabel if detailLabel is not None else "[+] 1 to 30 period gain/loss % for matching stocks on respective date from earlier predictions:[Example, 5% under 1-Pd, means the stock price actually gained 5% the next day from given date.]",
+            f"  [+] Scan results for {label} :",
+            summaryLabel if summaryLabel is not None else "  [+] For chosen scan, summary of correctness from past: [Example, 70% of (100) under 1-Pd, means out of 100 stocks that were in the scan result in the past, 70% of them gained next day.)",
+            detailLabel if detailLabel is not None else "  [+] 1 to 30 period gain/loss % for matching stocks on respective date from earlier predictions:[Example, 5% under 1-Pd, means the stock price actually gained 5% the next day from given date.]",
         ]
 
         artfont_arttext_width, artfont_arttext_height = artfont.getsize_multiline(artText+ f" | {marketStatus()}")
@@ -776,7 +789,7 @@ class tools:
         repoText = f"Source: https://GitHub.com/pkjmesra/pkscreener/  | © {datetime.date.today().year} pkjmesra | Telegram: https://t.me/PKScreener |"
         disclaimer = f"The author is NOT a financial advisor and is NOT SEBI registered. This report is for learning/analysis purposes ONLY. Author assumes no responsibility or liability for any errors or omissions in this report or repository, or gain/loss bearing out of this analysis. The user MUST take advise ONLY from registered SEBI financial advisors only."
         repoText = f"{repoText}\n{tools.wrapFitLegendText(table,backtestSummary,disclaimer)}"
-        repoText = f"{repoText}\n[+] Understanding this report:\n\n"
+        repoText = f"{repoText}\n  [+] Understanding this report:\n\n"
         return repoText
 
     def set_github_output(name, value):
@@ -804,19 +817,20 @@ class tools:
         pattern = f"{'intraday_' if intraday else ''}stock_data_"
         cache_file = pattern + str(cache_date) + ".pkl"
         exists = False
-        for f in glob.glob(f"{pattern}*.pkl", root_dir=Archiver.get_user_outputs_dir()):
+        for f in glob.glob(f"{pattern}*.pkl", root_dir=Archiver.get_user_data_dir()):
             if f.endswith(cache_file):
                 exists = True
                 break
         return exists, cache_file
 
+    @Halo(text='', spinner='dots')
     def saveStockData(stockDict, configManager, loadCount, intraday=False, downloadOnly=False, forceSave=False):
         exists, fileName = tools.afterMarketStockDataExists(
             configManager.isIntradayConfig() or intraday
         )
-        outputFolder = Archiver.get_user_outputs_dir()
+        outputFolder = Archiver.get_user_data_dir()
         if downloadOnly:
-            outputFolder = outputFolder.replace("results","actions-data-download")
+            outputFolder = outputFolder.replace(f"results{os.sep}Data","actions-data-download")
             if not os.path.isdir(outputFolder):
                 os.makedirs(os.path.dirname(f"{outputFolder}{os.sep}"), exist_ok=True)
             configManager.deleteFileWithPattern(rootDir=outputFolder)
@@ -825,20 +839,26 @@ class tools:
             try:
                 with open(cache_file, "wb") as f:
                     pickle.dump(stockDict.copy(), f, protocol=pickle.HIGHEST_PROTOCOL)
-                    OutputControls().printOutput(colorText.BOLD + colorText.GREEN + "=> Done." + colorText.END)
+                    OutputControls().printOutput(colorText.GREEN + "=> Done." + colorText.END)
                 if downloadOnly:
-                    OutputControls().printOutput(colorText.BOLD + colorText.GREEN + f"=> {cache_file}" + colorText.END)
-                    Committer.execOSCommand(f"git add {cache_file} -f >/dev/null 2>&1")
                     if "RUNNER" not in os.environ.keys():
-                        copyFilePath = os.path.join(Archiver.get_user_outputs_dir(), f"copy_{fileName}")
+                        copyFilePath = os.path.join(Archiver.get_user_data_dir(), f"copy_{fileName}")
                         cacheFileSize = os.stat(cache_file).st_size if os.path.exists(cache_file) else 0
                         if os.path.exists(cache_file) and cacheFileSize >= 1024*1024*40:
                             shutil.copy(cache_file,copyFilePath) # copy is the saved source of truth
+
+                    rootDirs = [Archiver.get_user_data_dir(),Archiver.get_user_indices_dir(),outputFolder]
+                    patterns = ["*.csv","*.pkl"]
+                    for dir in rootDirs:
+                        for pattern in patterns:
+                            for f in glob.glob(pattern, root_dir=dir, recursive=True):
+                                OutputControls().printOutput(colorText.GREEN + f"=> {f}" + colorText.END)
+                                Committer.execOSCommand(f"git add {f} -f >/dev/null 2>&1")
+
             except pickle.PicklingError as e:  # pragma: no cover
                 default_logger().debug(e, exc_info=True)
                 OutputControls().printOutput(
-                    colorText.BOLD
-                    + colorText.FAIL
+                    colorText.FAIL
                     + "=> Error while Caching Stock Data."
                     + colorText.END
                 )
@@ -846,12 +866,13 @@ class tools:
                 default_logger().debug(e, exc_info=True)
         else:
             OutputControls().printOutput(
-                colorText.BOLD + colorText.GREEN + "=> Already Cached." + colorText.END
+                colorText.GREEN + "=> Already Cached." + colorText.END
             )
             if downloadOnly:
-                OutputControls().printOutput(colorText.BOLD + colorText.GREEN + f"=> {cache_file}" + colorText.END)
+                OutputControls().printOutput(colorText.GREEN + f"=> {cache_file}" + colorText.END)
         return cache_file
 
+    @Halo(text='  [+] Downloading fresh data from Data Providers...', spinner='dots')
     def downloadLatestData(stockDict,configManager,stockCodes=[],exchangeSuffix=".NS",downloadOnly=False):
         numStocksPerIteration = (int(len(stockCodes)/int(len(stockCodes)/10)) if len(stockCodes) >= 10 else len(stockCodes)) + 1
         queueCounter = 0
@@ -932,8 +953,8 @@ class tools:
             f"Stock data cache file:{cache_file} exists ->{str(exists)}"
         )
         stockDataLoaded = False
-        copyFilePath = os.path.join(Archiver.get_user_outputs_dir(), f"copy_{cache_file}")
-        srcFilePath = os.path.join(Archiver.get_user_outputs_dir(), cache_file)
+        copyFilePath = os.path.join(Archiver.get_user_data_dir(), f"copy_{cache_file}")
+        srcFilePath = os.path.join(Archiver.get_user_data_dir(), cache_file)
         if os.path.exists(copyFilePath):
             shutil.copy(copyFilePath,srcFilePath) # copy is the saved source of truth
         if os.path.exists(srcFilePath) and not forceRedownload:
@@ -948,9 +969,8 @@ class tools:
             stockDict, stockDataLoaded = tools.downloadSavedDataFromServer(stockDict,configManager, downloadOnly, defaultAnswer, retrial, forceLoad, stockCodes, exchangeSuffix, isIntraday, forceRedownload, cache_file, isTrading)
         if not stockDataLoaded:
             OutputControls().printOutput(
-                colorText.BOLD
-                + colorText.FAIL
-                + "[+] Cache unavailable on pkscreener server, Continuing.."
+                colorText.FAIL
+                + "  [+] Cache unavailable on pkscreener server, Continuing.."
                 + colorText.END
             )
         if not stockDataLoaded and not recentDownloadFromOriginAttempted:
@@ -961,17 +981,17 @@ class tools:
             tools.saveStockData(stockDict,configManager,initialLoadCount,isIntraday,downloadOnly, forceSave=stockDataLoaded)
         return stockDict
 
+    @Halo(text='  [+] Loading data from local cache...', spinner='dots')
     def loadDataFromLocalPickle(stockDict, configManager, downloadOnly, defaultAnswer, exchangeSuffix, cache_file, isTrading):
         stockDataLoaded = False
-        srcFilePath = os.path.join(Archiver.get_user_outputs_dir(), cache_file)
+        srcFilePath = os.path.join(Archiver.get_user_data_dir(), cache_file)
         with open(srcFilePath, "rb") as f:
             try:
                 stockData = pickle.load(f)
                 if not downloadOnly:
                     OutputControls().printOutput(
-                            colorText.BOLD
-                            + colorText.GREEN
-                            + f"[+] Automatically Using Cached Stock Data {'due to After-Market hours' if not PKDateUtilities.isTradingTime() else ''}!"
+                            colorText.GREEN
+                            + f"\n  [+] Automatically Using Cached Stock Data {'due to After-Market hours' if not PKDateUtilities.isTradingTime() else ''}!"
                             + colorText.END
                         )
                 if stockData is not None and len(stockData) > 0:
@@ -1020,9 +1040,8 @@ class tools:
                 default_logger().debug(e, exc_info=True)
                 f.close()
                 OutputControls().printOutput(
-                        colorText.BOLD
-                        + colorText.FAIL
-                        + "[+] Error while Reading Stock Cache."
+                        colorText.FAIL
+                        + "  [+] Error while Reading Stock Cache. Press <Enter> to continue..."
                         + colorText.END
                     )
                 if tools.promptFileExists(defaultAnswer=defaultAnswer) == "Y":
@@ -1031,27 +1050,24 @@ class tools:
                 default_logger().debug(e, exc_info=True)
                 f.close()
                 OutputControls().printOutput(
-                        colorText.BOLD
-                        + colorText.FAIL
-                        + "[+] Stock Cache Corrupted."
+                        colorText.FAIL
+                        + "  [+] Stock Cache Corrupted."
                         + colorText.END
                     )
                 if tools.promptFileExists(defaultAnswer=defaultAnswer) == "Y":
                     configManager.deleteFileWithPattern()
         return stockDict, stockDataLoaded
 
-    def downloadSavedDataFromServer(stockDict, configManager, downloadOnly, defaultAnswer, retrial, forceLoad, stockCodes, exchangeSuffix, isIntraday, forceRedownload, cache_file, isTrading):
-        stockDataLoaded = False
+    @Halo(text='', spinner='dots')
+    def tryFetchFromServer(cache_file):
         OutputControls().printOutput(
-                    colorText.BOLD
-                    + colorText.FAIL
-                    + "[+] Market Stock Data is not cached, or forced to redownload .."
+                    colorText.FAIL
+                    + "[+] Loading data from server. Market Stock Data is not cached, or forced to redownload .."
                     + colorText.END
                 )
         OutputControls().printOutput(
-                colorText.BOLD
-                + colorText.GREEN
-                + f"[+] Downloading {'Intraday' if configManager.isIntradayConfig() else 'Daily'} cache from server for faster processing, Please Wait.."
+                colorText.GREEN
+                + f"  [+] Downloading {colorText.END}{colorText.FAIL}{'Intraday' if configManager.isIntradayConfig() else 'Daily'}{colorText.END}{colorText.GREEN} cache from server for faster processing, Please Wait.."
                 + colorText.END
             )
         cache_url = (
@@ -1074,6 +1090,35 @@ class tools:
                     #'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36
             }
         resp = fetcher.fetchURL(cache_url, headers=headers, stream=True)
+        return resp
+
+    @Halo(text='', spinner='dots')
+    def downloadSavedDefaultsFromServer(cache_file):
+        fileDownloaded = False
+        resp = tools.tryFetchFromServer(cache_file)
+        if resp is not None:
+            default_logger().debug(
+                    f"Stock data cache file:{cache_file} request status ->{resp.status_code}"
+                )
+        if resp is not None and resp.status_code == 200:
+            contentLength = resp.headers.get("content-length")
+            serverBytes = int(contentLength) if contentLength is not None else 0
+            KB = 1024
+            MB = KB * 1024
+            chunksize = MB if serverBytes >= MB else (KB if serverBytes >= KB else 1)
+            filesize = int( serverBytes / chunksize)
+            if filesize > 40: #Something definitely went wrong. It should be upward of 40bytes
+                try:
+                    with open(os.path.join(Archiver.get_user_data_dir(), cache_file),"w+",) as f: # .split(os.sep)[-1]
+                        f.write(resp.text)
+                    fileDownloaded = True
+                except:
+                    pass
+        return fileDownloaded
+
+    def downloadSavedDataFromServer(stockDict, configManager, downloadOnly, defaultAnswer, retrial, forceLoad, stockCodes, exchangeSuffix, isIntraday, forceRedownload, cache_file, isTrading):
+        stockDataLoaded = False
+        resp = tools.tryFetchFromServer(cache_file)
         if resp is not None:
             default_logger().debug(
                     f"Stock data cache file:{cache_file} request status ->{resp.status_code}"
@@ -1089,7 +1134,7 @@ class tools:
                 bar, spinner = tools.getProgressbarStyle()
                 try:
                     f = open(
-                            os.path.join(Archiver.get_user_outputs_dir(), cache_file),
+                            os.path.join(Archiver.get_user_data_dir(), cache_file),
                             "w+b",
                         )  # .split(os.sep)[-1]
                     dl = 0
@@ -1104,7 +1149,7 @@ class tools:
                                 progressbar(1.0)
                     f.close()
                     with open(
-                            os.path.join(Archiver.get_user_outputs_dir(), cache_file),
+                            os.path.join(Archiver.get_user_data_dir(), cache_file),
                             "rb",
                         ) as f:
                         stockData = pickle.load(f)
@@ -1146,15 +1191,14 @@ class tools:
                                     # and so, was not found in stockDict
                                 continue
                         stockDataLoaded = True
-                        copyFilePath = os.path.join(Archiver.get_user_outputs_dir(), f"copy_{cache_file}")
-                        srcFilePath = os.path.join(Archiver.get_user_outputs_dir(), cache_file)
+                        copyFilePath = os.path.join(Archiver.get_user_data_dir(), f"copy_{cache_file}")
+                        srcFilePath = os.path.join(Archiver.get_user_data_dir(), cache_file)
                         if os.path.exists(copyFilePath) and os.path.exists(srcFilePath):
                             shutil.copy(copyFilePath,srcFilePath) # copy is the saved source of truth
                         if not os.path.exists(copyFilePath) and os.path.exists(srcFilePath): # Let's make a copy of the original one
                             shutil.copy(srcFilePath,copyFilePath)
                         # Remove the progress bar now!
-                        sys.stdout.write("\x1b[1A")  # cursor up one line
-                        sys.stdout.write("\x1b[2K")  # delete the last line
+                        OutputControls().moveCursorUpLines(1)
                 except Exception as e:  # pragma: no cover
                     default_logger().debug(e, exc_info=True)
                     f.close()
@@ -1180,8 +1224,12 @@ class tools:
                 
         return stockDict,stockDataLoaded
 
+    def make_hyperlink(value):
+        url = "https://in.tradingview.com/chart?symbol=NSE:{}"
+        return '=HYPERLINK("%s", "%s")' % (url.format(value), value)
+
     # Save screened results to excel
-    def promptSaveResults(sheetName,df, defaultAnswer=None,pastDate=None):
+    def promptSaveResults(sheetName,df_save, defaultAnswer=None,pastDate=None):
         """
         Tries to save the dataframe output into an excel file.
 
@@ -1190,16 +1238,32 @@ class tools:
         If it fails to save, it will then try to save to Desktop and then eventually into
         a temporary directory.
         """
+        data = df_save.copy()
+        try:
+            data = data.fillna(0)
+            data = data.replace([np.inf, -np.inf], 0)
+        except:
+            pass
+        try:
+            data.reset_index(inplace=True)
+            with pd.option_context('mode.chained_assignment', None):
+                data["Stock"] = data['Stock'].apply(tools.make_hyperlink)
+            data.set_index("Stock", inplace=True)
+        except:
+            pass
+        df = data
         isSaved = False
         try:
             if defaultAnswer is None:
-                response = str(
-                    input(
-                        colorText.BOLD
-                        + colorText.WARN
-                        + "[>] Do you want to save the results in excel file? [Y/N](Default:Y): "
-                    ) or "Y"
-                ).upper()
+                if not configManager.alwaysExportToExcel:
+                    response = str(
+                        input(
+                            colorText.WARN
+                            + f"[>] Do you want to save the results in excel file? [Y/N](Default:{colorText.END}{colorText.FAIL}N{colorText.END}): "
+                        ) or "N"
+                    ).upper()
+                else:
+                    response = "Y"
             else:
                 response = defaultAnswer
         except ValueError as e:  # pragma: no cover
@@ -1208,7 +1272,7 @@ class tools:
         if response is not None and response.upper() != "N":
             pastDateString = f"{pastDate}_to_" if pastDate is not None else ""
             filename = (
-                f"PKS_{sheetName}_"
+                f"PKS_{sheetName.strip()}_"
                 + pastDateString
                 + PKDateUtilities.currentDateTime().strftime("%d-%m-%y_%H.%M.%S")
                 + ".xlsx"
@@ -1218,7 +1282,7 @@ class tools:
             desktop = os.path.normpath(os.path.expanduser("~/Desktop"))
             filePath = ""
             try:
-                filePath = os.path.join(Archiver.get_user_outputs_dir(), filename)
+                filePath = os.path.join(Archiver.get_user_reports_dir(), filename)
                 # Create a Pandas Excel writer using XlsxWriter as the engine.
                 writer = pd.ExcelWriter(filePath, engine='xlsxwriter') # openpyxl throws an error exporting % sign.
                 # Convert the dataframe to an XlsxWriter Excel object.
@@ -1231,7 +1295,7 @@ class tools:
                 OutputControls().printOutput(
                     colorText.FAIL
                     + (
-                        "[+] Error saving file at %s"
+                        "  [+] Error saving file at %s"
                         % filePath
                     )
                     + colorText.END
@@ -1250,7 +1314,7 @@ class tools:
                     OutputControls().printOutput(
                         colorText.FAIL
                         + (
-                            "[+] Error saving file at %s"
+                            "  [+] Error saving file at %s"
                             % filePath
                         )
                         + colorText.END
@@ -1264,9 +1328,8 @@ class tools:
                     writer.close()
                     isSaved = True
             OutputControls().printOutput(
-                colorText.BOLD
-                + (colorText.GREEN if isSaved else colorText.FAIL)
-                + (("[+] Results saved to %s" % filePath) if isSaved else "[+] Failed saving results into Excel file!")
+                (colorText.GREEN if isSaved else colorText.FAIL)
+                + (("  [+] Results saved to %s" % filePath) if isSaved else "  [+] Failed saving results into Excel file!")
                 + colorText.END
             )
             return filePath
@@ -1278,8 +1341,7 @@ class tools:
             if defaultAnswer is None:
                 response = str(
                     input(
-                        colorText.BOLD
-                        + colorText.WARN
+                        colorText.WARN
                         + "[>] "
                         + cache_file
                         + " already exists. Do you want to replace this? [Y/N] (Default: Y): "
@@ -1297,16 +1359,14 @@ class tools:
         try:
             minRSI, maxRSI = int(
                 input(
-                    colorText.BOLD
-                    + colorText.WARN
-                    + "\n[+] Enter Min RSI value (Default=55): "
+                    colorText.WARN
+                    + "\n  [+] Enter Min RSI value (Default=55): "
                     + colorText.END
                 ) or 55
             ), int(
                 input(
-                    colorText.BOLD
-                    + colorText.WARN
-                    + "[+] Enter Max RSI value (Default=68): "
+                    colorText.WARN
+                    + "  [+] Enter Max RSI value (Default=68): "
                     + colorText.END
                 ) or "68"
             )
@@ -1329,16 +1389,14 @@ class tools:
         try:
             minCCI, maxCCI = int(
                 input(
-                    colorText.BOLD
-                    + colorText.WARN
-                    + "\n[+] Enter Min CCI value (Default=110): "
+                    colorText.WARN
+                    + "\n  [+] Enter Min CCI value (Default=110): "
                     + colorText.END
                 ) or "110"
             ), int(
                 input(
-                    colorText.BOLD
-                    + colorText.WARN
-                    + "[+] Enter Max CCI value (Default=300): "
+                    colorText.WARN
+                    + "  [+] Enter Max CCI value (Default=300): "
                     + colorText.END
                 ) or "300"
             )
@@ -1357,9 +1415,8 @@ class tools:
         try:
             volumeRatio = float(
                 input(
-                    colorText.BOLD
-                    + colorText.WARN
-                    + "\n[+] Enter Min Volume ratio value (Default = 2.5): "
+                    colorText.WARN
+                    + "\n  [+] Enter Min Volume ratio value (Default = 2.5): "
                     + colorText.END
                 ) or "2.5"
             )
@@ -1390,9 +1447,8 @@ class tools:
             tools.promptMenus(menu=menu)
             resp = int(
                 input(
-                    colorText.BOLD
-                    + colorText.WARN
-                    + """[+] Select Option:"""
+                    colorText.WARN
+                    + """  [+] Select Option:"""
                     + colorText.END
                 ) or defaultOption
             )
@@ -1402,9 +1458,8 @@ class tools:
         except ValueError as e:  # pragma: no cover
             default_logger().debug(e, exc_info=True)
             input(
-                colorText.BOLD
-                + colorText.FAIL
-                + "\n[+] Invalid Option Selected. Press <Enter> to try again..."
+                colorText.FAIL
+                + "\n  [+] Invalid Option Selected. Press <Enter> to try again..."
                 + colorText.END
             )
             return None
@@ -1415,9 +1470,8 @@ class tools:
             tools.promptMenus(menu=menu)
             resp = int(
                 input(
-                    colorText.BOLD
-                    + colorText.WARN
-                    + """[+] Select Option:"""
+                    colorText.WARN
+                    + """  [+] Select Option:"""
                     + colorText.END
                 ) or "3"
             )
@@ -1427,9 +1481,8 @@ class tools:
                         defaultMALength = 9 if configManager.duration.endswith("m") else 50
                         maLength = int(
                             input(
-                                colorText.BOLD
-                                + colorText.WARN
-                                + f"\n[+] Enter MA Length (E.g. 9,10,20,50 or 200) (Default={defaultMALength}): "
+                                colorText.WARN
+                                + f"\n  [+] Enter MA Length (E.g. 9,10,20,50 or 200) (Default={defaultMALength}): "
                                 + colorText.END
                             ) or str(defaultMALength)
                         )
@@ -1437,8 +1490,7 @@ class tools:
                     except ValueError as e:  # pragma: no cover
                         default_logger().debug(e, exc_info=True)
                         OutputControls().printOutput(
-                            colorText.BOLD
-                            + colorText.FAIL
+                            colorText.FAIL
                             + "\n[!] Invalid Input! MA Length should be single integer value!\n"
                             + colorText.END
                         )
@@ -1447,9 +1499,8 @@ class tools:
                     try:
                         maLength = int(
                             input(
-                                colorText.BOLD
-                                + colorText.WARN
-                                + "\n[+] Enter NR timeframe [Integer Number] (E.g. 4, 7, etc.) (Default=4): "
+                                colorText.WARN
+                                + "\n  [+] Enter NR timeframe [Integer Number] (E.g. 4, 7, etc.) (Default=4): "
                                 + colorText.END
                             ) or "4"
                         )
@@ -1457,8 +1508,7 @@ class tools:
                     except ValueError as e:  # pragma: no cover
                         default_logger().debug(e, exc_info=True)
                         OutputControls().printOutput(
-                            colorText.BOLD
-                            + colorText.FAIL
+                            colorText.FAIL
                             + "\n[!] Invalid Input! NR timeframe should be single integer value!\n"
                             + colorText.END
                         )
@@ -1473,9 +1523,8 @@ class tools:
         except ValueError as e:  # pragma: no cover
             default_logger().debug(e, exc_info=True)
             input(
-                colorText.BOLD
-                + colorText.FAIL
-                + "\n[+] Invalid Option Selected. Press <Enter> to try again..."
+                colorText.FAIL
+                + "\n  [+] Invalid Option Selected. Press <Enter> to try again..."
                 + colorText.END
             )
             return None, None
@@ -1486,18 +1535,16 @@ class tools:
             tools.promptMenus(menu=menu)
             resp = int(
                 input(
-                    colorText.BOLD
-                    + colorText.WARN
-                    + """[+] Select Option:"""
+                    colorText.WARN
+                    + """  [+] Select Option:"""
                     + colorText.END
                 ) or "3"
             )
             if resp == 1 or resp == 2:
                 candles = int(
                     input(
-                        colorText.BOLD
-                        + colorText.WARN
-                        + "\n[+] How many candles (TimeFrame) to look back Inside Bar formation? (Default=3): "
+                        colorText.WARN
+                        + "\n  [+] How many candles (TimeFrame) to look back Inside Bar formation? (Default=3): "
                         + colorText.END
                     ) or "3"
                 )
@@ -1505,9 +1552,8 @@ class tools:
             if resp == 3:
                 percent = float(
                     input(
-                        colorText.BOLD
-                        + colorText.WARN
-                        + "\n[+] Enter Percentage within which all MA/EMAs should be (Ideal: 0.1-2%)? (Default=0.8): "
+                        colorText.WARN
+                        + "\n  [+] Enter Percentage within which all MA/EMAs should be (Ideal: 0.1-2%)? (Default=0.8): "
                         + colorText.END
                     ) or "0.8"
                 )
@@ -1518,9 +1564,8 @@ class tools:
         except ValueError as e:  # pragma: no cover
             default_logger().debug(e, exc_info=True)
             input(
-                colorText.BOLD
-                + colorText.FAIL
-                + "\n[+] Invalid Option Selected. Press <Enter> to try again..."
+                colorText.FAIL
+                + "\n  [+] Invalid Option Selected. Press <Enter> to try again..."
                 + colorText.END
             )
             return (None, None)
@@ -1533,10 +1578,17 @@ class tools:
             spinner = "dots_recur"
         return bar, spinner
 
+    @Halo(text='', spinner='dots')
     def getNiftyModel(retrial=False):
+        if "Windows" in platform.system() and not 'pytest' in sys.modules:
+            try:
+                sys.stdin.reconfigure(encoding='utf-8')
+                sys.stdout.reconfigure(encoding='utf-8')
+            except:
+                pass
         files = [
-            os.path.join(Archiver.get_user_outputs_dir(), "nifty_model_v2.h5"),
-            os.path.join(Archiver.get_user_outputs_dir(), "nifty_model_v2.pkl"),
+            os.path.join(Archiver.get_user_data_dir(), "nifty_model_v2.h5"),
+            os.path.join(Archiver.get_user_data_dir(), "nifty_model_v2.pkl"),
         ]
         model = None
         pkl = None
@@ -1559,9 +1611,8 @@ class tools:
                 resp = fetcher.fetchURL(file_url, stream=True)
                 if resp is not None and resp.status_code == 200:
                     OutputControls().printOutput(
-                        colorText.BOLD
-                        + colorText.GREEN
-                        + "[+] Downloading AI model (v2) for Nifty predictions, Please Wait.."
+                        colorText.GREEN
+                        + "  [+] Downloading AI model (v2) for Nifty predictions, Please Wait.."
                         + colorText.END
                     )
                     try:
@@ -1573,20 +1624,20 @@ class tools:
                         bar, spinner = tools.getProgressbarStyle()
                         f = open(
                             os.path.join(
-                                Archiver.get_user_outputs_dir(), file_url.split("/")[-1]
+                                Archiver.get_user_data_dir(), file_url.split("/")[-1]
                             ),
-                            "wb",
+                            "wb"
                         )
                         dl = 0
-                        with alive_bar(
-                            filesize, bar=bar, spinner=spinner, manual=True
-                        ) as progressbar:
-                            for data in resp.iter_content(chunk_size=chunksize):
-                                dl += 1
-                                f.write(data)
-                                progressbar(dl / filesize)
-                                if dl >= filesize:
-                                    progressbar(1.0)
+                        # with alive_bar(
+                        #     filesize, bar=bar, spinner=spinner, manual=True
+                        # ) as progressbar:
+                        for data in resp.iter_content(chunk_size=chunksize):
+                            dl += 1
+                            f.write(data)
+                                # progressbar(dl / filesize)
+                                # if dl >= filesize:
+                                #     progressbar(1.0)
                         f.close()
                     except Exception as e:  # pragma: no cover
                         default_logger().debug(e, exc_info=True)
@@ -1601,9 +1652,8 @@ class tools:
                     except:
                         OutputControls().printOutput("This installation might not work well, especially for NIFTY prediction. Please install 'keras' library on your machine!")
                         OutputControls().printOutput(
-                                colorText.BOLD
-                                + colorText.FAIL
-                                + "[+] 'Keras' library is not installed. You may wish to follow instructions from\n[+] https://github.com/pkjmesra/PKScreener/"
+                                colorText.FAIL
+                                + "  [+] 'Keras' library is not installed. You may wish to follow instructions from\n  [+] https://github.com/pkjmesra/PKScreener/"
                                 + colorText.END
                             )
                         pass
@@ -1616,9 +1666,8 @@ class tools:
                 tools.getNiftyModel(retrial=True)
         if model is None:
             OutputControls().printOutput(
-                colorText.BOLD
-                + colorText.FAIL
-                + "[+] 'Keras' library is not installed. Prediction failed! You may wish to follow instructions from\n[+] https://github.com/pkjmesra/PKScreener/"
+                colorText.FAIL
+                + "  [+] 'Keras' library is not installed. Prediction failed! You may wish to follow instructions from\n  [+] https://github.com/pkjmesra/PKScreener/"
                 + colorText.END
             )
         return model, pkl
@@ -1642,7 +1691,7 @@ class tools:
     
     def getMaxColumnWidths(df):
         columnWidths = [None]
-        addnlColumnWidths = [40 if (x in ["Trend(22Prds)"] or "-Pd" in x) else (20 if (x in ["Pattern"]) else ((25 if (x in ["MA-Signal"]) else None))) for x in df.columns]
+        addnlColumnWidths = [40 if (x in ["Trend(22Prds)"] or "-Pd" in x) else (20 if (x in ["Pattern"]) else ((25 if (x in ["MA-Signal"] or "ScanOption" in x) else None))) for x in df.columns]
         columnWidths.extend(addnlColumnWidths)
         columnWidths = columnWidths[:-1]
         return columnWidths

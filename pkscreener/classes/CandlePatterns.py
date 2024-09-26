@@ -77,7 +77,7 @@ class CandlePatterns:
         # TA-Lib.
         check = pktalib.CDLDOJI(data["Open"], data["High"], data["Low"], data["Close"])
         if check is not None and check.tail(1).item() != 0:
-            dict["Pattern"] = self.findCurrentSavedValue(dict,saveDict,"Pattern")[0] + colorText.BOLD + f"Doji" + colorText.END 
+            dict["Pattern"] = self.findCurrentSavedValue(dict,saveDict,"Pattern")[0] + colorText.GREEN + f"Doji" + colorText.END 
             saveDict["Pattern"] = self.findCurrentSavedValue(dict,saveDict,"Pattern")[1] +  f"Doji"
             hasCandleStickPattern = True
 
@@ -86,7 +86,7 @@ class CandlePatterns:
         )
         if check is not None and check.tail(1).item() != 0:
             dict["Pattern"] = (self.findCurrentSavedValue(dict,saveDict,"Pattern")[0] + 
-                colorText.BOLD + colorText.GREEN + f"Morning Star" + colorText.END 
+                colorText.GREEN + f"Morning Star" + colorText.END 
             )
             saveDict["Pattern"] = self.findCurrentSavedValue(dict,saveDict,"Pattern")[1] +  f"Morning Star"
             hasCandleStickPattern = True
@@ -96,7 +96,7 @@ class CandlePatterns:
         )
         if check is not None and check.tail(1).item() != 0:
             dict["Pattern"] = (self.findCurrentSavedValue(dict,saveDict,"Pattern")[0] + 
-                colorText.BOLD + colorText.GREEN + f"Morning Doji Star" + colorText.END 
+                colorText.GREEN + f"Morning Doji Star" + colorText.END 
             )
             saveDict["Pattern"] = self.findCurrentSavedValue(dict,saveDict,"Pattern")[1] +  f"Morning Doji Star"
             hasCandleStickPattern = True
@@ -106,7 +106,7 @@ class CandlePatterns:
         )
         if check is not None and check.tail(1).item() != 0:
             dict["Pattern"] = (self.findCurrentSavedValue(dict,saveDict,"Pattern")[0] + 
-                colorText.BOLD + colorText.FAIL + f"Evening Star" + colorText.END 
+                colorText.FAIL + f"Evening Star" + colorText.END 
             )
             saveDict["Pattern"] = self.findCurrentSavedValue(dict,saveDict,"Pattern")[1] +  f"Evening Star"
             hasCandleStickPattern = True
@@ -116,7 +116,7 @@ class CandlePatterns:
         )
         if check is not None and check.tail(1).item() != 0:
             dict["Pattern"] = (self.findCurrentSavedValue(dict,saveDict,"Pattern")[0] + 
-                colorText.BOLD + colorText.FAIL + f"Evening Doji Star" + colorText.END 
+                colorText.FAIL + f"Evening Doji Star" + colorText.END 
             )
             saveDict["Pattern"] = self.findCurrentSavedValue(dict,saveDict,"Pattern")[1] +  f"Evening Doji Star"
             hasCandleStickPattern = True
@@ -127,12 +127,12 @@ class CandlePatterns:
         if check is not None and check.tail(1).item() != 0:
             if check.tail(1).item() > 0:
                 dict["Pattern"] = (self.findCurrentSavedValue(dict,saveDict,"Pattern")[0] + 
-                    colorText.BOLD + colorText.GREEN + f"Bullish Ladder Bottom" + colorText.END 
+                    colorText.GREEN + f"Bullish Ladder Bottom" + colorText.END 
                 )
                 saveDict["Pattern"] = self.findCurrentSavedValue(dict,saveDict,"Pattern")[1] +  f"Bullish Ladder Bottom"
             else:
                 dict["Pattern"] = (self.findCurrentSavedValue(dict,saveDict,"Pattern")[0] + 
-                    colorText.BOLD + colorText.FAIL + f"Bearish Ladder Bottom" + colorText.END 
+                    colorText.FAIL + f"Bearish Ladder Bottom" + colorText.END 
                 )
                 saveDict["Pattern"] = self.findCurrentSavedValue(dict,saveDict,"Pattern")[1] +  f"Bearish Ladder Bottom"
             hasCandleStickPattern = True
@@ -143,11 +143,11 @@ class CandlePatterns:
         if check is not None and check.tail(1).item() != 0:
             if check.tail(1).item() > 0:
                 dict["Pattern"] = (self.findCurrentSavedValue(dict,saveDict,"Pattern")[0] + 
-                    colorText.BOLD + colorText.GREEN + f"3 Line Strike" + colorText.END 
+                    colorText.GREEN + f"3 Line Strike" + colorText.END 
                 )
             else:
                 dict["Pattern"] = (self.findCurrentSavedValue(dict,saveDict,"Pattern")[0] + 
-                    colorText.BOLD + colorText.FAIL + f"3 Line Strike" + colorText.END 
+                    colorText.FAIL + f"3 Line Strike" + colorText.END 
                 )
             saveDict["Pattern"] = self.findCurrentSavedValue(dict,saveDict,"Pattern")[1] +  f"3 Line Strike"
             hasCandleStickPattern = True
@@ -157,7 +157,7 @@ class CandlePatterns:
         )
         if check is not None and check.tail(1).item() != 0:
             dict["Pattern"] = (self.findCurrentSavedValue(dict,saveDict,"Pattern")[0] + 
-                colorText.BOLD + colorText.FAIL + f"3 Black Crows" + colorText.END 
+                colorText.FAIL + f"3 Black Crows" + colorText.END 
             )
             saveDict["Pattern"] = self.findCurrentSavedValue(dict,saveDict,"Pattern")[1] +  f"3 Black Crows"
             hasCandleStickPattern = True
@@ -168,12 +168,12 @@ class CandlePatterns:
         if check is not None and check.tail(1).item() != 0:
             if check.tail(1).item() > 0:
                 dict["Pattern"] = (self.findCurrentSavedValue(dict,saveDict,"Pattern")[0] + 
-                    colorText.BOLD + colorText.GREEN + f"3 Inside Up" + colorText.END 
+                    colorText.GREEN + f"3 Inside Up" + colorText.END 
                 )
                 saveDict["Pattern"] = self.findCurrentSavedValue(dict,saveDict,"Pattern")[1] +  f"3 Outside Up"
             else:
                 dict["Pattern"] = (self.findCurrentSavedValue(dict,saveDict,"Pattern")[0] + 
-                    colorText.BOLD + colorText.FAIL + f"3 Inside Down" + colorText.END 
+                    colorText.FAIL + f"3 Inside Down" + colorText.END 
                 )
                 saveDict["Pattern"] = self.findCurrentSavedValue(dict,saveDict,"Pattern")[1] +  f"3 Inside Down"
             hasCandleStickPattern = True
@@ -184,12 +184,12 @@ class CandlePatterns:
         if check is not None and check.tail(1).item() != 0:
             if check.tail(1).item() > 0:
                 dict["Pattern"] = (self.findCurrentSavedValue(dict,saveDict,"Pattern")[0] + 
-                    colorText.BOLD + colorText.GREEN + f"3 Outside Up" + colorText.END 
+                    colorText.GREEN + f"3 Outside Up" + colorText.END 
                 )
                 saveDict["Pattern"] = self.findCurrentSavedValue(dict,saveDict,"Pattern")[1] +  f"3 Outside Up"
             else:
                 dict["Pattern"] = (self.findCurrentSavedValue(dict,saveDict,"Pattern")[0] + 
-                    colorText.BOLD + colorText.FAIL + f"3 Outside Down" + colorText.END 
+                    colorText.FAIL + f"3 Outside Down" + colorText.END 
                 )
                 saveDict["Pattern"] = self.findCurrentSavedValue(dict,saveDict,"Pattern")[1] +  f"3 Outside Down"
             hasCandleStickPattern = True
@@ -199,7 +199,7 @@ class CandlePatterns:
         )
         if check is not None and check.tail(1).item() != 0:
             dict["Pattern"] = (self.findCurrentSavedValue(dict,saveDict,"Pattern")[0] + 
-                colorText.BOLD + colorText.GREEN + f"3 White Soldiers" + colorText.END 
+                colorText.GREEN + f"3 White Soldiers" + colorText.END 
             )
             saveDict["Pattern"] = self.findCurrentSavedValue(dict,saveDict,"Pattern")[1] +  f"3 White Soldiers"
             hasCandleStickPattern = True
@@ -210,12 +210,12 @@ class CandlePatterns:
         if check is not None and check.tail(1).item() != 0:
             if check.tail(1).item() > 0:
                 dict["Pattern"] = (self.findCurrentSavedValue(dict,saveDict,"Pattern")[0] + 
-                    colorText.BOLD + colorText.GREEN + f"Bullish Harami" + colorText.END 
+                    colorText.GREEN + f"Bullish Harami" + colorText.END 
                 )
                 saveDict["Pattern"] = self.findCurrentSavedValue(dict,saveDict,"Pattern")[1] +  f"Bullish Harami"
             else:
                 dict["Pattern"] = (self.findCurrentSavedValue(dict,saveDict,"Pattern")[0] + 
-                    colorText.BOLD + colorText.FAIL + f"Bearish Harami" + colorText.END 
+                    colorText.FAIL + f"Bearish Harami" + colorText.END 
                 )
                 saveDict["Pattern"] = self.findCurrentSavedValue(dict,saveDict,"Pattern")[1] +  f"Bearish Harami"
             hasCandleStickPattern = True
@@ -226,16 +226,14 @@ class CandlePatterns:
         if check is not None and check.tail(1).item() != 0:
             if check.tail(1).item() > 0:
                 dict["Pattern"] = (self.findCurrentSavedValue(dict,saveDict,"Pattern")[0] + 
-                    colorText.BOLD
-                    + colorText.GREEN
+                    colorText.GREEN
                     + f"Bullish Harami Cross" 
                     + colorText.END
                 )
                 saveDict["Pattern"] = self.findCurrentSavedValue(dict,saveDict,"Pattern")[1] +  f"Bullish Harami Cross"
             else:
                 dict["Pattern"] = (self.findCurrentSavedValue(dict,saveDict,"Pattern")[0] + 
-                    colorText.BOLD
-                    + colorText.FAIL
+                    colorText.FAIL
                     + f"Bearish Harami Cross" 
                     + colorText.END
                 )
@@ -248,15 +246,14 @@ class CandlePatterns:
         if check is not None and check.tail(1).item() != 0:
             if check.tail(1).item() > 0:
                 dict["Pattern"] = (self.findCurrentSavedValue(dict,saveDict,"Pattern")[0] + 
-                    colorText.BOLD
-                    + colorText.GREEN
+                    colorText.GREEN
                     + f"Bullish Marubozu" 
                     + colorText.END
                 )
                 saveDict["Pattern"] = self.findCurrentSavedValue(dict,saveDict,"Pattern")[1] +  f"Bullish Marubozu"
             else:
                 dict["Pattern"] = (
-                    colorText.BOLD + colorText.FAIL + f"Bearish Marubozu" + colorText.END 
+                    colorText.FAIL + f"Bearish Marubozu" + colorText.END 
                 )
                 saveDict["Pattern"] = self.findCurrentSavedValue(dict,saveDict,"Pattern")[1] +  f"Bearish Marubozu"
             hasCandleStickPattern = True
@@ -266,7 +263,7 @@ class CandlePatterns:
         )
         if check is not None and check.tail(1).item() != 0:
             dict["Pattern"] = (self.findCurrentSavedValue(dict,saveDict,"Pattern")[0] + 
-                colorText.BOLD + colorText.FAIL + f"Hanging Man" + colorText.END 
+                colorText.FAIL + f"Hanging Man" + colorText.END 
             )
             saveDict["Pattern"] = self.findCurrentSavedValue(dict,saveDict,"Pattern")[1] +  f"Hanging Man"
             hasCandleStickPattern = True
@@ -276,7 +273,7 @@ class CandlePatterns:
         )
         if check is not None and check.tail(1).item() != 0:
             dict["Pattern"] = (self.findCurrentSavedValue(dict,saveDict,"Pattern")[0] + 
-                colorText.BOLD + colorText.GREEN + f"Hammer" + colorText.END 
+                colorText.GREEN + f"Hammer" + colorText.END 
             )
             saveDict["Pattern"] = self.findCurrentSavedValue(dict,saveDict,"Pattern")[1] +  f"Hammer"
             hasCandleStickPattern = True
@@ -286,7 +283,7 @@ class CandlePatterns:
         )
         if check is not None and check.tail(1).item() != 0:
             dict["Pattern"] = (self.findCurrentSavedValue(dict,saveDict,"Pattern")[0] + 
-                colorText.BOLD + colorText.GREEN + f"Inverted Hammer" + colorText.END 
+                colorText.GREEN + f"Inverted Hammer" + colorText.END 
             )
             saveDict["Pattern"] = self.findCurrentSavedValue(dict,saveDict,"Pattern")[1] +  f"Inverted Hammer"
             hasCandleStickPattern = True
@@ -296,7 +293,7 @@ class CandlePatterns:
         )
         if check is not None and check.tail(1).item() != 0:
             dict["Pattern"] = (self.findCurrentSavedValue(dict,saveDict,"Pattern")[0] + 
-                colorText.BOLD + colorText.FAIL + f"Shooting Star" + colorText.END 
+                colorText.FAIL + f"Shooting Star" + colorText.END 
             )
             saveDict["Pattern"] = self.findCurrentSavedValue(dict,saveDict,"Pattern")[1] +  f"Shooting Star"
             hasCandleStickPattern = True
@@ -306,7 +303,7 @@ class CandlePatterns:
         )
         if check is not None and check.tail(1).item() != 0:
             dict["Pattern"] = (self.findCurrentSavedValue(dict,saveDict,"Pattern")[0] + 
-                colorText.BOLD + colorText.GREEN + f"Dragonfly Doji" + colorText.END 
+                colorText.GREEN + f"Dragonfly Doji" + colorText.END 
             )
             saveDict["Pattern"] = self.findCurrentSavedValue(dict,saveDict,"Pattern")[1] +  f"Dragonfly Doji"
             hasCandleStickPattern = True
@@ -316,7 +313,7 @@ class CandlePatterns:
         )
         if check is not None and check.tail(1).item() != 0:
             dict["Pattern"] = (self.findCurrentSavedValue(dict,saveDict,"Pattern")[0] + 
-                colorText.BOLD + colorText.FAIL + f"Gravestone Doji" + colorText.END 
+                colorText.FAIL + f"Gravestone Doji" + colorText.END 
             )
             saveDict["Pattern"] = self.findCurrentSavedValue(dict,saveDict,"Pattern")[1] +  f"Gravestone Doji"
             hasCandleStickPattern = True
@@ -327,16 +324,14 @@ class CandlePatterns:
         if check is not None and check.tail(1).item() != 0:
             if check.tail(1).item() > 0:
                 dict["Pattern"] = (self.findCurrentSavedValue(dict,saveDict,"Pattern")[0] + 
-                    colorText.BOLD
-                    + colorText.GREEN
+                    colorText.GREEN
                     + f"Bullish Engulfing" 
                     + colorText.END
                 )
                 saveDict["Pattern"] = self.findCurrentSavedValue(dict,saveDict,"Pattern")[1] +  f"Bullish Engulfing"
             else:
                 dict["Pattern"] = (self.findCurrentSavedValue(dict,saveDict,"Pattern")[0] + 
-                    colorText.BOLD
-                    + colorText.FAIL
+                    colorText.FAIL
                     + f"Bearish Engulfing" 
                     + colorText.END
                 )

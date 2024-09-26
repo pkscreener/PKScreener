@@ -11,6 +11,8 @@ results/*stock_data_*.pkl
 *.spec
 .DS_Store
 Help
+DeleteThis
+Cookies
 *.h5
 *model*.pkl
 *.ini
@@ -41,3 +43,4 @@ results/*.pkl.lck
 results/*.csv
 *.txt
 *.whl
+results

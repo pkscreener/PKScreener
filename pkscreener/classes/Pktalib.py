@@ -40,24 +40,21 @@ if Imports["talib"]:
         import talib
     except:
         OutputControls().printOutput(
-                colorText.BOLD
-                + colorText.FAIL
-                + "[+] 'TA-Lib' library is not installed. For best results, please install 'TA-Lib'! You may wish to follow instructions from\n[+] https://github.com/pkjmesra/PKScreener/"
+                colorText.FAIL
+                + "  [+] 'TA-Lib' library is not installed. For best results, please install 'TA-Lib'! You may wish to follow instructions from\n  [+] https://github.com/pkjmesra/PKScreener/"
                 + colorText.END
             )
         try:
             import pandas_ta as talib
             OutputControls().printOutput(
-                colorText.BOLD
-                + colorText.FAIL
-                + "[+] TA-Lib is not installed. Falling back on pandas_ta.\n[+] For full coverage(candle patterns), you may wish to follow instructions from\n[+] https://github.com/ta-lib/ta-lib-python"
+                colorText.FAIL
+                + "  [+] TA-Lib is not installed. Falling back on pandas_ta.\n  [+] For full coverage(candle patterns), you may wish to follow instructions from\n  [+] https://github.com/ta-lib/ta-lib-python"
                 + colorText.END
             )
         except:
             OutputControls().printOutput(
-                colorText.BOLD
-                + colorText.FAIL
-                + "[+] pandas_ta is not installed. Falling back on pandas_ta also failed.\n[+] For full coverage(candle patterns), you may wish to follow instructions from\n[+] https://github.com/ta-lib/ta-lib-python"
+                colorText.FAIL
+                + "  [+] pandas_ta is not installed. Falling back on pandas_ta also failed.\n  [+] For full coverage(candle patterns), you may wish to follow instructions from\n  [+] https://github.com/ta-lib/ta-lib-python"
                 + colorText.END
             )
             pass
@@ -66,9 +63,8 @@ else:
     try:
         import pandas_ta as talib
         OutputControls().printOutput(
-            colorText.BOLD
-            + colorText.FAIL
-            + "[+] TA-Lib is not installed. Falling back on pandas_ta.\n[+] For full coverage(candle patterns), you may wish to follow instructions from\n[+] https://github.com/ta-lib/ta-lib-python"
+            colorText.FAIL
+            + "  [+] TA-Lib is not installed. Falling back on pandas_ta.\n  [+] For full coverage(candle patterns), you may wish to follow instructions from\n  [+] https://github.com/ta-lib/ta-lib-python"
             + colorText.END
         )
         sleep(3)
@@ -338,6 +334,116 @@ class pktalib:
     def psar(self, high, low, acceleration=0.02, maximum=0.2):
         psar = talib.SAR(high, low, acceleration=acceleration, maximum=maximum)
         return psar
+
+    def momentum(self, df):
+        df.loc[:,'MOM'] = talib.MOM(df.loc[:,'close'],2).apply(lambda x: round(x, 2))
+        return df.loc[:,'MOM']
+
+    def get_dmi_df(self, df):
+        df.loc[:,'DMI'] = talib.DX(df.loc[:,'high'],df.loc[:,'low'],df.loc[:,'close'],timeperiod=14)
+        return df.loc[:,'DMI']
+
+    def get_macd_df(self, df):
+        df.loc[:,'macd(12)'], df.loc[:,'macdsignal(9)'], df.loc[:,'macdhist(26)'] = talib.MACD(df.loc[:,'close'], fastperiod=12, slowperiod=26, signalperiod=9)
+        df.loc[:,'macd(12)'] = df.loc[:,'macd(12)'].apply(lambda x: round(x, 3))
+        df.loc[:,'macdsignal(9)']= df.loc[:,'macdsignal(9)'].apply(lambda x: round(x, 3))
+        df.loc[:,'macdhist(26)'] = df.loc[:,'macdhist(26)'].apply(lambda x: round(x, 3))
+        return df.loc[:,['macd(12)','macdsignal(9)', 'macdhist(26)']]
+
+    def get_sma_df(self, df):
+        df.loc[:,'SMA(10)'] = talib.SMA(df.loc[:,'close'],10).apply(lambda x: round(x, 2))
+        df.loc[:,'SMA(50)'] = talib.SMA(df.loc[:,'close'],50).apply(lambda x: round(x, 2))
+        return df.loc[:,['close','SMA(10)', 'SMA(50)']]
+
+    def get_ema_df(self, df):
+        df.loc[:,'EMA(9)'] = talib.EMA(df.loc[:,'close'], timeperiod = 9).apply(lambda x: round(x, 2))
+        return df.loc[:,['close','EMA(9)']]
+
+    def get_adx_df(self, df):
+        df.loc[:,'ADX'] = talib.ADX(df.loc[:,'high'],df.loc[:,'low'], df.loc[:,'close'], timeperiod=14).apply(lambda x: round(x, 2))
+        return df.loc[:,'ADX']
+
+    def get_bbands_df(self, df):
+        df.loc[:,'BBands-U'], df.loc[:,'BBands-M'], df.loc[:,'BBands-L'] = talib.BBANDS(df.loc[:,'close'], timeperiod =20)
+        df.loc[:,'BBands-U'] = df.loc[:,'BBands-U'].apply(lambda x: round(x, 2))
+        df.loc[:,'BBands-M'] = df.loc[:,'BBands-M'].apply(lambda x: round(x, 2))
+        df.loc[:,'BBands-L'] = df.loc[:,'BBands-L'].apply(lambda x: round(x, 2))
+        return df[['close','BBands-U','BBands-M','BBands-L']]
+
+    def get_obv_df(self, df):
+        if ('close' not in df.keys()) or ('Volume' not in df.keys()):
+            return np.nan
+        df.loc[:,'OBV'] = talib.OBV(df.loc[:,'close'], df.loc[:,'Volume'])
+        return df.loc[:,'OBV']
+
+    def get_atr_df(self, df):
+        df.loc[:,'ATR'] = talib.ATR(df.loc[:,'high'], df.loc[:,'low'], df.loc[:,'close'], timeperiod=14).apply(lambda x: round(x, 2))
+        return df.loc[:,'ATR']
+
+    def get_natr_df(self, df):
+        df.loc[:,'NATR'] = talib.NATR(df.loc[:,'high'], df.loc[:,'low'], df.loc[:,'close'], timeperiod=14).apply(lambda x: round(x, 2))
+        return df.loc[:,'NATR']
+
+    def get_trange_df(self, df):
+        df.loc[:,'TRANGE'] = talib.TRANGE(df.loc[:,'high'], df.loc[:,'low'], df.loc[:,'close']).apply(lambda x: round(x, 2))
+        return df.loc[:,'TRANGE']
+
+    def get_atr_extreme(self, df):
+        """
+        ATR Exterme: which is based on 《Volatility-Based Technical Analysis》
+        TTI is 'Trading The Invisible'
+
+        @return: fasts, slows
+        """
+        highs = df.loc[:,'high']
+        lows = df.loc[:,'low']
+        closes = df.loc[:,'close']
+        slowPeriod=30
+        fastPeriod=3
+        atr = self.get_atr_df(df)
+
+        highsMean = talib.EMA(highs, 5)
+        lowsMean = talib.EMA(lows, 5)
+        closesMean = talib.EMA(closes, 5)
+
+        atrExtremes = np.where(closes > closesMean,
+                    ((highs - highsMean)/closes * 100) * (atr/closes * 100),
+                    ((lows - lowsMean)/closes * 100) * (atr/closes * 100)
+                    )
+        fasts = talib.MA(atrExtremes, fastPeriod)
+        slows = talib.EMA(atrExtremes, slowPeriod)
+        return fasts, slows, np.std(atrExtremes[-slowPeriod:])
+
+    def get_atr_ratio(self, df):
+        """
+        ATR(14)/MA(14)
+        """
+        closes = df.loc[:,'close']
+
+        atr = self.get_atr_df(df)
+        ma = talib.MA(closes, timeperiod=14)
+
+        volatility = atr/ma
+
+        s = pd.Series(volatility, index=df.index, name='volatility').dropna()
+        pd.set_option('mode.chained_assignment', None)
+        return pd.DataFrame({'volatility':round(s,2)})
+
+    def get_ppsr_df(self, df):
+        PP = pd.Series((df.loc[:,'high'] + df.loc[:,'low'] + df.loc[:,'close']) / 3)
+        R1 = pd.Series(2 * PP - df.loc[:,'low'])
+        S1 = pd.Series(2 * PP - df.loc[:,'high'])
+        R2 = pd.Series(PP + df.loc[:,'high'] - df.loc[:,'low'])
+        S2 = pd.Series(PP - df.loc[:,'high'] + df.loc[:,'low'])
+        R3 = pd.Series(df.loc[:,'high'] + 2 * (PP - df.loc[:,'low']))
+        S3 = pd.Series(df.loc[:,'low'] - 2 * (df.loc[:,'high'] - PP))
+        psr = {'PP':round(PP,2), 'R1':round(R1,2), 'S1':round(S1,2), 'R2':round(R2,2), 'S2':round(S2,2), 'R3':round(R3,2), 'S3':round(S3,2)}
+        pd.set_option('mode.chained_assignment', None)
+        PSR = pd.DataFrame(psr)
+        keys = ['PP','R1','R2','R3','S1','S2','S3']
+        for key in keys:
+            df[key] = PSR[key]
+        return df
 
     @classmethod
     def CDLMORNINGSTAR(self, open, high, low, close):

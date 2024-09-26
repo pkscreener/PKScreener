@@ -27,7 +27,7 @@ import logging
 import sys
 import time
 import warnings
-
+import datetime
 import numpy as np
 
 warnings.simplefilter("ignore", DeprecationWarning)
@@ -54,6 +54,7 @@ class StockScreener:
     # @tracelog
     def screenStocks(
         self,
+        runOption,
         menuOption,
         exchangeName,
         executeOption,
@@ -82,6 +83,8 @@ class StockScreener:
         assert (
             hostRef is not None
         ), "hostRef argument must not be None. It should be an instance of PKMultiProcessorClient"
+        if stock is None or len(stock) == 0:
+            return None
         configManager = hostRef.configManager
         self.configManager = configManager
         screeningDictionary, saveDictionary = self.initResultDictionaries()
@@ -94,6 +97,29 @@ class StockScreener:
         userArgsLog = printCounter
         start_time = time.time()
         self.isTradingTime = False if menuOption in "B" else self.isTradingTime
+        runOptionKey = runOption.split("=>")[0].split(":D:")[0].strip().replace(":0:",":12:")
+        if menuOption in ["F"]:
+            screeningDictionary["ScanOption"] = runOptionKey
+            saveDictionary["ScanOption"] = runOptionKey
+        # hostRef.default_logger.debug(f"runOption:{runOption}\nStock:{stock}\nmenuOption:{menuOption},\nexecuteOption:{executeOption},\nreversalOption:{reversalOption},\nmaLength:{maLength},\ndaysForLowestVolume:{daysForLowestVolume},\nminRSI:{minRSI},\nmaxRSI:{maxRSI},\nrespChartPattern:{respChartPattern},\ninsideBarToLookback:{insideBarToLookback}")
+        # defaultsParentDict = {}
+        # defaultsDict = {}
+        # import json
+        # with open("defaults.json","a+") as f:
+        #     try:
+        #         defaultsParentDict = json.loads(f.read())
+        #     except:
+        #         pass
+        #     defaultsDict["reversalOption"] = reversalOption
+        #     defaultsDict["maLength"] = maLength
+        #     defaultsDict["daysForLowestVolume"] = daysForLowestVolume
+        #     defaultsDict["minRSI"] = minRSI
+        #     defaultsDict["maxRSI"] = maxRSI
+        #     defaultsDict["respChartPattern"] = respChartPattern
+        #     defaultsDict["insideBarToLookback"] = insideBarToLookback
+        #     defaultsParentDict[runOption.split("=>")[0].replace(":SBIN,","").strip()] = defaultsDict
+        #     allDdefaults = json.dumps(defaultsParentDict)
+        #     f.write(allDdefaults)
         try:
             with hostRef.processingCounter.get_lock():
                 hostRef.processingCounter.value += 1
@@ -104,10 +130,10 @@ class StockScreener:
             data = None
             intraday_data = None
             data = self.getRelevantDataForStock(totalSymbols, shouldCache, stock, downloadOnly, printCounter, backtestDuration, hostRef,hostRef.objectDictionaryPrimary, configManager, fetcher, period,None, testData,exchangeName)
-            if str(executeOption) in ["32","38"] or (not configManager.isIntradayConfig() and configManager.calculatersiintraday):
+            if str(executeOption) in ["32","38","33"] or (not configManager.isIntradayConfig() and configManager.calculatersiintraday):
                 # Daily data is already available in "data" above.
                 # We need the intraday data for 1-d RSI values when config is not for intraday
-                intraday_data = self.getRelevantDataForStock(totalSymbols, shouldCache, stock, downloadOnly, printCounter, backtestDuration, hostRef, hostRef.objectDictionarySecondary, configManager, fetcher, "1d",("1m" if configManager.duration.endswith("d") else configManager.duration), testData,exchangeName)
+                intraday_data = self.getRelevantDataForStock(totalSymbols, shouldCache, stock, downloadOnly, printCounter, backtestDuration, hostRef, hostRef.objectDictionarySecondary, configManager, fetcher, ("5d" if str(executeOption) in ["33"] else "1d"),"1m" if (str(executeOption) in ["33"] and maLength==3) else ("1m" if configManager.period.endswith("d") else configManager.duration), testData,exchangeName)
                 
             if data is not None:
                 if len(data) == 0 or data.empty or len(data) < backtestDuration:
@@ -190,16 +216,20 @@ class StockScreener:
                     data = data.tail(len(intraday_data))
                     intraday_data = intraday_data.tail(len(data))
                     # Indexes won't match. Hence, we'd need to fallback on tolist
-                    processedData.insert(len(processedData.columns), "RSIi", intraday_processedData["RSI"].tolist())
-                    fullData.insert(len(fullData.columns), "RSIi", intraday_processedData["RSI"].tolist())
+                    if "RSIi" not in processedData.columns:
+                        processedData.insert(len(processedData.columns), "RSIi", intraday_processedData["RSI"].tolist())
+                    if "RSIi" not in fullData.columns:
+                        fullData.insert(len(fullData.columns), "RSIi", intraday_processedData["RSI"].tolist())
                 else:
                     with SuppressOutput(suppress_stderr=(logLevel==logging.NOTSET), suppress_stdout=(not (printCounter or testbuild))):
-                        processedData.insert(len(processedData.columns), "RSIi", np.array(np.nan))
-                        fullData.insert(len(fullData.columns), "RSIi", np.array(np.nan))
+                        if "RSIi" not in processedData.columns:
+                            processedData.insert(len(processedData.columns), "RSIi", np.array(np.nan))
+                            fullData.insert(len(fullData.columns), "RSIi", np.array(np.nan))
             else:
                     with SuppressOutput(suppress_stderr=(logLevel==logging.NOTSET), suppress_stdout=(not (printCounter or testbuild))):
-                        processedData.insert(len(processedData.columns), "RSIi", np.array(np.nan))
-                        fullData.insert(len(fullData.columns), "RSIi", np.array(np.nan))
+                        if "RSIi" not in processedData.columns:
+                            processedData.insert(len(processedData.columns), "RSIi", np.array(np.nan))
+                            fullData.insert(len(fullData.columns), "RSIi", np.array(np.nan))
 
             def returnLegibleData(exceptionMessage=None):
                 if backtestDuration == 0 or menuOption not in ["B"]:
@@ -224,6 +254,7 @@ class StockScreener:
                             data,
                             stock,
                             backtestDuration,
+                            runOptionKey
                         )
             if newlyListedOnly:
                 if not screener.validateNewlyListed(fullData, period):
@@ -244,6 +275,8 @@ class StockScreener:
                 isConfluence = False
                 isInsideBar = 0
                 isMaReversal = 0
+                bullishCount = 0 
+                bearishCount = 0
                 isIpoBase = False
                 isMaSupport = False
                 isLorentzian = False
@@ -420,7 +453,7 @@ class StockScreener:
                                 screener.findRSRating(index_rs_value=hostRef.rs_strange_index,df=fullData,screenDict=screeningDictionary, saveDict=saveDictionary)
                             screener.findRVM(df=fullData,screenDict=screeningDictionary, saveDict=saveDictionary)
                     elif respChartPattern == 9:
-                        hasMASignalFilter = screener.validateMovingAverages(
+                        hasMASignalFilter,_, _ = screener.validateMovingAverages(
                             fullData, screeningDictionary, saveDictionary,maRange=1.25,maLength=maLength
                         )
                         if not hasMASignalFilter:
@@ -469,7 +502,7 @@ class StockScreener:
                                 onlyMF=(executeOption == 21 and reversalOption in [5,6]),
                                 hostData=data,
                                 exchangeName=exchangeName,
-                                refreshMFAndFV=(menuOption in ["X", "C"]),
+                                refreshMFAndFV=(menuOption in ["X", "C", "F"]),
                                 downloadOnly=True
                             )
                             hostRef.objectDictionaryPrimary[stock] = data.to_dict("split")
@@ -487,7 +520,7 @@ class StockScreener:
                         return returnLegibleData(f"isValidCci:{isValidCci}")
 
                 if not (isConfluence or isShortTermBullish or hasMASignalFilter):
-                    isMaReversal = screener.validateMovingAverages(
+                    isMaReversal,bullishCount, bearishCount = screener.validateMovingAverages(
                         processedData, screeningDictionary, saveDictionary, maRange=1.25
                     )
                 if executeOption == 6:
@@ -573,7 +606,7 @@ class StockScreener:
                         or ((executeOption == 7) and ((respChartPattern < 3 and isInsideBar > 0) 
                                                                   or (isConfluence)
                                                                   or (isIpoBase and newlyListedOnly and not respChartPattern < 3)
-                                                                  or (isVCP)
+                                                                  or (isVCP and ((bearishCount == 0) if configManager.enableAdditionalVCPEMAFilters else True))
                                                                   or (isBuyingTrendline)
                                                                   or (respChartPattern == 6 and hasBbandsSqz)
                                                                   or (respChartPattern == 7 and isCandlePattern)
@@ -592,7 +625,7 @@ class StockScreener:
                         or (executeOption == 29 and bidGreaterThanAsk)
                         or (executeOption == 40 and priceCrossed)
                     ):
-                        isNotMonitoringDashboard = userArgs.monitor is None or (userArgs.monitor is not None and "~" not in userArgs.monitor)
+                        isNotMonitoringDashboard = userArgs is None or userArgs.monitor is None or (userArgs.monitor is not None and "~" not in userArgs.monitor)
                         # Now screen for common ones to improve performance
                         if isNotMonitoringDashboard and not (executeOption == 6 and reversalOption == 7):
                             if sys.version_info >= (3, 11):
@@ -611,7 +644,7 @@ class StockScreener:
                                 daysToLookback=configManager.daysToLookback,
                                 alreadyBrokenout=(executeOption == 2),
                             )
-                        if isNotMonitoringDashboard and executeOption != 3:
+                        if (isNotMonitoringDashboard and executeOption != 3) or (self.configManager.alwaysExportToExcel):
                             screener.validateConsolidation(
                                 processedData,
                                 screeningDictionary,
@@ -659,6 +692,7 @@ class StockScreener:
                             data,
                             stock,
                             backtestDuration,
+                            runOptionKey
                         )
 
         except KeyboardInterrupt: # pragma: no cover
@@ -719,13 +753,13 @@ class StockScreener:
             # if userArgsLog:
             #     hostRef.default_logger.debug(f"Exception:{stock}: {e}", exc_info=True)
             if testbuild or printCounter:
-                # import traceback
-                # traceback.print_exc()
+                import traceback
+                traceback.print_exc()
                 OutputControls().printOutput(e)
                 OutputControls().printOutput(
                     colorText.FAIL
                     + (
-                        "\n[+] Exception Occured while Screening %s! Skipping this stock.."
+                        "\n  [+] Exception Occured while Screening %s! Skipping this stock.."
                         % stock
                     )
                     + colorText.END
@@ -785,6 +819,8 @@ class StockScreener:
                 isValid = screener.findPotentialProfitableEntriesFrequentHighsBullishMAs(processedData,fullData, saveDictionary,screeningDictionary)
             elif subMenuOption == 2:
                 isValid = screener.findPotentialProfitableEntriesBullishTodayForPDOPDC(processedData,saveDictionary,screeningDictionary)
+            elif subMenuOption == 3:
+                isValid = screener.findPotentialProfitableEntriesForFnOTradesAbove50MAAbove200MA5Min(intraday_data,fullData,saveDictionary,screeningDictionary)
         elif executeOption == 34: # findBullishAVWAP
             isValid = screener.findBullishAVWAP(fullData,screeningDictionary,saveDictionary)
         elif executeOption == 35: # findPerfectShortSellsFutures
@@ -846,14 +882,15 @@ class StockScreener:
             'High':'max',
             'Low':'min',
             'Close':'last',
+            'Adj Close': 'last',
             'Volume':'sum'
         }
-        # final_df = df.resample('W-FRI', closed='left').agg(ohlc_dict).shift('1d')
-        # weeklyData = data.resample('W').agg(ohlc_dict)
-        candleDuration = self.configManager.duration[:-1]
-        durationFrequency = "T" if self.configManager.duration.endswith("m") else ("H" if self.configManager.duration.endswith("h") else ("M" if self.configManager.duration.endswith("mo") else ("W" if self.configManager.duration.endswith("wk") else "T")))
-        if int(candleDuration) >= 1 and (self.configManager.duration.endswith("m") or self.configManager.duration.endswith("h") or self.configManager.duration.endswith("mo") or self.configManager.duration.endswith("wk")):
+        candleDuration = self.configManager.candleDurationInt
+        candleDurationFrequency = self.configManager.candleDurationFrequency
+        durationFrequency = "T" if candleDurationFrequency=="m" else ("H" if candleDurationFrequency=="h" else ("M" if candleDurationFrequency=="mo" else ("W" if candleDurationFrequency=="wk" else "T")))
+        if int(candleDuration) >= 1 and (candleDurationFrequency in ["m","h","mo","wk"]):
             data = data.resample(f'{candleDuration}{durationFrequency}', offset='15min').agg(ohlc_dict)
+            data = data[data["High"]>0] # resampling can introduce 0 value rows for non-market hours
         if backtestDuration == 0:
             fullData, processedData = screener.preprocessData(
                     data, daysToLookback=configManager.effectiveDaysToLookback
@@ -896,7 +933,7 @@ class StockScreener:
         hostDataLength = 0 if hostData is None else (0 if "data" not in hostData.keys() else len(hostData["data"]))
         start = None
         lastTradingDate = PKDateUtilities.tradingDate().strftime("%Y-%m-%d")
-        if (period == '1d' or configManager.duration[-1] == "m"):
+        if (configManager.candlePeriodFrequency in ["d","mo"] and configManager.candleDurationFrequency in ["m","h"]):
             if backtestDuration > 0: # We are backtesting
                 start = PKDateUtilities.nthPastTradingDateStringFromFutureDate(backtestDuration)
                 end = PKDateUtilities.nthPastTradingDateStringFromFutureDate(backtestDuration-1)
@@ -912,6 +949,10 @@ class StockScreener:
             ):
             if testData is not None:
                 data = testData
+                data.reset_index(inplace=True)
+                data["Date"] = pd.to_datetime(data['index'].astype(int)/1000,unit='s')
+                data.set_index("Date", inplace=True)
+                data.drop("index",axis=1,inplace=True)
             else:
                 data = fetcher.fetchStockData(
                         stock,
@@ -967,7 +1008,18 @@ class StockScreener:
                 else:
                     hostRef.default_logger.debug(e, exc_info=True)
                 pass
-
+        if "Datetime" in data.columns: # for intraday data, the column name is Datetime
+            with pd.option_context('mode.chained_assignment', None):
+                data["Date"] = data["Datetime"]
+        try:
+            data.reset_index(inplace=True)
+            if "Datetime" in data.columns and "Date" not in data.columns:
+                data.rename(columns={"Datetime": "Date"}, inplace=True)
+            else:
+                data.rename(columns={"index": "Date"}, inplace=True)
+            data.set_index("Date", inplace=True)
+        except:
+            pass
         if ((shouldCache and not self.isTradingTime and (hostData is None  or hostDataLength == 0)) or downloadOnly) \
             or (shouldCache and hostData is None):  # and backtestDuration == 0 # save only if we're NOT backtesting
                 if start is None or start is lastTradingDate and data is not None:
@@ -1000,8 +1052,7 @@ class StockScreener:
         if printCounter:
             try:
                 OutputControls().printOutput(
-                            colorText.BOLD
-                            + colorText.GREEN
+                            colorText.GREEN
                             + (
                                 "[%d%%] Screened %d, Found %d. Fetching data & Analyzing %s..."
                                 % (
@@ -1018,8 +1069,7 @@ class StockScreener:
                             end="",
                         )
                 OutputControls().printOutput(
-                            colorText.BOLD
-                            + colorText.GREEN
+                            colorText.GREEN
                             + "=> Done!"
                             + colorText.END,
                             end="\r",

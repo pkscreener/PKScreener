@@ -34,6 +34,14 @@ from PKDevTools.classes import Archiver
 from PKDevTools.classes.SuppressOutput import SuppressOutput
 from PKDevTools.classes.log import default_logger
 
+# This code defines a MarketMonitor class that manages the monitoring of stock market data. 
+# It utilizes the Singleton design pattern to ensure only one instance of the class exists. 
+# The class initializes with a list of monitors and various configuration parameters, 
+# and provides methods for updating and displaying stock data, handling alerts, 
+# and formatting output for a console or Telegram integration. 
+# Key functionalities include refreshing the monitor data, saving results, 
+# and managing display options based on user-defined settings.
+
 class MarketMonitor(SingletonMixin, metaclass=SingletonType):
     def __init__(self,monitors=[], maxNumResultsPerRow=3,maxNumColsInEachResult=6,maxNumRowsInEachResult=10,maxNumResultRowsInMonitor=2,pinnedIntervalWaitSeconds=30,alertOptions=[]):
         super(MarketMonitor, self).__init__()
@@ -45,6 +53,7 @@ class MarketMonitor(SingletonMixin, metaclass=SingletonType):
             self.monitorResultStocks = {}
             self.alertOptions = alertOptions
             self.hiddenColumns = ""
+            self.alertStocks = []
             self.pinnedIntervalWaitSeconds = pinnedIntervalWaitSeconds
             # self.monitorNames = {}
             # We are going to present the dataframes in a 3x3 matrix with limited set of columns
@@ -92,6 +101,16 @@ class MarketMonitor(SingletonMixin, metaclass=SingletonType):
             prevOutput_results = prevOutput_results.index
             # # Maybe the index is an int ?
             # prevOutput_results = [str(stock) for stock in prevOutput_results]
+            try:
+                lastSavedResults = self.monitorResultStocks[str(self.monitorIndex)]
+                if lastSavedResults is not None and len(lastSavedResults) > 0:
+                    lastSavedResults = lastSavedResults.split(",")
+                    s = set(lastSavedResults)
+                    self.alertStocks = [x for x in prevOutput_results if x not in s]
+                else:
+                    self.alertStocks = []
+            except:
+                pass
             prevOutput_results = ",".join(prevOutput_results)
         self.monitorResultStocks[str(self.monitorIndex)] = prevOutput_results
 
@@ -129,9 +148,7 @@ class MarketMonitor(SingletonMixin, metaclass=SingletonType):
         if monitorPosition is not None:
             startRowIndex, startColIndex = monitorPosition
             if not self.monitor_df.empty:
-                for _ in range(self.lines):
-                    sys.stdout.write("\x1b[1A")  # cursor up one line
-                    sys.stdout.write("\x1b[2K")  # delete the last line
+                OutputControls().moveCursorUpLines(self.lines)
             if not self.isPinnedSingleMonitorMode:
                 firstColIndex = startColIndex
                 rowIndex = 0
@@ -155,10 +172,16 @@ class MarketMonitor(SingletonMixin, metaclass=SingletonType):
                                 widgetHeader = ":".join(cleanedScreenOptions.split(":")[:4])
                                 if "i " in screenOptions:
                                     widgetHeader = f'{":".join(widgetHeader.split(":")[:3])}:i:{cleanedScreenOptions.split("i ")[-1]}'
-                            self.monitor_df.loc[startRowIndex,[f"A{startColIndex+1}"]] = colorText.BOLD+colorText.HEAD+(widgetHeader if startColIndex==firstColIndex else col)+colorText.END
+                            self.monitor_df.loc[startRowIndex,[f"A{startColIndex+1}"]] = colorText.HEAD+(widgetHeader if startColIndex==firstColIndex else col)+colorText.END
                             highlightCols.append(startColIndex)
                         else:
-                            self.monitor_df.loc[startRowIndex, [f"A{startColIndex+1}"]] = screen_monitor_df.iloc[rowIndex-1,colIndex]
+                            if colIndex == 0:
+                                stockNameDecorated = screen_monitor_df.iloc[rowIndex-1,colIndex]
+                                stockName = Utility.tools.stockNameFromDecoratedName(stockNameDecorated)
+                                stockName = (f"{colorText.BOLD}{colorText.WHITE_FG_BRED_BG}{stockNameDecorated}{colorText.END}") if stockName in self.alertStocks else stockNameDecorated
+                                self.monitor_df.loc[startRowIndex, [f"A{startColIndex+1}"]] = stockName
+                            else:
+                                self.monitor_df.loc[startRowIndex, [f"A{startColIndex+1}"]] = screen_monitor_df.iloc[rowIndex-1,colIndex]
                             colIndex += 1
                         startColIndex += 1
                     _, startColIndex= monitorPosition
@@ -166,13 +189,21 @@ class MarketMonitor(SingletonMixin, metaclass=SingletonType):
                     colIndex = 0
                     highlightRows.append(startRowIndex+1)
                     startRowIndex += 1
+            else:
+                stocks = list(self.monitor_df.index)
+                updatedStocks = []
+                for stock in stocks:
+                    stockName = Utility.tools.stockNameFromDecoratedName(stock)
+                    stockName = (f"{colorText.BOLD}{colorText.WHITE_FG_BRED_BG}{stock}{colorText.END}") if stockName in self.alertStocks else stock
+                    updatedStocks.append(stockName)
+                self.monitor_df.reset_index(inplace=True)
+                self.monitor_df["Stock"] = updatedStocks
+                self.monitor_df.set_index("Stock",inplace=True)
 
         self.monitor_df = self.monitor_df.replace(np.nan, "-", regex=True)
-        # self.monitorNames[screenOptions] = f"(Dashboard) > {chosenMenu}"
-        latestScanMenuOption = f"[+] {dbTimestamp} (Dashboard) > " + f"{chosenMenu} [{screenOptions}]"
+        latestScanMenuOption = f"  [+] {dbTimestamp} (Dashboard) > " + f"{chosenMenu[:190]} [{screenOptions}]"
         OutputControls().printOutput(
-            colorText.BOLD
-            + colorText.FAIL
+            colorText.FAIL
             + latestScanMenuOption[:200]
             + colorText.END
             , enableMultipleLineOutput=True
@@ -201,14 +232,14 @@ class MarketMonitor(SingletonMixin, metaclass=SingletonType):
             except:
                 console_results = tabulated_results
         numRecords = len(tabulated_results.splitlines())
-        self.lines = numRecords + 1 # 1 for the progress bar at the bottom and 1 for the chosenMenu option
+        self.lines = numRecords #+ 1 #(1 if len(self.monitorResultStocks.keys()) <= self.maxNumColsInEachResult else 0) # 1 for the progress bar at the bottom and 1 for the chosenMenu option
         OutputControls().printOutput(tabulated_results if not self.isPinnedSingleMonitorMode else console_results, enableMultipleLineOutput=True)
         
+        if not telegram and ((screenOptions in self.alertOptions and numRecords > 1) or len(self.alertStocks) > 0): # Alert conditions met? Sound alert!
+            Utility.tools.alertSound(beeps=5)
         if not self.isPinnedSingleMonitorMode:
             if telegram:
                 self.updateIfRunningInTelegramBotMode(screenOptions, chosenMenu, dbTimestamp, telegram, telegram_df)
-            elif screenOptions in self.alertOptions and numRecords > 1: # RSI conditions met? Sound alert!
-                Utility.tools.alertSound(beeps=5)
         else:
             sleep(self.pinnedIntervalWaitSeconds)
 
@@ -258,7 +289,7 @@ class MarketMonitor(SingletonMixin, metaclass=SingletonType):
             chosenMenu = f"{choiceSegments[-2]}>{choiceSegments[-1]}" if (len(choiceSegments)>=4 or len(choiceSegments[-1]) <= 10) else f"{choiceSegments[-1]}"
             result_output = f"Latest data as of:{dbTimestamp}\n<b>{optionName}{chosenMenu}</b> [{screenOptions}]\n<pre>{telegram_df_tabulated}</pre>"
             try:
-                filePath = os.path.join(Archiver.get_user_outputs_dir(), f"monitor_outputs_{self.monitorIndex}.txt")
+                filePath = os.path.join(Archiver.get_user_data_dir(), f"monitor_outputs_{self.monitorIndex}.txt")
                 f = open(filePath, "w")
                 f.write(result_output)
                 f.close()
@@ -267,6 +298,8 @@ class MarketMonitor(SingletonMixin, metaclass=SingletonType):
 
     def getScanOptionName(self, screenOptions):
         from pkscreener.classes.MenuOptions import PREDEFINED_SCAN_MENU_VALUES
+        if screenOptions is None:
+            return ""
         choices = f"--systemlaunched -a y -e -o '{screenOptions.replace('C:','X:').replace('D:','')}'"
         indexNum = -1
         try:

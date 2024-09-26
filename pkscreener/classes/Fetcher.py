@@ -99,16 +99,18 @@ class screenerStockDataFetcher(nseStockDataFetcher):
         elif isinstance(stockCode,str):
             if len(exchangeSuffix) > 0:
                 stockCode = f"{stockCode}{exchangeSuffix}" if (not stockCode.endswith(exchangeSuffix) and not stockCode.startswith("^")) else stockCode
-        if (period == '1d' or duration[-1] == "m"):
+        if (period in ["1d","5d","1mo","3mo","5mo"] or duration[-1] in ["m","h"]):
             # Since this is intraday data, we'd just need to start from the last trading session
-            if start is None:
-                start = PKDateUtilities.tradingDate().strftime("%Y-%m-%d")
-            if end is None:
-                end = PKDateUtilities.currentDateTime().strftime("%Y-%m-%d")
-            if start == end:
+            # if start is None:
+            #     start = PKDateUtilities.tradingDate().strftime("%Y-%m-%d")
+            # if end is None:
+            #     end = PKDateUtilities.currentDateTime().strftime("%Y-%m-%d")
+            # if start == end:
                 # If we send start and end dates for intraday, it comes back with empty dataframe
-                start = None
-                end = None
+            start = None
+            end = None
+            # if duration == "1m" and period == "1d":
+            #     period = "5d" # Download 1m data for the last 5 days
         data = None
         with SuppressOutput(suppress_stdout=(not printCounter), suppress_stderr=(not printCounter)):
             try:
@@ -128,8 +130,15 @@ class screenerStockDataFetcher(nseStockDataFetcher):
                     for ticker in shared._ERRORS:
                         err = shared._ERRORS.get(ticker)
                         # Maybe this stock is recently listed. Let's try and fetch for the last month
-                        if "YFInvalidPeriodError" in err and "Period \'1mo\' is invalid" not in err:
-                            data = self.fetchStockData(stockCode=ticker,period='1mo',duration=duration,printCounter=printCounter, start=start,end=end)
+                        if "YFInvalidPeriodError" in err: #and "Period \'1mo\' is invalid" not in err:
+                            recommendedPeriod = period
+                            if isinstance(err,YFInvalidPeriodError):
+                                recommendedPeriod = err.valid_ranges[-1]
+                            else:
+                                recommendedPeriod = str(err).split("[")[1].split("]")[0].split(",")[-1].strip()
+                            recommendedPeriod = recommendedPeriod.replace("'","").replace("\"","")
+                            # default_logger().debug(f"Sending request again for {ticker} with period:{recommendedPeriod}")
+                            data = self.fetchStockData(stockCode=ticker,period=recommendedPeriod,duration=duration,printCounter=printCounter, start=start,end=end)
                             return data
             except (KeyError,YFPricesMissingError) as e:
                 default_logger().debug(e,exc_info=True)
@@ -140,8 +149,7 @@ class screenerStockDataFetcher(nseStockDataFetcher):
             sys.stdout.write("\r\033[K")
             try:
                 OutputControls().printOutput(
-                    colorText.BOLD
-                    + colorText.GREEN
+                    colorText.GREEN
                     + (
                         "[%d%%] Screened %d, Found %d. Fetching data & Analyzing %s..."
                         % (
@@ -162,8 +170,7 @@ class screenerStockDataFetcher(nseStockDataFetcher):
                 pass
             if len(data) == 0:
                 OutputControls().printOutput(
-                    colorText.BOLD
-                    + colorText.FAIL
+                    colorText.FAIL
                     + "=> Failed to fetch!"
                     + colorText.END,
                     end="\r",
@@ -171,7 +178,7 @@ class screenerStockDataFetcher(nseStockDataFetcher):
                 )
                 raise StockDataEmptyException
             OutputControls().printOutput(
-                colorText.BOLD + colorText.GREEN + "=> Done!" + colorText.END,
+                colorText.GREEN + "=> Done!" + colorText.END,
                 end="\r",
                 flush=True,
             )
@@ -234,9 +241,8 @@ class screenerStockDataFetcher(nseStockDataFetcher):
         except FileNotFoundError as e:  # pragma: no cover
             default_logger().debug(e, exc_info=True)
             OutputControls().printOutput(
-                colorText.BOLD
-                + colorText.FAIL
-                + f"[+] watchlist.xlsx not found in {os.getcwd()}"
+                colorText.FAIL
+                + f"  [+] watchlist.xlsx not found in {os.getcwd()}"
                 + colorText.END
             )
             createTemplate = True
@@ -246,9 +252,8 @@ class screenerStockDataFetcher(nseStockDataFetcher):
         except KeyError as e: # pragma: no cover
             default_logger().debug(e, exc_info=True)
             OutputControls().printOutput(
-                colorText.BOLD
-                + colorText.FAIL
-                + '[+] Bad Watchlist Format: First Column (A1) should have Header named "Stock Code"'
+                colorText.FAIL
+                + '  [+] Bad Watchlist Format: First Column (A1) should have Header named "Stock Code"'
                 + colorText.END
             )
             createTemplate = True
@@ -257,9 +262,8 @@ class screenerStockDataFetcher(nseStockDataFetcher):
             sample_data = pd.DataFrame(sample, columns=["Stock Code"])
             sample_data.to_excel("watchlist_template.xlsx", index=False, header=True)
             OutputControls().printOutput(
-                colorText.BOLD
-                + colorText.BLUE
-                + f"[+] watchlist_template.xlsx created in {os.getcwd()} as a referance template."
+                colorText.BLUE
+                + f"  [+] watchlist_template.xlsx created in {os.getcwd()} as a referance template."
                 + colorText.END
             )
             return None

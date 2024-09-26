@@ -9,7 +9,7 @@ mistletoe
 pep517
 pip
 pip-chill
-pyinstaller
+pyinstaller==6.8.0
 pytest
 pytest-cov
 pytest-mock

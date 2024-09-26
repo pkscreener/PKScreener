@@ -30,8 +30,7 @@ from pkscreener.classes.OtaUpdater import OTAUpdater
 
 def changelog():
     return (
-        colorText.BOLD
-        + "[ChangeLog]\n"
+        "[ChangeLog]\n"
         + colorText.END
         + colorText.GREEN
         + OTAUpdater.showWhatsNew()

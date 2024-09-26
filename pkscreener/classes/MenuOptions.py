@@ -37,6 +37,7 @@ LINE_SEPARATOR = "\n"
 
 level0MenuDict = {
     "X": "Scanners",
+    "F": "Find a stock in scanners",
     "M": "Monitor Intraday",
     "S": "Strategies",
     "B": "Backtests",
@@ -49,7 +50,7 @@ level0MenuDict = {
     "Y": "View your user configuration",
     "U": "Check for software update",
     "L": "Collect Logs for Debugging",
-    "H": "Help / About Developer",
+    "H": "About PKScreener",
     "Z": "Exit (Ctrl + C)",
 }
 level1_index_options_sectoral= {
@@ -105,6 +106,7 @@ level1_P_MenuDict = {
     "1": "Predefined Piped Scanners",
     "2": "Define my custom Piped Scanner",
     "3": "Run Piped Scans Saved So Far",
+    "4": "Predefined Piped Scanners for My Watchlist",
     "M": "Back to the Top/Main menu",
 }
 LEVEL_1_DATA_DOWNLOADS = {
@@ -115,7 +117,7 @@ LEVEL_1_DATA_DOWNLOADS = {
     "M": "Back to the Top/Main menu",
 }
 PREDEFINED_SCAN_ALERT_MENU_KEYS = ["1","5","6","8","18","22","25","27","28","29","30","31"]
-PREDEFINED_SCAN_MENU_KEYS = ["1","2","3","4","5","6","7","8","9","10","11","12","13","14","15","16","17","18","19","20", "21", "22", "23", "24", "25","26","27","28","29","30","31"]
+PREDEFINED_SCAN_MENU_KEYS = ["1","2","3","4","5","6","7","8","9","10","11","12","13","14","15","16","17","18","19","20", "21", "22", "23", "24", "25","26","27","28","29","30","31","32"]
 PREDEFINED_SCAN_MENU_TEXTS = [
     "Volume Scanners | High Momentum | Breaking Out Now | ATR Cross     ",  # 1
     "Volume Scanners | High Momentum | ATR Cross",                          # 2
@@ -143,16 +145,18 @@ PREDEFINED_SCAN_MENU_TEXTS = [
     "BullCross-VWAP | Volume Scanners",                                     # 24
     "BullCross-VWAP | ATR Cross | ATR Trailing Stop                     ",  # 25
     "Super-Confluence | ATR Trailing Stop                               ",  # 26
-    "BullCross-VWAP | Super-Confluence                                  ",  # 27
+    "BullCross-VWAP | Super-Confluence (BTST)                           ",  # 27
     "VCP | Volume-Breakout                                              ",  # 28
     "VCP | Volume-Breakout | Price Breakout                             ",  # 29
     "VCP | Super-Confluence                                             ",  # 30
     "Bullish Today x PDO/PDC | VCP                                      ",  # 31
+    "Intraday(15m) VCP | Breaking out now                               ",  # 32
 ]
 level2_P_MenuDict = {}
 for key in PREDEFINED_SCAN_MENU_KEYS:
     level2_P_MenuDict[key] = PREDEFINED_SCAN_MENU_TEXTS[int(key)-1]
 level2_P_MenuDict["M"] = "Back to the Top/Main menu"
+NA_NON_MARKET_HOURS = ["X:12:9:2.5:>|X:0:29:"]
 PREDEFINED_SCAN_MENU_VALUES =[
     "--systemlaunched -a y -e -o 'X:12:9:2.5:>|X:0:31:>|X:0:23:>|X:0:27:'", # 1
     "--systemlaunched -a y -e -o 'X:12:9:2.5:>|X:0:31:>|X:0:27:'",          # 2
@@ -187,14 +191,30 @@ PREDEFINED_SCAN_MENU_VALUES =[
     "--systemlaunched -a y -e -o 'X:12:7:4:>|X:0:9:2.5:>|X:0:27:'",         # 29
     "--systemlaunched -a y -e -o 'X:12:7:4:>|X:0:7:3:0.008:4:'",            # 30
     "--systemlaunched -a y -e -o 'X:12:33:2:>|X:0:7:4:'",                   # 31
+    "--systemlaunched -a y -e -o 'X:14:7:4:i 15m:>|X:0:23:i 15m:'",         # 32
 ]
-PREDEFINED_PIPED_MENU_OPTIONS = []
+PREDEFINED_PIPED_MENU_ANALYSIS_OPTIONS = []
+PREDEFINED_PIPED_MENU_OPTIONS = {}
+pipedIndex = 0
 for option in PREDEFINED_SCAN_MENU_VALUES:
+    pipedOptions = []
     argOptions = option.split("-o ")[-1]
     analysisOptions = argOptions.split("|")
+    for analysisOption in analysisOptions:
+        analysisOption = analysisOption.replace(">","").replace("X:0:","X:12:").replace("'","").replace("\"","")
+        if "." in analysisOption:
+            inputOptions = analysisOption.split(":")
+            inputOptionsCopy = inputOptions
+            for inputOption in inputOptions:
+                if "." in inputOption:
+                    inputOptionsCopy.remove(inputOption)
+            analysisOption = ":".join(inputOptionsCopy)
+        pipedOptions.append(analysisOption)
+    PREDEFINED_PIPED_MENU_OPTIONS[f"P_1_{PREDEFINED_SCAN_MENU_KEYS[pipedIndex]}"] = pipedOptions
+    pipedIndex += 1
     analysisOptions[-1] = analysisOptions[-1].replace("X:","C:")
     argOptions = "|".join(analysisOptions)
-    PREDEFINED_PIPED_MENU_OPTIONS.append(argOptions.replace("'","").replace("\"",""))
+    PREDEFINED_PIPED_MENU_ANALYSIS_OPTIONS.append(argOptions.replace("'","").replace("\"",""))
 
 PIPED_SCANNERS = {}
 for key in PREDEFINED_SCAN_MENU_KEYS:
@@ -211,18 +231,18 @@ level1_T_MenuDict = {
 # Valid intervals: 1m,2m,5m,15m,30m,60m,90m,1h,1d,5d,1wk,1mo,3mo
 level2_T_MenuDict_L = {
     "1": "Daily (1y, 1d)",
-    "2": "Weekly (1y, 1wk)",
-    "3": "Monthly (1y, 1mo)",
-    "4": "Hourly (1y, 1h)",
+    "2": "Weekly (5y, 1wk)",
+    "3": "Monthly (max, 1mo)",
+    "4": "Hourly (3mo, 1h)",
     "5": "Custom",
 
     "M": "Back to the Top/Main menu",
 }
 level2_T_MenuDict_S = {
     "1": "1m (1d, 1m)",
-    "2": "5m (1d, 5m)",
-    "3": "15m (1d, 15m)",
-    "4": "30m (1d, 30m)",
+    "2": "5m (5d, 5m)",
+    "3": "15m (1mo, 15m)",
+    "4": "30m (1mo, 30m)",
     "5": "Custom",
 
     "M": "Back to the Top/Main menu",
@@ -343,6 +363,7 @@ level3_X_Reversal_MenuDict = {
 level3_X_PotentialProfitable_MenuDict = {
     "1": "Frequent highs with bullish MAs",
     "2": "Bullish Today for Previous Day Open/Close (PDO/PDC) with 1M Volume",
+    "3": "FnO Trades > 2% /Above 50MA/200MA(5Min)",
 
     "0": "Cancel",
 }
@@ -377,7 +398,7 @@ level4_X_ChartPattern_BBands_SQZ_MenuDict = {
     "1": "TTM Squeeze-Buy",
     "2": "TTM In-Squeeze",
     "3": "TTM Squeeze-Sell",
-    "4": "All/Any",
+    "4": "Any/All",
 
     "0": "Cancel",
 }
@@ -437,8 +458,8 @@ PRICE_CROSS_SMA_EMA_TYPE_MENUDICT = {
 }
 
 PRICE_CROSS_SMA_EMA_DIRECTION_MENUDICT = {
-    "1": "Crosses From Above",
-    "2": "Crosses From Below",
+    "1": "Price Crosses From Above (Sell)",
+    "2": "Price Crosses From Below (Buy)",
 
     "0": "Cancel"
 }
@@ -450,14 +471,14 @@ class MenuRenderStyle(Enum):
 
 
 class menu:
-    def __init__(self):
-        self.menuKey = ""
+    def __init__(self,menuKey="",level=0,parent=None):
+        self.menuKey = menuKey
         self.menuText = ""
         self.submenu = None
-        self.level = 0
+        self.level = level
         self.isException = None
         self.hasLeftSibling = False
-        self.parent = None
+        self.parent = parent
         self.line = 0
         self.lineIndex = 0
 
@@ -541,31 +562,77 @@ class menus:
     def allMenus(topLevel="X",index=12):
         menuOptions = [topLevel]
         indexOptions =[index]
-        scanOptions = [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,23,24,25,27,28,30,31,32]
-        scanSubOptions = {
-                            6:[1,2,3,4,5,6,{7:[1,2]},8,9,10],
-                            7:[1,2,{3:[1,2]},4,5,{6:[1,3]},7,8,{9:[1,2,3,4,5,6]}],
-                            21:[3,5,6,7,8,9],
-                            30:[1,2],
-                            32:[1,2],
-                         }
+        # Ignore the option "0" and the last 3 menu keys because 
+        # those are to exit, going back to main menu and showing 
+        # last screen results 
+        scanOptionKeys = list(level2_X_MenuDict.keys()) #[1:-3]
+        # These have to be ignored because these are irrelevant from 
+        # scan perspective
+        scanOptionsToIgnore = ["0","22","26","29",str(MAX_MENU_OPTION),"M","Z"]
+        from PKDevTools.classes.PKDateUtilities import PKDateUtilities
+        isTrading = PKDateUtilities.isTradingTime()
+        if isTrading:
+            # Don't ignore the bid/ask difference scan option if it's 
+            # trading hour. Bid vs ask can only be run during trading 
+            # hours.
+            scanOptionsToIgnore.remove("29")
+        for scanOption in scanOptionsToIgnore:
+            scanOptionKeys.remove(scanOption)
+        scanOptions = scanOptionKeys
         runOptions = []
+        topMenu = menu(menuKey=topLevel,level=0)
         for menuOption in menuOptions:
             for indexOption in indexOptions:
-                for scanOption in scanOptions:
-                    if scanOption in scanSubOptions.keys():
-                        for scanSubOption in scanSubOptions[scanOption]:
-                            if isinstance(scanSubOption, dict):
-                                for childLevelOption in scanSubOption.keys():
-                                    for value in scanSubOption[childLevelOption]:
-                                        runOption = f"{menuOption}:{indexOption}:{scanOption}:{childLevelOption}:{value}:D:D:D:D:D"
-                                        runOptions.append(runOption)
-                            else:
-                                runOption = f"{menuOption}:{indexOption}:{scanOption}:{scanSubOption}:D:D:D:D:D"
-                                runOptions.append(runOption)
-                    else:
-                        runOption = f"{menuOption}:{indexOption}:{scanOption}:D:D:D:D:D"
+                parentMenu = menu(menuKey=scanOptions[0],level=1,parent=topMenu)
+                menuItems = menus()
+                childMenus  = menuItems.renderForMenu(parentMenu,asList=True)
+                for childMenu in childMenus:
+                    if childMenu.menuKey in scanOptionsToIgnore:
+                        continue
+                    level1ChildMenus  = menuItems.renderForMenu(childMenu,asList=True)
+                    if level1ChildMenus is None:
+                        runOption = f"{menuOption}:{indexOption}:{childMenu.menuKey}:D:D:D:D:D"
                         runOptions.append(runOption)
+                    else:
+                        for level1ChildMenu in level1ChildMenus:
+                            if level1ChildMenu.menuText in ["Any/All","Cancel"]:
+                                continue
+                            level2ChildMenus  = menuItems.renderForMenu(level1ChildMenu,asList=True)
+                            if level2ChildMenus is None:
+                                runOption = f"{menuOption}:{indexOption}:{childMenu.menuKey}:{level1ChildMenu.menuKey}:D:D:D:D:D"
+                                runOptions.append(runOption)
+                            else:
+                                for level2ChildMenu in level2ChildMenus:
+                                    if level2ChildMenu.menuText in ["Any/All","Cancel"]:
+                                        continue
+                                    level3ChildMenus  = menuItems.renderForMenu(level2ChildMenu,asList=True)
+                                    if level3ChildMenus is None:
+                                        runOption = f"{menuOption}:{indexOption}:{childMenu.menuKey}:{level1ChildMenu.menuKey}:{level2ChildMenu.menuKey}:D:D:D:D:D"
+                                        runOptions.append(runOption)
+                                    else:
+                                        for level3ChildMenu in level3ChildMenus:
+                                            if level3ChildMenu.menuText in ["Any/All","Cancel"]:
+                                                continue
+                                            level4ChildMenus  = menuItems.renderForMenu(level3ChildMenu,asList=True)
+                                            if level4ChildMenus is None:
+                                                runOption = f"{menuOption}:{indexOption}:{childMenu.menuKey}:{level1ChildMenu.menuKey}:{level2ChildMenu.menuKey}:{level3ChildMenu.menuKey}:D:D:D:D:D"
+                                                runOptions.append(runOption)
+                                            else:
+                                                for level4ChildMenu in level4ChildMenus:
+                                                    if level4ChildMenu.menuText in ["Any/All","Cancel"]:
+                                                        continue
+                                                    level5ChildMenus  = menuItems.renderForMenu(level4ChildMenu,asList=True)
+                                                    if level5ChildMenus is None:
+                                                        runOption = f"{menuOption}:{indexOption}:{childMenu.menuKey}:{level1ChildMenu.menuKey}:{level2ChildMenu.menuKey}:{level3ChildMenu.menuKey}:{level4ChildMenu.menuKey}:D:D:D:D:D"
+                                                        runOptions.append(runOption)
+                                                    else:
+                                                        for level5ChildMenu in level5ChildMenus:
+                                                            if level5ChildMenu.menuText in ["Any/All","Cancel"]:
+                                                                continue
+                                                            level6ChildMenus  = menuItems.renderForMenu(level5ChildMenu,asList=True)
+                                                            if level6ChildMenus is None:
+                                                                runOption = f"{menuOption}:{indexOption}:{childMenu.menuKey}:{level1ChildMenu.menuKey}:{level2ChildMenu.menuKey}:{level3ChildMenu.menuKey}:{level4ChildMenu.menuKey}:{level5ChildMenu.menuKey}:D:D:D:D:D"
+                                                                runOptions.append(runOption)
         return runOptions
 
     def __init__(self):
@@ -634,15 +701,20 @@ class menus:
                 menuText = menuText + m.render(coloredValues=([] if asList else coloredValues))
         return menuText
 
-    def renderPinnedMenu(self,substitutes=[]):
-        return self.renderPinSubmenus(substitutes=substitutes)
+    def renderPinnedMenu(self,substitutes=[],skip=[]):
+        return self.renderMenuFromDictionary(dict=Pin_MenuDict,
+                                                 exceptionKeys=["M"],
+                                                 coloredValues=(["M"]),
+                                                 defaultMenu="M",
+                                                 substitutes = substitutes,
+                                                 skip=skip)
     
     def renderForMenu(self, selectedMenu:menu=None, skip=[], asList=False, renderStyle=None):
         if selectedMenu is None and self.level == 0:
             # Top level Application Main menu
             return self.renderMenuFromDictionary(dict=level0MenuDict,
-                                                 exceptionKeys=["X", "T", "E", "U", "Z", "L", "D"],
-                                                 coloredValues=(["P"] if not asList else []),
+                                                 exceptionKeys=["T", "E", "U", "Z", "L", "D", "M", "P"],
+                                                 coloredValues=(["P","F","X"] if not asList else []),
                                                  defaultMenu="P",
                                                  skip=skip, 
                                                  asList=asList, 
@@ -651,28 +723,47 @@ class menus:
                                                  checkUpdate=True)
         elif selectedMenu is not None:
             if selectedMenu.menuKey == "S" and selectedMenu.level == 0:
-                    return self.renderLevel1_S_Menus(
-                    skip=skip,
-                    asList=asList,
-                    renderStyle=renderStyle,
-                    parent=selectedMenu,
-                )
+                strategies = self.strategyNames
+                counter = 1
+                menuDict = {}
+                for strategyName in strategies:
+                    menuDict[f"{counter}"] = strategyName.ljust(20)
+                    counter += 1
+                for key in level1_S_MenuDict.keys():
+                    menuDict[key] = level1_S_MenuDict[key]
+                return self.renderMenuFromDictionary(dict=menuDict,
+                                                 exceptionKeys=level1_S_MenuDict.keys(),
+                                                 skip=skip, 
+                                                 asList=asList, 
+                                                 renderStyle=renderStyle
+                                                    if renderStyle is not None
+                                                    else MenuRenderStyle.THREE_PER_ROW, 
+                                                 parent=selectedMenu,
+                                                 checkUpdate=False)
             if selectedMenu.level == 0:
                 self.level = 1
                 if selectedMenu.menuKey in ["T"]:
-                    return self.renderLevel1_T_Menus(
-                        skip=skip,
-                        asList=asList,
-                        renderStyle=renderStyle,
-                        parent=selectedMenu,
-                    )
+                    defaultKey = 'L' if configManager.period == '1y' else 'S'
+                    return self.renderMenuFromDictionary(dict=level1_T_MenuDict,
+                                                 exceptionKeys=["M", "B"],
+                                                 coloredValues=([defaultKey,"B"]),
+                                                 defaultMenu=defaultKey,
+                                                 skip=skip, 
+                                                 asList=asList, 
+                                                 optionText="  [+] Select a configuration period for Screening:",
+                                                 renderStyle=renderStyle, 
+                                                 parent=selectedMenu,
+                                                 checkUpdate=False)
                 elif selectedMenu.menuKey in ["P"]:
-                    return self.renderLevel1_P_Menus(
-                        skip=skip,
-                        asList=asList,
-                        renderStyle=renderStyle,
-                        parent=selectedMenu,
-                    )
+                    return self.renderMenuFromDictionary(dict=level1_P_MenuDict,
+                                                 exceptionKeys=["M", "4"],
+                                                 coloredValues=(["1"] if not asList else []),
+                                                 defaultMenu="1",
+                                                 skip=skip, 
+                                                 asList=asList, 
+                                                 renderStyle=renderStyle, 
+                                                 parent=selectedMenu,
+                                                 checkUpdate=False)
                 elif selectedMenu.menuKey in ["D"]:
                     return self.renderMenuFromDictionary(dict=LEVEL_1_DATA_DOWNLOADS,
                                                          exceptionKeys=["M",],
@@ -685,12 +776,17 @@ class menus:
                                                          checkUpdate=False)
                 else:
                     # sub-menu of the top level main selected menu
-                    return self.renderLevel1_X_Menus(
-                        skip=skip,
-                        asList=asList,
-                        renderStyle=renderStyle,
-                        parent=selectedMenu,
-                    )
+                    return self.renderMenuFromDictionary(dict=level1_X_MenuDict,
+                                                         exceptionKeys=["W", "0", "M", "S", "15"],
+                                                         coloredValues=(["0", "15",str(configManager.defaultIndex)] if not asList else []),
+                                                         defaultMenu=str(configManager.defaultIndex),
+                                                         skip=skip, 
+                                                         asList=asList, 
+                                                         renderStyle=renderStyle
+                                                            if renderStyle is not None
+                                                            else MenuRenderStyle.THREE_PER_ROW, 
+                                                         parent=selectedMenu,
+                                                         checkUpdate=False)
             elif selectedMenu.level == 1:
                 self.level = 2
                 if selectedMenu.parent.menuKey in ["D"]:
@@ -705,79 +801,120 @@ class menus:
                                                          checkUpdate=False)
                 if selectedMenu.parent.menuKey in ["T"]:
                     if selectedMenu.menuKey in ["L"]:
-                        return self.level2_T_MenuDict_L(
-                            skip=skip,
-                            asList=asList,
-                            renderStyle=renderStyle,
-                            parent=selectedMenu,
-                        )
+                        return self.renderMenuFromDictionary(dict=level2_T_MenuDict_L,
+                                                         exceptionKeys=["5","4","M"],
+                                                         coloredValues=(["1"] if not asList else []),
+                                                         defaultMenu="1",
+                                                         skip=skip, 
+                                                         asList=asList,
+                                                         optionText="  [+] Select a config period/candle-duration combination: ",
+                                                         renderStyle=renderStyle, 
+                                                         parent=selectedMenu,
+                                                         checkUpdate=False)
                     elif selectedMenu.menuKey in ["S"]:
-                        return self.level2_T_MenuDict_S(
-                            skip=skip,
-                            asList=asList,
-                            renderStyle=renderStyle,
-                            parent=selectedMenu,
-                        )
+                        return self.renderMenuFromDictionary(dict=level2_T_MenuDict_S,
+                                                         exceptionKeys=["5","M"],
+                                                         coloredValues=(["1"] if not asList else []),
+                                                         defaultMenu="1",
+                                                         skip=skip, 
+                                                         asList=asList,
+                                                         optionText="  [+] Select a config period/candle-duration combination: ",
+                                                         renderStyle=renderStyle, 
+                                                         parent=selectedMenu,
+                                                         checkUpdate=False)
                 elif selectedMenu.parent.menuKey in ["P"]:
-                    return self.renderLevel2_P_Menus(
-                        skip=skip,
-                        asList=asList,
-                        renderStyle=renderStyle,
-                        parent=selectedMenu,
-                    )
+                    return self.renderMenuFromDictionary(dict=level2_P_MenuDict,
+                                                         exceptionKeys=["M"],
+                                                         coloredValues=(["1"] if not asList else []),
+                                                         defaultMenu="1",
+                                                         skip=skip, 
+                                                         asList=asList,
+                                                         optionText="  [+] Select a scanner:",
+                                                         renderStyle=renderStyle
+                                                            if renderStyle is not None
+                                                            else MenuRenderStyle.TWO_PER_ROW, 
+                                                         parent=selectedMenu,
+                                                         checkUpdate=False)
                 elif selectedMenu.menuKey == "S":
-                    return self.renderLevel2_Sectoral_Menus(
-                        skip=skip,
-                        asList=asList,
-                        renderStyle=renderStyle,
-                        parent=selectedMenu,
-                    )
+                    indexKeys = level1_index_options_sectoral.keys()
+                    return self.renderMenuFromDictionary(dict=level1_index_options_sectoral,
+                                                         exceptionKeys=[str(len(indexKeys))],
+                                                         coloredValues=([str(len(indexKeys))] if not asList else []),
+                                                         defaultMenu=str(len(indexKeys)),
+                                                         skip=skip, 
+                                                         asList=asList,
+                                                         optionText="  [+] Select a sectoral index:",
+                                                         renderStyle=renderStyle
+                                                            if renderStyle is not None
+                                                            else MenuRenderStyle.TWO_PER_ROW, 
+                                                         parent=selectedMenu,
+                                                         checkUpdate=False)
                 else:
                     # next levelsub-menu of the selected sub-menu
-                    return self.renderLevel2_X_Menus(
-                        skip=skip,
-                        asList=asList,
-                        renderStyle=renderStyle,
-                        parent=selectedMenu,
-                    )
+                    return self.renderMenuFromDictionary(dict=level2_X_MenuDict,
+                                                         exceptionKeys=["0", str(MAX_MENU_OPTION), "M"],
+                                                         coloredValues=(["9"] if not asList else []),
+                                                         defaultMenu="9",
+                                                         skip=skip, 
+                                                         asList=asList,
+                                                         optionText="  [+] Select a Criterion for Stock Screening: ",
+                                                         renderStyle=renderStyle
+                                                            if renderStyle is not None
+                                                            else MenuRenderStyle.TWO_PER_ROW, 
+                                                         parent=selectedMenu,
+                                                         checkUpdate=False)
             elif selectedMenu.level == 2:
                 self.level = 3
                 # next levelsub-menu of the selected sub-menu
                 if selectedMenu.menuKey == "6":
-                    return self.renderLevel3_X_Reversal_Menus(
-                        skip=skip,
-                        asList=asList,
-                        renderStyle=renderStyle,
-                        parent=selectedMenu,
-                    )
+                    return self.renderMenuFromDictionary(dict=level3_X_Reversal_MenuDict,
+                                                         exceptionKeys=["0"],
+                                                         coloredValues=(["3"] if not asList else []),
+                                                         defaultMenu="3",
+                                                         skip=skip, 
+                                                         asList=asList,
+                                                         optionText="  [+] Select an option: ",
+                                                         renderStyle=renderStyle
+                                                            if renderStyle is not None
+                                                            else MenuRenderStyle.STANDALONE, 
+                                                         parent=selectedMenu,
+                                                         checkUpdate=False)
                 elif selectedMenu.menuKey == "7":
-                    return self.renderLevel3_X_ChartPattern_Menus(
-                        skip=skip,
-                        asList=asList,
-                        renderStyle=renderStyle,
-                        parent=selectedMenu,
-                    )
+                    return self.renderMenuFromDictionary(dict=level3_X_ChartPattern_MenuDict,
+                                                         exceptionKeys=["0"],
+                                                         coloredValues=["3"],
+                                                         defaultMenu="3",
+                                                         asList=asList,
+                                                         renderStyle=renderStyle,
+                                                         skip=skip, 
+                                                         parent=selectedMenu)
                 elif selectedMenu.menuKey == "21":
-                    return self.renderLevel3_X_PopularStocks_Menus(
-                        skip=skip,
-                        asList=asList,
-                        renderStyle=renderStyle,
-                        parent=selectedMenu,
-                    )
+                    return self.renderMenuFromDictionary(dict=level3_X_PopularStocks_MenuDict,
+                                                         exceptionKeys=["0"],
+                                                         coloredValues=["1"],
+                                                         defaultMenu="1",
+                                                         asList=asList,
+                                                         renderStyle=renderStyle,
+                                                         skip=skip, 
+                                                         parent=selectedMenu)
                 elif selectedMenu.menuKey == "22":
-                    return self.renderLevel3_X_StockPerformance_Menus(
-                        skip=skip,
-                        asList=asList,
-                        renderStyle=renderStyle,
-                        parent=selectedMenu,
-                    )
+                    return self.renderMenuFromDictionary(dict=level3_X_StockPerformance_MenuDict,
+                                                         exceptionKeys=["0"],
+                                                         coloredValues=["1"],
+                                                         defaultMenu="1",
+                                                         asList=asList,
+                                                         renderStyle=renderStyle,
+                                                         skip=skip, 
+                                                         parent=selectedMenu)
                 elif selectedMenu.menuKey in ["30","32"]:
-                    return self.renderLevel4_X_Lorenzian_Menus(
-                        skip=skip,
-                        asList=asList,
-                        renderStyle=renderStyle,
-                        parent=selectedMenu,
-                    )
+                    return self.renderMenuFromDictionary(dict=level4_X_Lorenzian_MenuDict,
+                                                         exceptionKeys=["0"],
+                                                         coloredValues=["1"],
+                                                         defaultMenu="1",
+                                                         asList=asList,
+                                                         renderStyle=renderStyle,
+                                                         skip=skip, 
+                                                         parent=selectedMenu)
                 elif selectedMenu.menuKey in ["33"]:
                     return self.renderMenuFromDictionary(dict=level3_X_PotentialProfitable_MenuDict,
                                                          exceptionKeys=["0"],
@@ -800,35 +937,50 @@ class menus:
                 self.level = 4
                 # next levelsub-menu of the selected sub-menu
                 if selectedMenu.parent.menuKey == "6" and selectedMenu.menuKey in ["7","10"]:
-                    return self.renderLevel4_X_Lorenzian_Menus(
-                        skip=skip,
-                        asList=asList,
-                        renderStyle=renderStyle,
-                        parent=selectedMenu,
-                    )
+                    return self.renderMenuFromDictionary(dict=level4_X_Lorenzian_MenuDict,
+                                                         exceptionKeys=["0"],
+                                                         coloredValues=["1"],
+                                                         defaultMenu="1",
+                                                         asList=asList,
+                                                         renderStyle=renderStyle,
+                                                         skip=skip, 
+                                                         parent=selectedMenu)
                 if selectedMenu.parent.menuKey == "7" and selectedMenu.menuKey == "3":
-                    return self.renderLevel4_X_ChartPattern_Confluence_Menus(
-                        skip=skip,
-                        asList=asList,
-                        renderStyle=renderStyle,
-                        parent=selectedMenu,
-                    )
+                    return self.renderMenuFromDictionary(dict=level4_X_ChartPattern_Confluence_MenuDict,
+                                                         exceptionKeys=["0"],
+                                                         coloredValues=["4"],
+                                                         defaultMenu="4",
+                                                         asList=asList,
+                                                         renderStyle=renderStyle,
+                                                         skip=skip, 
+                                                         parent=selectedMenu)
                 if selectedMenu.parent.menuKey == "7" and selectedMenu.menuKey == "6":
-                    return self.renderLevel4_X_ChartPattern_BBands_SQZ_Menus(
-                        skip=skip,
-                        asList=asList,
-                        renderStyle=renderStyle,
-                        parent=selectedMenu,
-                    )
+                    return self.renderMenuFromDictionary(dict=level4_X_ChartPattern_BBands_SQZ_MenuDict,
+                                                         exceptionKeys=["0"],
+                                                         coloredValues=["1"],
+                                                         defaultMenu="1",
+                                                         asList=asList,
+                                                         renderStyle=renderStyle,
+                                                         skip=skip, 
+                                                         parent=selectedMenu)
                 if selectedMenu.parent.menuKey == "7" and selectedMenu.menuKey == "9":
-                    return self.renderLevel4_X_ChartPattern_MASignal_Menus(
-                        skip=skip,
-                        asList=asList,
-                        renderStyle=renderStyle,
-                        parent=selectedMenu,
-                    )
+                    return self.renderMenuFromDictionary(dict=level4_X_ChartPattern_MASignalMenuDict,
+                                                         exceptionKeys=["0"],
+                                                         coloredValues=["1"],
+                                                         defaultMenu="1",
+                                                         asList=asList,
+                                                         renderStyle=renderStyle,
+                                                         skip=skip, 
+                                                         parent=selectedMenu)
                 if selectedMenu.parent.menuKey == "40" and selectedMenu.menuKey in PRICE_CROSS_SMA_EMA_TYPE_MENUDICT.keys():
-                    return self.renderMenuFromDictionary(dict=PRICE_CROSS_SMA_EMA_DIRECTION_MENUDICT,exceptionKeys=["0"],coloredValues=["2"],defaultMenu="2", parent=selectedMenu)
+                    return self.renderMenuFromDictionary(dict=PRICE_CROSS_SMA_EMA_DIRECTION_MENUDICT,
+                                                         exceptionKeys=["0"],
+                                                         coloredValues=["2"],
+                                                         defaultMenu="2", 
+                                                         parent=selectedMenu,
+                                                         asList=asList,
+                                                         renderStyle=renderStyle,
+                                                         skip=skip)
 
 
     def find(self, key=None):
@@ -840,7 +992,7 @@ class menus:
                 return None
         return None
 
-    def renderMenuFromDictionary(self, dict={},exceptionKeys=[],coloredValues=[], optionText="[+] Select a menu option:", defaultMenu="0", asList=False, renderStyle=None, parent=None, skip=None, substitutes=[],checkUpdate=False):
+    def renderMenuFromDictionary(self, dict={},exceptionKeys=[],coloredValues=[], optionText="  [+] Select a menu option:", defaultMenu="0", asList=False, renderStyle=None, parent=None, skip=None, substitutes=[],checkUpdate=False):
         menuText = self.fromDictionary(
             dict,
             renderExceptionKeys=exceptionKeys,
@@ -856,14 +1008,12 @@ class menus:
         else:
             if OutputControls().enableMultipleLineOutput:
                 OutputControls().printOutput(
-                    colorText.BOLD
-                    + colorText.WARN
+                    colorText.WARN
                     + optionText
                     + colorText.END
                 )
                 OutputControls().printOutput(
-                    colorText.BOLD
-                    + menuText
+                    menuText
                     + """
 
     Enter your choice > (default is """
@@ -879,635 +1029,6 @@ class menus:
                         pass
             return menuText
         
-    def renderPinSubmenus(self, asList=False, renderStyle=None, parent=None, skip=None, substitutes=[]):
-        menuText = self.fromDictionary(
-            Pin_MenuDict,
-            renderExceptionKeys=["M"],
-            renderStyle=renderStyle
-            if renderStyle is not None
-            else MenuRenderStyle.STANDALONE,
-            skip=skip,
-            parent=parent,
-            substitutes = substitutes
-        ).render(asList=asList,coloredValues=["M"] if not asList else [])
-        if asList:
-            return menuText
-        else:
-            if OutputControls().enableMultipleLineOutput:
-                OutputControls().printOutput(
-                    colorText.BOLD
-                    + colorText.WARN
-                    + "[+] Select a menu option:"
-                    + colorText.END
-                )
-                OutputControls().printOutput(
-                    colorText.BOLD
-                    + menuText
-                    + """
-
-    Enter your choice > (default is """
-                    + colorText.WARN
-                    + (self.find("M") or menu().create('?','?')).keyTextLabel().strip()
-                    + ") "
-                    "" + colorText.END
-                )
-            return menuText
-
-    def renderLevel1_S_Menus(
-        self, skip=[], asList=False, renderStyle=None, parent=None
-    ):
-        strategies = self.strategyNames
-        counter = 1
-        menuDict = {}
-        for strategyName in strategies:
-            menuDict[f"{counter}"] = strategyName.ljust(20)
-            counter += 1
-        for key in level1_S_MenuDict.keys():
-            menuDict[key] = level1_S_MenuDict[key]
-
-        menuText = self.fromDictionary(
-            menuDict,
-            renderExceptionKeys=level1_S_MenuDict.keys(),
-            renderStyle=renderStyle
-            if renderStyle is not None
-            else MenuRenderStyle.THREE_PER_ROW,
-            skip=skip,
-            parent=parent,
-        ).render(asList=asList)
-        if asList:
-            return menuText
-        else:
-            if OutputControls().enableMultipleLineOutput:
-                OutputControls().printOutput(
-                    colorText.BOLD
-                    + colorText.WARN
-                    + "[+] Select a Strategy for Screening:"
-                    + colorText.END
-                )
-                OutputControls().printOutput(
-                    colorText.BOLD
-                    + menuText
-                    + """
-
-    Enter your choice > """
-                    ""
-                )
-            return menuText
-        
-    def renderLevel1_T_Menus(
-        self, skip=[], asList=False, renderStyle=None, parent=None
-    ):
-        defaultKey = 'L' if configManager.period == '1y' else 'S'
-        menuText = self.fromDictionary(
-            level1_T_MenuDict,
-            renderExceptionKeys=["M","B"],
-            renderStyle=renderStyle
-            if renderStyle is not None
-            else MenuRenderStyle.STANDALONE,
-            skip=skip,
-            parent=parent,
-        ).render(asList=asList,coloredValues=[defaultKey,"B"] if not asList else [])
-        if asList:
-            return menuText
-        else:
-            if OutputControls().enableMultipleLineOutput:
-                OutputControls().printOutput(
-                    colorText.BOLD
-                    + colorText.WARN
-                    + "[+] Select a configuration period for Screening:"
-                    + colorText.END
-                )
-                OutputControls().printOutput(
-                    colorText.BOLD
-                    + menuText
-                    + """
-
-    Enter your choice > (default is """
-                    + colorText.WARN
-                    + (self.find(defaultKey) or menu().create('?','?')).keyTextLabel().strip()
-                    + ")  "
-                    "" + colorText.END
-                )
-            return menuText
-        
-    def renderLevel1_P_Menus(
-        self, skip=[], asList=False, renderStyle=None, parent=None
-    ):
-        menuText = self.fromDictionary(
-            level1_P_MenuDict,
-            renderExceptionKeys=["M"],
-            renderStyle=renderStyle
-            if renderStyle is not None
-            else MenuRenderStyle.STANDALONE,
-            skip=skip,
-            parent=parent,
-        ).render(asList=asList, coloredValues=["1"] if not asList else [])
-        if asList:
-            return menuText
-        else:
-            if OutputControls().enableMultipleLineOutput:
-                OutputControls().printOutput(
-                    colorText.BOLD
-                    + colorText.WARN
-                    + "[+] Select an option:"
-                    + colorText.END
-                )
-                OutputControls().printOutput(
-                    colorText.BOLD
-                    + menuText
-                    + """
-
-    Enter your choice > (default is """
-                    + colorText.WARN
-                    + (self.find('1') or menu().create('?','?')).keyTextLabel().strip()
-                    + ")  "
-                    "" + colorText.END
-                )
-            return menuText
-
-    def renderLevel2_P_Menus(
-        self, skip=[], asList=False, renderStyle=None, parent=None
-    ):
-        menuText = self.fromDictionary(
-            level2_P_MenuDict,
-            renderExceptionKeys=["M"],
-            renderStyle=renderStyle
-            if renderStyle is not None
-            else MenuRenderStyle.TWO_PER_ROW,
-            skip=skip,
-            parent=parent,
-        ).render(asList=asList,coloredValues=["1"] if not asList else [])
-        if asList:
-            return menuText
-        else:
-            if OutputControls().enableMultipleLineOutput:
-                OutputControls().printOutput(
-                    colorText.BOLD
-                    + colorText.WARN
-                    + "[+] Select a scanner:"
-                    + colorText.END
-                )
-                OutputControls().printOutput(
-                    colorText.BOLD
-                    + menuText
-                    + """
-
-    Enter your choice > (default is """
-                    + colorText.WARN
-                    + (self.find('1') or menu().create('?','?')).keyTextLabel().strip()
-                    + ")  "
-                    "" + colorText.END
-                )
-            return menuText
-
-    def renderLevel2_Sectoral_Menus(
-        self, skip=[], asList=False, renderStyle=None, parent=None
-    ):
-        indexKeys = level1_index_options_sectoral.keys()
-        menuText = self.fromDictionary(
-            level1_index_options_sectoral,
-            renderExceptionKeys=[str(len(indexKeys))],
-            renderStyle=renderStyle
-            if renderStyle is not None
-            else MenuRenderStyle.TWO_PER_ROW,
-            skip=skip,
-            parent=parent,
-        ).render(asList=asList,coloredValues=[str(len(indexKeys))] if not asList else [])
-        if asList:
-            return menuText
-        else:
-            if OutputControls().enableMultipleLineOutput:
-                OutputControls().printOutput(
-                    colorText.BOLD
-                    + colorText.WARN
-                    + "[+] Select a sectoral index:"
-                    + colorText.END
-                )
-                OutputControls().printOutput(
-                    colorText.BOLD
-                    + menuText
-                    + """
-
-    Enter your choice > (default is """
-                    + colorText.WARN
-                    + (self.find(str(len(indexKeys))) or menu().create('?','?')).keyTextLabel().strip()
-                    + ")  "
-                    "" + colorText.END
-                )
-            return menuText
-
-    def renderLevel1_X_Menus(
-        self, skip=[], asList=False, renderStyle=None, parent=None
-    ):
-        menuText = self.fromDictionary(
-            level1_X_MenuDict,
-            renderExceptionKeys=["W", "0", "M", "S", "15"],
-            renderStyle=renderStyle
-            if renderStyle is not None
-            else MenuRenderStyle.THREE_PER_ROW,
-            skip=skip,
-            parent=parent,
-        ).render(asList=asList, coloredValues=["0", "15",str(configManager.defaultIndex)] if not asList else [])
-        if asList:
-            return menuText
-        else:
-            if OutputControls().enableMultipleLineOutput:
-                OutputControls().printOutput(
-                    colorText.BOLD
-                    + colorText.WARN
-                    + "[+] Select an Index for Screening:"
-                    + colorText.END
-                )
-                OutputControls().printOutput(
-                    colorText.BOLD
-                    + menuText
-                    + """
-
-    Enter your choice > (default is """
-                    + colorText.WARN
-                    + (self.find(str(configManager.defaultIndex)) or menu().create('?','?')).keyTextLabel().strip()
-                    + ")  "
-                    "" + colorText.END
-                )
-            return menuText
-
-    def level2_T_MenuDict_L(
-        self, skip=[], asList=False, renderStyle=None, parent=None
-    ):
-        menuText = self.fromDictionary(
-            level2_T_MenuDict_L,
-            renderExceptionKeys=["4","5","M"],
-            renderStyle=renderStyle
-            if renderStyle is not None
-            else MenuRenderStyle.STANDALONE,
-            skip=skip,
-            parent=parent,
-        ).render(asList=asList, coloredValues=["1"] if not asList else [])
-        if asList:
-            return menuText
-        else:
-            if OutputControls().enableMultipleLineOutput:
-                OutputControls().printOutput(
-                    colorText.BOLD
-                    + colorText.WARN
-                    + "[+] Select a config period/candle-duration combination: "
-                    + colorText.END
-                )
-                OutputControls().printOutput(
-                    colorText.BOLD
-                    + menuText
-                    + """
-
-    Enter your choice > (default is """
-                    + colorText.WARN
-                    + (self.find("1") or menu().create('?','?')).keyTextLabel().strip()
-                    + ")  "
-                    "" + colorText.END
-                )
-            return menuText
-
-    def level2_T_MenuDict_S(
-        self, skip=[], asList=False, renderStyle=None, parent=None
-    ):
-        menuText = self.fromDictionary(
-            level2_T_MenuDict_S,
-            renderExceptionKeys=["5", "M"],
-            renderStyle=renderStyle
-            if renderStyle is not None
-            else MenuRenderStyle.STANDALONE,
-            skip=skip,
-            parent=parent,
-        ).render(asList=asList, coloredValues=["1"] if not asList else [])
-        if asList:
-            return menuText
-        else:
-            if OutputControls().enableMultipleLineOutput:
-                OutputControls().printOutput(
-                    colorText.BOLD
-                    + colorText.WARN
-                    + "[+] Select a config period/candle-duration combination: "
-                    + colorText.END
-                )
-                OutputControls().printOutput(
-                    colorText.BOLD
-                    + menuText
-                    + """
-
-    Enter your choice > (default is """
-                    + colorText.WARN
-                    + (self.find("1") or menu().create('?','?')).keyTextLabel().strip()
-                    + ")  "
-                    "" + colorText.END
-                )
-            return menuText
-        
-    def renderLevel2_X_Menus(
-        self, skip=[], asList=False, renderStyle=None, parent=None
-    ):
-        menuText = self.fromDictionary(
-            level2_X_MenuDict,
-            renderExceptionKeys=["0", str(MAX_MENU_OPTION), "M"],
-            renderStyle=renderStyle
-            if renderStyle is not None
-            else MenuRenderStyle.TWO_PER_ROW,
-            skip=skip,
-            parent=parent,
-        ).render(asList=asList, coloredValues=["9"] if not asList else [])
-        if asList:
-            return menuText
-        else:
-            if OutputControls().enableMultipleLineOutput:
-                OutputControls().printOutput(
-                    colorText.BOLD
-                    + colorText.WARN
-                    + "[+] Select a Criterion for Stock Screening: "
-                    + colorText.END
-                )
-                OutputControls().printOutput(
-                    colorText.BOLD
-                    + menuText
-                    + """
-
-    Enter your choice > (default is """
-                    + colorText.WARN
-                    + (self.find("9") or menu().create('?','?')).keyTextLabel().strip() + ")"
-                    + colorText.END
-                )
-            return menuText
-
-    def renderLevel3_X_Reversal_Menus(
-        self, skip=[], asList=False, renderStyle=None, parent=None
-    ):
-        menuText = self.fromDictionary(
-            level3_X_Reversal_MenuDict,
-            renderExceptionKeys=["0"],
-            renderStyle=renderStyle
-            if renderStyle is not None
-            else MenuRenderStyle.STANDALONE,
-            skip=skip,
-            parent=parent,
-        ).render(asList=asList,coloredValues=["3"] if not asList else [])
-        if asList:
-            return menuText
-        else:
-            if OutputControls().enableMultipleLineOutput:
-                OutputControls().printOutput(
-                    colorText.BOLD
-                    + colorText.WARN
-                    + "[+] Select an option: "
-                    + colorText.END
-                )
-                OutputControls().printOutput(
-                    colorText.BOLD
-                    + menuText
-                    + """
-
-    Enter your choice > (default is """
-                    + colorText.WARN
-                    + (self.find("3") or menu().create('?','?')).keyTextLabel().strip() + ")"
-                    + colorText.END
-                )
-            return menuText
-
-    def renderLevel3_X_ChartPattern_Menus(
-        self, skip=[], asList=False, renderStyle=MenuRenderStyle.STANDALONE, parent=None
-    ):
-        menuText = self.fromDictionary(
-            level3_X_ChartPattern_MenuDict,
-            renderExceptionKeys=["0"],
-            renderStyle=renderStyle
-            if renderStyle is not None
-            else MenuRenderStyle.STANDALONE,
-            skip=skip,
-            parent=parent,
-        ).render(asList=asList,coloredValues=["3"] if not asList else [])
-        if asList:
-            return menuText
-        else:
-            if OutputControls().enableMultipleLineOutput:
-                OutputControls().printOutput(
-                    colorText.BOLD
-                    + colorText.WARN
-                    + "[+] Select an option: "
-                    + colorText.END
-                )
-                OutputControls().printOutput(
-                    colorText.BOLD
-                    + menuText
-                    + """
-
-    Enter your choice > (default is """
-                    + colorText.WARN
-                    + (self.find("3") or menu().create('?','?')).keyTextLabel().strip() + ")"
-                    + colorText.END
-                )
-            return menuText
-
-    def renderLevel3_X_PopularStocks_Menus(
-        self, skip=[], asList=False, renderStyle=MenuRenderStyle.STANDALONE, parent=None
-    ):
-        menuText = self.fromDictionary(
-            level3_X_PopularStocks_MenuDict,
-            renderExceptionKeys=["0"],
-            renderStyle=renderStyle
-            if renderStyle is not None
-            else MenuRenderStyle.STANDALONE,
-            skip=skip,
-            parent=parent,
-        ).render(asList=asList, coloredValues=["1"] if not asList else [])
-        if asList:
-            return menuText
-        else:
-            if OutputControls().enableMultipleLineOutput:
-                OutputControls().printOutput(
-                    colorText.BOLD
-                    + colorText.WARN
-                    + "[+] Select an option: "
-                    + colorText.END
-                )
-                OutputControls().printOutput(
-                    colorText.BOLD
-                    + menuText
-                    + """
-
-    Enter your choice > (default is """
-                    + colorText.WARN
-                    + ((self.find("1")) or menu().create('?','?')).keyTextLabel().strip() + ")"
-                    + colorText.END
-                )
-            return menuText
-
-    def renderLevel3_X_StockPerformance_Menus(
-        self, skip=[], asList=False, renderStyle=MenuRenderStyle.STANDALONE, parent=None
-    ):
-        menuText = self.fromDictionary(
-            level3_X_StockPerformance_MenuDict,
-            renderExceptionKeys=["0"],
-            renderStyle=renderStyle
-            if renderStyle is not None
-            else MenuRenderStyle.STANDALONE,
-            skip=skip,
-            parent=parent,
-        ).render(asList=asList,coloredValues=["1"] if not asList else [])
-        if asList:
-            return menuText
-        else:
-            if OutputControls().enableMultipleLineOutput:
-                OutputControls().printOutput(
-                    colorText.BOLD
-                    + colorText.WARN
-                    + "[+] Select an option: "
-                    + colorText.END
-                )
-                OutputControls().printOutput(
-                    colorText.BOLD
-                    + menuText
-                    + """
-
-    Enter your choice > (default is """
-                    + colorText.WARN
-                    + (self.find("1") or menu().create('?','?')).keyTextLabel().strip() + ")"
-                    + colorText.END
-                )
-            return menuText
-
-    def renderLevel4_X_Lorenzian_Menus(
-        self, skip=[], asList=False, renderStyle=MenuRenderStyle.STANDALONE, parent=None
-    ):
-        menuText = self.fromDictionary(
-            level4_X_Lorenzian_MenuDict,
-            renderExceptionKeys=["0"],
-            renderStyle=renderStyle
-            if renderStyle is not None
-            else MenuRenderStyle.STANDALONE,
-            skip=skip,
-            parent=parent,
-        ).render(asList=asList, coloredValues=["1"] if not asList else [])
-        if asList:
-            return menuText
-        else:
-            if OutputControls().enableMultipleLineOutput:
-                OutputControls().printOutput(
-                    colorText.BOLD
-                    + colorText.WARN
-                    + "[+] Select an option: "
-                    + colorText.END
-                )
-                OutputControls().printOutput(
-                    colorText.BOLD
-                    + menuText
-                    + """
-
-    Enter your choice > (default is """
-                    + colorText.WARN
-                    + (self.find("1") or menu().create('?','?')).keyTextLabel().strip() + ")"
-                    + colorText.END
-                )
-            return menuText
-
-
-    def renderLevel4_X_ChartPattern_BBands_SQZ_Menus(
-        self, skip=[], asList=False, renderStyle=MenuRenderStyle.STANDALONE, parent=None
-    ):
-        menuText = self.fromDictionary(
-            level4_X_ChartPattern_BBands_SQZ_MenuDict,
-            renderExceptionKeys=["0"],
-            renderStyle=renderStyle
-            if renderStyle is not None
-            else MenuRenderStyle.STANDALONE,
-            skip=skip,
-            parent=parent,
-        ).render(asList=asList, coloredValues=["1"] if not asList else [])
-        if asList:
-            return menuText
-        else:
-            if OutputControls().enableMultipleLineOutput:
-                OutputControls().printOutput(
-                    colorText.BOLD
-                    + colorText.WARN
-                    + "[+] Select an option: "
-                    + colorText.END
-                )
-                OutputControls().printOutput(
-                    colorText.BOLD
-                    + menuText
-                    + """
-
-    Enter your choice > (default is """
-                    + colorText.WARN
-                    + (self.find("1") or menu().create('?','?')).keyTextLabel().strip() + ")"
-                    + colorText.END
-                )
-            return menuText
-
-    def renderLevel4_X_ChartPattern_MASignal_Menus(
-        self, skip=[], asList=False, renderStyle=MenuRenderStyle.STANDALONE, parent=None
-    ):
-        menuText = self.fromDictionary(
-            level4_X_ChartPattern_MASignalMenuDict,
-            renderExceptionKeys=["0"],
-            renderStyle=renderStyle
-            if renderStyle is not None
-            else MenuRenderStyle.STANDALONE,
-            skip=skip,
-            parent=parent,
-        ).render(asList=asList, coloredValues=["1"] if not asList else [])
-        if asList:
-            return menuText
-        else:
-            if OutputControls().enableMultipleLineOutput:
-                OutputControls().printOutput(
-                    colorText.BOLD
-                    + colorText.WARN
-                    + "[+] Select an option: "
-                    + colorText.END
-                )
-                OutputControls().printOutput(
-                    colorText.BOLD
-                    + menuText
-                    + """
-
-    Enter your choice > (default is """
-                    + colorText.WARN
-                    + (self.find("1") or menu().create('?','?')).keyTextLabel().strip() + ")"
-                    + colorText.END
-                )
-            return menuText
-        
-    def renderLevel4_X_ChartPattern_Confluence_Menus(
-        self, skip=[], asList=False, renderStyle=MenuRenderStyle.STANDALONE, parent=None
-    ):
-        menuText = self.fromDictionary(
-            level4_X_ChartPattern_Confluence_MenuDict,
-            renderExceptionKeys=["0"],
-            renderStyle=renderStyle
-            if renderStyle is not None
-            else MenuRenderStyle.STANDALONE,
-            skip=skip,
-            parent=parent,
-        ).render(asList=asList,coloredValues=["4"] if not asList else [])
-        if asList:
-            return menuText
-        else:
-            if OutputControls().enableMultipleLineOutput:
-                OutputControls().printOutput(
-                    colorText.BOLD
-                    + colorText.WARN
-                    + "[+] Select an option: "
-                    + colorText.END
-                )
-                OutputControls().printOutput(
-                    colorText.BOLD
-                    + menuText
-                    + """
-
-    Enter your choice > (default is """
-                    + colorText.WARN
-                    + (self.find("4") or menu().create('?','?')).keyTextLabel().strip() + ")"
-                    + colorText.END
-                )
-            return menuText
-        
 # Fundamentally good compnaies but nearing 52 week low
 # https://www.tickertape.in/screener/equity/prebuilt/SCR0005
 
@@ -1516,3 +1037,5 @@ class menus:
 
 # Cash rich small caps
 # https://www.tickertape.in/screener/equity/prebuilt/SCR0017
+
+m = menus.allMenus()

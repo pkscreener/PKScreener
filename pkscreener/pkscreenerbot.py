@@ -67,7 +67,6 @@ from PKDevTools.classes.ColorText import colorText
 from PKDevTools.classes.MarketHours import MarketHours
 from pkscreener.classes.MenuOptions import MenuRenderStyle, menu, menus,MAX_MENU_OPTION
 from pkscreener.classes.WorkflowManager import run_workflow
-from pkscreener.globals import showSendConfigInfo, showSendHelpInfo
 import pkscreener.classes.ConfigManager as ConfigManager
 
 monitor_proc = None
@@ -130,7 +129,7 @@ int_timer = None
 _updater = None
 
 TOP_LEVEL_SCANNER_MENUS = ["X", "B", "MI","DV", "P"]
-TOP_LEVEL_SCANNER_SKIP_MENUS = ["M", "S", "G", "C", "T", "D", "I", "E", "U", "L", "Z", "P"]
+TOP_LEVEL_SCANNER_SKIP_MENUS = ["M", "S", "F", "G", "C", "T", "D", "I", "E", "U", "L", "Z", "P"] # Last item will be skipped.
 INDEX_SKIP_MENUS = ["W","E","M","Z","0","2","3","4","6","7","9","10","S"]
 SCANNER_SKIP_MENUS_1_TO_6 = ["0","7","8","9","10","11","12","13","14","15","16","17","18","19","20","21","22","23","24","25","26","27","28","29","30","31","32","33","34","35","36","37","38","39","40","41","42","43","44","45","M","Z",str(MAX_MENU_OPTION)]
 SCANNER_SKIP_MENUS_7_TO_12 = ["0","1","2","3","4","5","6","13","14","15","16","17","18","19","20","21","22","23","24","25","26","27","28","29","30","31","32","33","34","35","36","37","38","39","40","41","42","43","44","45","M","Z",str(MAX_MENU_OPTION)]
@@ -154,13 +153,14 @@ def initializeIntradayTimer():
         if (not PKDateUtilities.isTodayHoliday()[0]):
             now = PKDateUtilities.currentDateTime()
             marketStartTime = PKDateUtilities.currentDateTime(simulate=True,hour=MarketHours().openHour,minute=MarketHours().openMinute-1)
+            marketCloseTime = PKDateUtilities.currentDateTime(simulate=True,hour=MarketHours().closeHour,minute=MarketHours().closeMinute)
             marketOpenAnHourandHalfPrior = PKDateUtilities.currentDateTime(simulate=True,hour=MarketHours().openHour-2,minute=MarketHours().openMinute+30)
             if now < marketStartTime and now >= marketOpenAnHourandHalfPrior: # Telegram bot might keep running beyond an hour. So let's start watching around 7:45AM
                 difference = (marketStartTime - now).total_seconds() + 1
                 global int_timer
                 int_timer = threading.Timer(difference, launchIntradayMonitor, args=[])
                 int_timer.start()
-            elif now >= marketStartTime:
+            elif now >= marketStartTime and now <= marketCloseTime:
                 launchIntradayMonitor()
     except:
         launchIntradayMonitor()
@@ -264,7 +264,7 @@ def start(update: Update, context: CallbackContext, updatedResults=None, monitor
 def removeMonitorFile():
     from PKDevTools.classes import Archiver
     configManager.getConfig(ConfigManager.parser)
-    filePath = os.path.join(Archiver.get_user_outputs_dir(), "monitor_outputs")
+    filePath = os.path.join(Archiver.get_user_data_dir(), "monitor_outputs")
     index = 0
     while index < configManager.maxDashboardWidgetsPerRow*configManager.maxNumResultRowsInMonitor:
         try:
@@ -278,7 +278,7 @@ def launchIntradayMonitor():
     global int_timer
     if int_timer is not None:
         int_timer.cancel()
-    filePath = os.path.join(Archiver.get_user_outputs_dir(), "monitor_outputs")
+    filePath = os.path.join(Archiver.get_user_data_dir(), "monitor_outputs")
     result_outputs = ""
     if (PKDateUtilities.isTradingTime() and not PKDateUtilities.isTodayHoliday()[0]) or ("PKDevTools_Default_Log_Level" in os.environ.keys() or sys.argv[0].endswith(".py")):
         result_outputs = "Starting up the monitor for this hour. Please try again after 30-40 seconds."
@@ -482,7 +482,7 @@ def Level2(update: Update, context: CallbackContext) -> str:
             )
             mns.append(menu().create("P1", "More Options", 2))
             mns.append(menu().create("H", "Home", 2))
-        elif selection[1] == "P1":
+        elif selection[1] in ["P1", "N"]:
             selection.extend(["", ""])
     elif len(selection) == 3:
         if selection[2] == "P1":
@@ -625,7 +625,7 @@ def Level2(update: Update, context: CallbackContext) -> str:
             f"{selection[0]} > {selection[1]} > {selection[2]} > {selection[3]}"
         )
         expectedTime = f"{'10 to 15' if '> 15' in optionChoices else '1 to 2'}"
-        menuText = f"Thank you for choosing {optionChoices}. You will receive the notification/results in about {expectedTime} minutes. It generally takes 1-2 minutes for NSE (2000+) stocks and 10-15 minutes for NASDAQ (7300+).\n\nPKScreener is free and will always remain so for everyone. Consider donating to help cover the basic server costs:\n\nUPI (India): 8007162973@APL \n\nor\nhttps://github.com/sponsors/pkjmesra?frequency=one-time&sponsor=pkjmesra"
+        menuText = f"Thank you for choosing {optionChoices.replace(' >  > ','')}. You will receive the notification/results in about {expectedTime} minutes. It generally takes 1-2 minutes for NSE (2000+) stocks and 10-15 minutes for NASDAQ (7300+).\n\nPKScreener is free and will always remain so for everyone. Consider donating to help cover the basic server costs:\n\nUPI (India): 8007162973@APL \n\nor\nhttps://github.com/sponsors/pkjmesra?frequency=recurring&sponsor=pkjmesra"
 
         reply_markup = default_markup(inlineMenus)
         options = ":".join(selection)
@@ -1157,6 +1157,7 @@ def command_handler(update: Update, context: CallbackContext) -> None:
             return START_ROUTES
     if cmd == "y" or cmd == "h":
         shareUpdateWithChannel(update=update, context=context)
+        from pkscreener.globals import showSendConfigInfo, showSendHelpInfo
         if cmd == "y":
             showSendConfigInfo(defaultAnswer='Y',user=str(update.message.from_user.id))
         elif cmd == "h":
@@ -1175,7 +1176,7 @@ def command_handler(update: Update, context: CallbackContext) -> None:
 
 
 def sendRequestSubmitted(optionChoices, update, context):
-    menuText = f"Thank you for choosing {optionChoices}. You will receive the notification/results in about 1-2 minutes! \n\nConsider donating to help keep this project going:\nUPI: 8007162973@APL \nor\nhttps://github.com/sponsors/pkjmesra?frequency=one-time&sponsor=pkjmesra"
+    menuText = f"Thank you for choosing {optionChoices}. You will receive the notification/results in about 1-2 minutes! \n\nConsider donating to help keep this project going:\nUPI: 8007162973@APL \nor\nhttps://github.com/sponsors/pkjmesra?frequency=recurring&sponsor=pkjmesra"
     update.message.reply_text(sanitiseTexts(menuText))
     help_command(update=update, context=context)
     shareUpdateWithChannel(

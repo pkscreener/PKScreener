@@ -34,6 +34,7 @@ python setup.py clean build sdist bdist_wheel
 import platform
 import subprocess
 import sys
+import os
 from distutils.core import setup
 
 import setuptools  # noqa
@@ -54,7 +55,7 @@ if "Windows" in platform.system():
     ].extend(install_requires)
 elif "Linux" in platform.system():
     subprocess.Popen(["chmod", "+x", ".github/dependencies/build_tools/github/talib.sh"])
-    subprocess.Popen("start .github/dependencies/build_tools/github/talib.sh", shell=True)
+    subprocess.Popen("./.github/dependencies/build_tools/github/talib.sh", shell=True)
 # For Darwin, brew install ta-lib will work
 
 SYS_MAJOR_VERSION = str(sys.version_info.major)
@@ -112,7 +113,9 @@ setup(
             __PACKAGENAME__ + ".ini",
             "courbd.ttf",
             "LICENSE",
-            "LICENSE-Others",
+            "README.md",
+            "requirements.txt",
+            f"docs{os.sep}LICENSE-Others",
         ]
     },
     # ...but exclude README.txt from all packages

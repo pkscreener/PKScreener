@@ -28,6 +28,7 @@ import time
 import pandas as pd
 import multiprocessing
 from time import sleep
+from halo import Halo
 
 from PKDevTools.classes import Archiver
 from PKDevTools.classes.ColorText import colorText
@@ -131,9 +132,44 @@ class PKScanRunner:
         actualHistoricalDuration = (samplingDuration - fillerPlaceHolder)
         return samplingDuration,fillerPlaceHolder,actualHistoricalDuration
 
-    def addStocksToItemList(userArgs, testing, testBuild, newlyListedOnly, downloadOnly, minRSI, maxRSI, insideBarToLookback, respChartPattern, daysForLowestVolume, backtestPeriod, reversalOption, maLength, listStockCodes, menuOption, exchangeName,executeOption, volumeRatio, items, daysInPast):
+    def addScansWithDefaultParams(userArgs, testing, testBuild, newlyListedOnly, downloadOnly, backtestPeriod, listStockCodes, menuOption, exchangeName,executeOption, volumeRatio, items, daysInPast,runOption=""):
+        import json
+        defaultOptionsDict = {}
+        filePath = os.path.join(Archiver.get_user_data_dir(),"defaults.json")
+        if not os.path.exists(filePath):
+            fileDownloaded = Utility.tools.downloadSavedDefaultsFromServer("defaults.json")
+        if not os.path.exists(filePath):
+            return items
+        with open(filePath,"r") as f:
+            defaultOptionsDict = json.loads(f.read())
+        for scanOption in defaultOptionsDict.keys():
+            items = PKScanRunner.addStocksToItemList(userArgs=userArgs,
+                                                     testing=testing,
+                                                     testBuild=testBuild,
+                                                     newlyListedOnly=newlyListedOnly,
+                                                     downloadOnly=downloadOnly,
+                                                     minRSI=defaultOptionsDict[scanOption]["minRSI"],
+                                                     maxRSI=defaultOptionsDict[scanOption]["maxRSI"],
+                                                     insideBarToLookback=defaultOptionsDict[scanOption]["insideBarToLookback"],
+                                                     respChartPattern=defaultOptionsDict[scanOption]["respChartPattern"],
+                                                     daysForLowestVolume=defaultOptionsDict[scanOption]["daysForLowestVolume"],
+                                                     backtestPeriod=backtestPeriod,
+                                                     reversalOption=defaultOptionsDict[scanOption]["reversalOption"],
+                                                     maLength=defaultOptionsDict[scanOption]["maLength"],
+                                                     listStockCodes=listStockCodes,
+                                                     menuOption=menuOption,
+                                                     exchangeName=exchangeName,
+                                                     executeOption=int(scanOption.split(":")[2]), 
+                                                     volumeRatio=volumeRatio,
+                                                     items=items,
+                                                     daysInPast=daysInPast,
+                                                     runOption=scanOption)
+        return items
+    
+    def addStocksToItemList(userArgs, testing, testBuild, newlyListedOnly, downloadOnly, minRSI, maxRSI, insideBarToLookback, respChartPattern, daysForLowestVolume, backtestPeriod, reversalOption, maLength, listStockCodes, menuOption, exchangeName,executeOption, volumeRatio, items, daysInPast,runOption=""):
         moreItems = [
                         (
+                            runOption,
                             menuOption,
                             exchangeName,
                             executeOption,
@@ -159,7 +195,7 @@ class PKScanRunner:
                                 else PKScanRunner.configManager.effectiveDaysToLookback
                             ),
                             default_logger().level,
-                            (menuOption in ["B", "G", "X", "S","C"])
+                            (menuOption in ["B", "G", "X", "S","C", "F"])
                             or (userArgs.backtestdaysago is not None),
                             # assumption is that fetcher.fetchStockData would be
                             # mocked to avoid calling yf.download again and again
@@ -168,6 +204,7 @@ class PKScanRunner:
                         for stock in listStockCodes
                     ]
         items.extend(moreItems)
+        return items
 
     def getStocksListForScan(userArgs, menuOption, totalStocksInReview, downloadedRecently, daysInPast):
         savedStocksCount = 0
@@ -250,10 +287,17 @@ class PKScanRunner:
             worker.objectDictionaryPrimary = stockDictPrimary
             worker.objectDictionarySecondary = stockDictSecondary
             worker.refreshDatabase = True
-            
+    
+    # @Halo(text='', spinner='dots')
     def runScanWithParams(userPassedArgs,keyboardInterruptEvent,screenCounter,screenResultsCounter,stockDictPrimary,stockDictSecondary,testing, backtestPeriod, menuOption, executeOption, samplingDuration, items,screenResults, saveResults, backtest_df,scanningCb,tasks_queue, results_queue, consumers,logging_queue):
         if tasks_queue is None or results_queue is None or consumers is None:
-            tasks_queue, results_queue, consumers,logging_queue = PKScanRunner.prepareToRunScan(menuOption,keyboardInterruptEvent,screenCounter, screenResultsCounter, stockDictPrimary,stockDictSecondary, items,executeOption,userPassedArgs)
+            try:
+                import tensorflow as tf
+                with tf.device("/device:GPU:0"):
+                    tasks_queue, results_queue, consumers,logging_queue = PKScanRunner.prepareToRunScan(menuOption,keyboardInterruptEvent,screenCounter, screenResultsCounter, stockDictPrimary,stockDictSecondary, items,executeOption,userPassedArgs)
+            except:
+                tasks_queue, results_queue, consumers,logging_queue = PKScanRunner.prepareToRunScan(menuOption,keyboardInterruptEvent,screenCounter, screenResultsCounter, stockDictPrimary,stockDictSecondary, items,executeOption,userPassedArgs)
+                pass
             try:
                 if logging_queue is not None:
                     log_queue_reader = LogQueueReader(logging_queue)
@@ -287,7 +331,7 @@ class PKScanRunner:
                 )
 
         OutputControls().printOutput(colorText.END)
-        if userPassedArgs is not None and (userPassedArgs.monitor is None and "|" not in userPassedArgs.options) and not userPassedArgs.options.upper().startswith("C"):
+        if userPassedArgs is not None and not userPassedArgs.testalloptions and (userPassedArgs.monitor is None and "|" not in userPassedArgs.options) and not userPassedArgs.options.upper().startswith("C"):
             # Don't terminate the multiprocessing clients if we're 
             # going to pipe the results from an earlier run
             # or we're running in monitoring mode
@@ -299,6 +343,7 @@ class PKScanRunner:
         return screenResults, saveResults,backtest_df,tasks_queue, results_queue, consumers, logging_queue
 
     @exit_after(180) # Should not remain stuck starting the multiprocessing clients beyond this time
+    @Halo(text='  [+] Creating multiple processes for faster processing...', spinner='dots')
     def prepareToRunScan(menuOption,keyboardInterruptEvent, screenCounter, screenResultsCounter, stockDictPrimary,stockDictSecondary, items, executeOption,userPassedArgs):
         tasks_queue, results_queue, totalConsumers, logging_queue = PKScanRunner.initQueues(len(items),userPassedArgs)
         scr = ScreeningStatistics.ScreeningStatistics(PKScanRunner.configManager, default_logger())
@@ -306,8 +351,9 @@ class PKScanRunner:
         sec_cache_file = cache_file if "intraday_" in cache_file else f"intraday_{cache_file}"
         # Get RS rating stock value of the index
         from pkscreener.classes.Fetcher import screenerStockDataFetcher
-        nsei_df = screenerStockDataFetcher().fetchStockData(PKScanRunner.configManager.baseIndex,'1y','1d',None,0,0,0,exchangeSuffix="")
+        nsei_df = screenerStockDataFetcher().fetchStockData(PKScanRunner.configManager.baseIndex,PKScanRunner.configManager.period,PKScanRunner.configManager.duration,None,0,0,0,exchangeSuffix="")
         rs_score_index = -1
+        PKScanRunner.configManager.getConfig(parser)
         if nsei_df is not None:
             rs_score_index = scr.calc_relative_strength(nsei_df[::-1])
         consumers = [
@@ -349,6 +395,7 @@ class PKScanRunner:
         return tasks_queue,results_queue,consumers,logging_queue
 
     @exit_after(120) # Should not remain stuck starting the multiprocessing clients beyond this time
+    @Halo(text='', spinner='dots')
     def startWorkers(consumers):
         try:
             from pytest_cov.embed import cleanup_on_signal, cleanup_on_sigterm
@@ -362,9 +409,8 @@ class PKScanRunner:
             else:
                 cleanup_on_sigterm()
         OutputControls().printOutput(
-            colorText.BOLD
-            + colorText.FAIL
-            + f"[+] Using Period:{PKScanRunner.configManager.period} and Duration:{PKScanRunner.configManager.duration} for scan! You can change this in user config."
+            colorText.FAIL
+            + f"[+] Using Period:{colorText.END}{colorText.GREEN}{PKScanRunner.configManager.period}{colorText.END}{colorText.FAIL} and Duration:{colorText.END}{colorText.GREEN}{PKScanRunner.configManager.duration}{colorText.END}{colorText.FAIL} for scan! You can change this in user config."
             + colorText.END
         )
         start_time = time.time()
@@ -374,8 +420,10 @@ class PKScanRunner:
             worker.start()
         OutputControls().printOutput(f"Started all workers in {round(time.time() - start_time,4)}s")
         if OutputControls().enableMultipleLineOutput:
-            sys.stdout.write("\x1b[1A") # Move cursor up to hide the starting times we printed above
+            # sys.stdout.write("\x1b[1A") # Move cursor up to hide the starting times we printed above
+            OutputControls().moveCursorUpLines(1)
 
+    @Halo(text='', spinner='dots')
     def terminateAllWorkers(userPassedArgs,consumers, tasks_queue, testing=False):
         shouldSuppress = (userPassedArgs is None) or (userPassedArgs is not None and not userPassedArgs.log)
         with SuppressOutput(suppress_stderr=shouldSuppress, suppress_stdout=shouldSuppress):
@@ -416,7 +464,7 @@ class PKScanRunner:
     def shutdown(frame, signum):
         OutputControls().printOutput("Shutting down for test coverage")
 
-    # @exit_after(60)
+    # @Halo(text='', spinner='dots')
     def runScan(userPassedArgs,testing,numStocks,iterations,items,numStocksPerIteration,tasks_queue,results_queue,originalNumberOfStocks,backtest_df, *otherArgs,resultsReceivedCb=None):
         queueCounter = 0
         counter = 0
