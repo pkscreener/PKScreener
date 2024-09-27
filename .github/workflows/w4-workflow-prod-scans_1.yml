@@ -51,9 +51,9 @@ jobs:
     steps:
     - uses: actions/checkout@v4
       with:
-        repository: pkjmesra/PKScreener
+        # repository: pkjmesra/PKScreener
         ref: main
-        token: ${{secrets.PK_GITHUB_TOKEN}}
+        # token: ${{secrets.PK_GITHUB_TOKEN}}
     
     - name: setup git config
       run: |
@@ -127,10 +127,29 @@ jobs:
         cd /home/runner/work/PKScreener/PKScreener/
         pip3 install ta-lib==0.4.32
           
-    - name: Install Python Dependencies
+    - name: Environment setup to get latest EXE
+      shell: bash
+      id: releaseurlsetter
       run: |
-        pip3 install -r requirements.txt
-        pip3 install .
+        pip3 install requests
+        python3 .github/workflows/githubutilities.py -d
+  
+    - name: Download latest executable on Windows
+      shell: cmd
+      if: ${{ startsWith(runner.os, 'Windows' ) }}
+      env:
+        exe_path: ${{ steps.releaseurlsetter.outputs.DOWNLOAD_URL }}
+      run: |
+        curl -o pkscreenercli.exe -JL %exe_path%
+
+    - name: Download latest executable on Ubuntu
+      shell: bash
+      if: ${{ startsWith(runner.os, 'Linux' ) }}
+      env:
+        exe_path: ${{ steps.releaseurlsetter.outputs.DOWNLOAD_URL }}
+      run: |
+        curl -o /home/runner/work/PKScreener/PKScreener/pkscreenercli.bin -JL $exe_path
+        chmod +x /home/runner/work/PKScreener/PKScreener/pkscreenercli.bin
 
     - name: Environment setup to check the market status
       shell: bash
@@ -152,15 +171,37 @@ jobs:
       if : ${{ steps.marketsetter.outputs.MARKET_STATUS == 'Open' || steps.marketsetter.outputs.MARKET_TRADED_TODAY == '1' }}
       shell: bash
       run: |
-        cd pkscreener/
-        python3 pkscreenercli.py -a Y -l -o X:N -e
-        cd ..
+        /home/runner/work/PKScreener/PKScreener/pkscreenercli.bin -a Y -l -o X:N -e
 
-    - name: Update holidays
-      shell: bash
-      timeout-minutes: 15
-      run: |
-        python3 .github/workflows/workflowtriggers.py --updateholidays
+  HOLIDAYS_UPDATE:
+    runs-on: ${{ inputs.runson || 'ubuntu-20.04' }} #ubuntu-20.04 #windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: pkjmesra/PKScreener
+          ref: main
+          token: ${{secrets.PK_GITHUB_TOKEN}}
+      
+      - name: setup git config
+        run: |
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+
+      - name: Set up Python 
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ inputs.targetPythonVersion || 3.11 }}
+
+      - name: Install Python Dependencies
+        run: |
+          pip3 install -r requirements.txt
+          pip3 install .
+          
+      - name: Update holidays
+        shell: bash
+        timeout-minutes: 15
+        run: |
+          python3 .github/workflows/workflowtriggers.py --updateholidays
         
   # Delete_Workflow_Run:
   #   runs-on: ubuntu-20.04
