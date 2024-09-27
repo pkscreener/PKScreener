@@ -175,6 +175,8 @@ jobs:
     - name: 1. Next day Nifty/Market AI prediction
       if : ${{ steps.marketsetter.outputs.MARKET_STATUS == 'Open' || steps.marketsetter.outputs.MARKET_TRADED_TODAY == '1' }}
       shell: bash
+      env:
+        RUNNER : "GitHub_Actions"
       run: |
         /home/runner/work/PKScreener/PKScreener/pkscreenercli.bin -a Y -l -o X:N -e
 
