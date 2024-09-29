@@ -204,6 +204,15 @@ m4 = menus()
 objectDictionary = {}
 nse = nseStockDataFetcher()
 
+if args.user is None:
+    try:
+        from PKDevTools.classes.Telegram import get_secrets
+        Channel_Id, _, _, _ = get_secrets()
+        if Channel_Id is not None and len(str(Channel_Id)) > 0:
+            args.user = int(f"-{Channel_Id}")
+    except:
+        pass
+    
 def aset_output(name, value):
     if "GITHUB_OUTPUT" in os.environ.keys():
         with open(os.environ["GITHUB_OUTPUT"], "a") as fh:
