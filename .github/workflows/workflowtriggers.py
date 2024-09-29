@@ -187,7 +187,7 @@ original__stdout = sys.__stdout__
 # args.scanDaysInPast = 7
 # args.reScanForZeroSize = True
 # args.user = "-1001785195297"
-# args.skiplistlevel0 = "S,T,E,U,Z,H,Y,B,G,C,M,D,I,L,P"
+# args.skiplistlevel0 = "S,T,E,U,Z,F,H,Y,B,G,C,M,D,I,L,P"
 # args.skiplistlevel1 = "W,N,E,M,Z,S,0,2,3,4,6,7,9,10,13,14,15"
 # args.skiplistlevel2 = "0,22,29,42,50,M,Z"
 # args.skiplistlevel3 = "0"
@@ -212,7 +212,7 @@ if args.user is None:
             args.user = int(f"-{Channel_Id}")
     except:
         pass
-    
+        
 def aset_output(name, value):
     if "GITHUB_OUTPUT" in os.environ.keys():
         with open(os.environ["GITHUB_OUTPUT"], "a") as fh:
@@ -248,7 +248,7 @@ if __name__ == '__main__':
                             not args.cleanuphistoricalscans and \
                             not args.updateholidays
     if args.skiplistlevel0 is None:
-        args.skiplistlevel0 = ",".join(["S", "T", "E", "U", "Z", "B", "H", "Y", "G", "C", "M", "D", "I", "L"])
+        args.skiplistlevel0 = ",".join(["S", "T", "E", "U", "Z", "B", "F", "H", "Y", "G", "C", "M", "D", "I", "L"])
     if args.skiplistlevel1 is None:
         args.skiplistlevel1 = ",".join(["W,N,E,M,Z,S,0,1,2,3,4,5,6,7,8,9,10,11,13,14,15"])
     if args.skiplistlevel2 is None:
@@ -261,7 +261,7 @@ if __name__ == '__main__':
     if noActionableArguments:
         # By default, just generate the report
         args.report = True
-        args.skiplistlevel0 = "S,T,E,U,Z,H,Y,X,G,C,M,D,I,L,P" 
+        args.skiplistlevel0 = "S,T,E,U,Z,F,H,Y,X,G,C,M,D,I,L,P" 
         args.skiplistlevel1 = "W,N,E,M,Z,S,0,2,3,4,6,7,9,10,13,14,15"
         args.skiplistlevel2 = "0,21,22,29,42,50,M,Z"
         args.skiplistlevel3 = "0"
@@ -520,7 +520,7 @@ def run_workflow(workflow_name, postdata, option=""):
         print(f"{datetime.datetime.now(pytz.timezone('Asia/Kolkata'))}: [{resp.status_code}] Something went wrong while triggering {workflow_name}")
     return resp
 
-def cleanuphistoricalscans(scanDaysInPast=270):
+def cleanuphistoricalscans(scanDaysInPast=450):
     removedFileCount = 0
     options = "X:"
     for key in objectDictionary.keys():
@@ -537,6 +537,8 @@ def cleanuphistoricalscans(scanDaysInPast=270):
                 os.remove(fileName)
                 Committer.execOSCommand(f"git rm {fileName}")
                 removedFileCount += 1
+            if removedFileCount > 50:
+                tryCommitOutcomes(options, pathSpec=None, delete=True)
             daysInPast -=1
     if removedFileCount > 0:
         tryCommitOutcomes(options, pathSpec=None, delete=True)
@@ -552,6 +554,8 @@ def triggerScanWorkflowActions(launchLocal=False, scanDaysInPast=0):
         sleep(60) # Wait for alert time
     # Trigger intraday pre-defined piped scanners
     if PKDateUtilities.currentDateTime() <= PKDateUtilities.currentDateTime(simulate=True,hour=MarketHours().closeHour,minute=MarketHours().closeMinute):
+        if not shouldRunWorkflow():
+            return
         for scanIndex in PREDEFINED_SCAN_ALERT_MENU_KEYS:
             triggerRemoteScanAlertWorkflow(f"P:1:{scanIndex}:", branch)
 
@@ -584,9 +588,11 @@ def triggerScanWorkflowActions(launchLocal=False, scanDaysInPast=0):
             else:
                 break
     
-    runIntradayAnalysisScans(branch="main")
+    # runIntradayAnalysisScans(branch="main")
 
 def runIntradayAnalysisScans(branch="gh-pages"):
+    if not shouldRunWorkflow():
+        return
     # Trigger the intraday analysis only in the 2nd half after it gets trigerred anytime after 3 PM IST
     if PKDateUtilities.currentDateTime() >= PKDateUtilities.currentDateTime(simulate=True,hour=MarketHours().closeHour,minute=MarketHours().closeMinute-30):
         while (PKDateUtilities.currentDateTime() < PKDateUtilities.currentDateTime(simulate=True,hour=MarketHours().closeHour+1,minute=MarketHours().closeMinute-15)):
@@ -660,7 +666,7 @@ def triggerHistoricalScanWorkflowActions(scanDaysInPast=0):
                                 '{"ref":"'
                                 + branch
                                 + '","inputs":{"installtalib":"N","skipDownload":"Y","scanOptions":"'
-                                + f'--scanDaysInPast {scanDaysInPast} -s2 {skip2ListStr} -s1 {skip1ListStr} -s0 S,T,E,U,Z,H,Y,B,G,C,M,D,I,L,P -s3 {str(0)} -s4 {str(0)} --branchname actions-data-download --scans --local -f","name":"X_{index}_{option}"'
+                                + f'--scanDaysInPast {scanDaysInPast} -s2 {skip2ListStr} -s1 {skip1ListStr} -s0 S,T,E,U,Z,F,H,Y,B,G,C,M,D,I,L,P -s3 {str(0)} -s4 {str(0)} --branchname actions-data-download --scans --local -f","name":"X_{index}_{option}"'
                                 + ',"cleanuphistoricalscans":"N"}'
                                 + '}'
                                 )
@@ -674,7 +680,7 @@ def triggerHistoricalScanWorkflowActions(scanDaysInPast=0):
         '{"ref":"'
         + branch
         + '","inputs":{"installtalib":"N","skipDownload":"Y","scanOptions":"'
-        + '--scanDaysInPast 251 -s0 S,T,E,U,Z,H,Y,B,G,C,M,D,I,L,P -s1 W,N,E,M,Z,S,0,2,3,4,6,7,9,10,13,15 -s2 0,22,29,42,50,M,Z -s3 0 -s4 0 --branchname actions-data-download","name":"X_Cleanup"'
+        + '--scanDaysInPast 450 -s0 S,T,E,U,Z,F,H,Y,G,M,D,I,L -s1 "" -s2 "" -s3 "" -s4 "" --branchname actions-data-download","name":"X_Cleanup"'
         + (',"cleanuphistoricalscans":"Y"}')
         + '}'
         )
@@ -899,7 +905,7 @@ if __name__ == '__main__':
             else:
                 triggerScanWorkflowActions(args.local, scanDaysInPast=daysInPast)
     if args.cleanuphistoricalscans:
-        daysInPast = 270
+        daysInPast = 450
         if args.scanDaysInPast is not None:
             daysInPast = int(args.scanDaysInPast)
         cleanuphistoricalscans(daysInPast)
