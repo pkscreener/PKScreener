@@ -102,7 +102,7 @@ jobs:
 
     - name: Trigger barometer
       run: |
-        python3 .github/workflows/workflowtriggers.py --barometer --user "-1002097332564"
+        python3 .github/workflows/workflowtriggers.py --barometer
       shell: bash
       continue-on-error: true
       env:

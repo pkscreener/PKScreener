@@ -179,7 +179,7 @@ jobs:
       env:
         RUNNER : "GitHub_Actions"
       run: |
-        /home/runner/work/PKScreener/PKScreener/pkscreenercli.bin -a Y -l -o X:N -e --user "-1002097332564"
+        /home/runner/work/PKScreener/PKScreener/pkscreenercli.bin -a Y -l -o X:N -e
 
   HOLIDAYS_UPDATE:
     runs-on: ${{ inputs.runson || 'ubuntu-20.04' }} #ubuntu-20.04 #windows-latest
