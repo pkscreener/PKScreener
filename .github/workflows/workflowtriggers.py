@@ -558,7 +558,15 @@ def triggerScanWorkflowActions(launchLocal=False, scanDaysInPast=0):
             return
         for scanIndex in PREDEFINED_SCAN_ALERT_MENU_KEYS:
             triggerRemoteScanAlertWorkflow(f"P:1:{scanIndex}:", branch)
-
+    if scanDaysInPast > 0:
+        try:
+            os.remove(os.path.join(os.getcwd(),".env.dev"))
+        except:
+            pass
+        try:
+            os.remove(os.path.join(os.getcwd(),f"pkscreener{os.sep}.env.dev"))
+        except:
+            pass
     for key in objectDictionary.keys():
         scanOptions = f'{objectDictionary[key]["td3"]}_D_D_D_D_D'
         options = f'{scanOptions.replace("_",":").replace("B:","X:")}:D:D:D'.replace("::",":")
