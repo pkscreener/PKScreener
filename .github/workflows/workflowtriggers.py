@@ -895,7 +895,7 @@ def triggerMiscellaneousTasks():
 if __name__ == '__main__':
     if args.barometer:
         if PKDateUtilities.currentDateTime() <= PKDateUtilities.currentDateTime(simulate=True,hour=MORNING_ALERT_HOUR+1,minute=MORNING_ALERT_MINUTE):
-            triggerRemoteScanAlertWorkflow("X:12: --barometer", "main")
+            triggerRemoteScanAlertWorkflow("X:12: --barometer -l", "main")
     if args.report:
         generateBacktestReportMainPage()
     if args.backtests:
