@@ -178,6 +178,7 @@ jobs:
       shell: bash
       env:
         RUNNER : "GitHub_Actions"
+        ALERT_TRIGGER : "Y"
       run: |
         /home/runner/work/PKScreener/PKScreener/pkscreenercli.bin -a Y -l -o X:N -e
 

@@ -205,7 +205,7 @@ m4 = menus()
 objectDictionary = {}
 nse = nseStockDataFetcher()
 
-if args.user is None:
+if args.user is None and "ALERT_TRIGGER" in os.environ.keys():
     try:
         from PKDevTools.classes.Telegram import get_secrets
         Channel_Id, _, _, _ = get_secrets()
@@ -559,7 +559,7 @@ def triggerScanWorkflowActions(launchLocal=False, scanDaysInPast=0):
             return
         for scanIndex in PREDEFINED_SCAN_ALERT_MENU_KEYS:
             triggerRemoteScanAlertWorkflow(f"P:1:{scanIndex}:", branch)
-    if scanDaysInPast > 0:
+    if scanDaysInPast > 0 or "ALERT_TRIGGER" not in os.environ.keys():
         try:
             os.remove(os.path.join(os.getcwd(),".env.dev"))
         except:

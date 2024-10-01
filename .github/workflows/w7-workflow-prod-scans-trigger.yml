@@ -107,6 +107,7 @@ jobs:
       continue-on-error: true
       env:
         RUNNER : "GitHub_Actions"
+        ALERT_TRIGGER : "Y"
         GITHUB_TOKEN : ${{secrets.GITHUB_TOKEN}}
 
     - name: Trigger Scan alerts
@@ -115,4 +116,5 @@ jobs:
       shell: bash
       env:
         RUNNER : "GitHub_Actions"
+        ALERT_TRIGGER : "Y"
         GITHUB_TOKEN : ${{secrets.GITHUB_TOKEN}}
