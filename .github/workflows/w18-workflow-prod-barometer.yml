@@ -1,0 +1,184 @@
+# """
+#     The MIT License (MIT)
+
+#     Copyright (c) 2023 pkjmesra
+
+#     Permission is hereby granted, free of charge, to any person obtaining a copy
+#     of this software and associated documentation files (the "Software"), to deal
+#     in the Software without restriction, including without limitation the rights
+#     to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+#     copies of the Software, and to permit persons to whom the Software is
+#     furnished to do so, subject to the following conditions:
+
+#     The above copyright notice and this permission notice shall be included in all
+#     copies or substantial portions of the Software.
+
+#     THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+#     IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+#     FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+#     AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+#     LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+#     OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+#     SOFTWARE.
+
+# """
+name: 18. Global Market Barometer
+on:
+  workflow_dispatch:
+    inputs:
+      name:
+        description: 'Run Details'
+        required: false
+        default: 'PKScreener - Barometer'
+      targetPythonVersion:
+        description: 'Target Python version: 3.9 , 3.10, 3.11 ?'
+        required: false
+        type: string
+        default: '3.11'
+      runson:
+        description: 'Runner OS. e.g: ubuntu-20.04, windows-latest or macos-latest'
+        required: false
+        default: 'ubuntu-20.04'
+  schedule:
+  - cron: '15 3 * * 0-6'
+
+jobs:
+
+  NIFTY_Barometer_Alert:
+
+    runs-on: ${{ inputs.runson || 'ubuntu-20.04' }} #ubuntu-20.04 #windows-latest
+
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        # repository: pkjmesra/PKScreener
+        ref: main
+        # token: ${{secrets.PK_GITHUB_TOKEN}}
+    
+    - name: setup git config
+      run: |
+        git config user.name github-actions
+        git config user.email github-actions@github.com
+
+    - name: Set up Python 
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ inputs.targetPythonVersion || 3.11 }}
+
+    - name: Restore Dependencies from Cache
+      uses: actions/cache@v4
+      with:
+        path: ~\AppData\Local\pip\Cache
+        key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-
+
+    - name: Load Cache for Linux Dependencies
+      uses: actions/cache@v4
+      if: startsWith(runner.os, 'Linux')
+      with:
+        path: |
+          /usr/include/ta-lib
+          /usr/bin/ta-lib-config
+          /usr/lib/libta_lib.la
+          /usr/lib/libta_lib.a
+        key: ${{ runner.os }}-talib
+        restore-keys: |
+          ${{ runner.os }}-talib
+          
+    - name: Restore Dependencies from Ubuntu Cache
+      if: startsWith(runner.os, 'Linux')
+      uses: actions/cache@v4
+      id: cache-venv  # name for referring later
+      with:
+        path: ./.venv/  # what we cache: the virtualenv
+        # The cache key depends on requirements.txt
+        key: ${{ runner.os }}-venv-${{ hashFiles('**/requirements*.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-venv-
+
+    - name: Install TA-Lib for Windows
+      if: ${{ startsWith(runner.os, 'Windows') }}
+      shell: bash
+      run: |
+        python3 -m pip install --upgrade pip
+        pip3 install requests
+        cd .github/dependencies/
+        if [[ "${{ inputs.targetPythonVersion }}" == "" ]] ;then
+          pip3 install TA_Lib-0.4.28-cp311-cp311-win_amd64.whl
+        elif [[ "${{ inputs.targetPythonVersion }}" == "3.9" ]] ;then
+          pip3 install TA_Lib-0.4.19-cp39-cp39-win_amd64.whl
+        elif [[ "${{ inputs.targetPythonVersion }}" == "3.11" ]] ;then
+          pip3 install TA_Lib-0.4.28-cp311-cp311-win_amd64.whl
+        elif [[ "${{ inputs.targetPythonVersion }}" == "3.12" ]] ;then
+          pip3 install TA_Lib-0.4.28-cp312-cp312-win_amd64.whl
+        fi
+
+    - name: Install TA-Lib for Linux
+      if: ${{ startsWith(runner.os, 'Linux') }}
+      run: |
+        cd .github/dependencies/
+        pwd
+        tar -xzf ta-lib-0.4.0-src.tar.gz
+        cd ta-lib/
+        ./configure --prefix=/usr
+        make
+        sudo make install
+        cd /home/runner/work/PKScreener/PKScreener/
+        pip3 install ta-lib==0.4.32
+          
+    - name: Environment setup to get latest EXE
+      shell: bash
+      id: releaseurlsetter
+      run: |
+        pip3 install requests
+        python3 .github/workflows/githubutilities.py -d
+  
+    - name: Download latest executable on Windows
+      shell: cmd
+      if: ${{ startsWith(runner.os, 'Windows' ) }}
+      env:
+        exe_path: ${{ steps.releaseurlsetter.outputs.DOWNLOAD_URL }}
+      run: |
+        curl -o pkscreenercli.exe -JL %exe_path%
+
+    - name: Download latest executable on Ubuntu
+      shell: bash
+      if: ${{ startsWith(runner.os, 'Linux' ) }}
+      env:
+        exe_path: ${{ steps.releaseurlsetter.outputs.DOWNLOAD_URL }}
+      run: |
+        curl -o /home/runner/work/PKScreener/PKScreener/pkscreenercli.bin -JL $exe_path
+        chmod +x /home/runner/work/PKScreener/PKScreener/pkscreenercli.bin
+
+    - name: Install Python Dependencies
+      run: |
+        pip3 install -r requirements.txt
+        pip3 install .
+
+    - name: Environment setup to check the market status
+      shell: bash
+      id: marketsetter
+      run: |
+        python3 .github/workflows/workflowtriggers.py
+
+    - name: Configure env.dev file
+      # if : ${{ steps.marketsetter.outputs.MARKET_STATUS == 'Open' || steps.marketsetter.outputs.MARKET_TRADED_TODAY == '1' }}
+      run: |
+        python3 -c "import os; file = open('.env.dev', 'w'); file.write('CHAT_ID='+os.environ['CHAT_ID_PROD']+'\n'); file.write('TOKEN='+os.environ['TOKEN_DEV']+'\n'); file.write('GITHUB_TOKEN='+os.environ['GITHUB_TOKEN']+'\n'); file.write('chat_idADMIN='+os.environ['CHAT_IDADMIN_DEV']+'\n'); file.close()"
+        python3 -c "import os; file = open('pkscreener/.env.dev', 'w'); file.write('CHAT_ID='+os.environ['CHAT_ID_PROD']+'\n'); file.write('TOKEN='+os.environ['TOKEN_DEV']+'\n'); file.write('GITHUB_TOKEN='+os.environ['GITHUB_TOKEN']+'\n'); file.write('chat_idADMIN='+os.environ['CHAT_IDADMIN_DEV']+'\n'); file.close()"
+      shell: bash
+      env:
+        CHAT_ID_PROD : ${{secrets.CHAT_ID_DEV}}
+        TOKEN_DEV : ${{secrets.TOKEN_DEV}}
+        CHAT_IDADMIN_DEV : ${{secrets.CHAT_IDADMIN_DEV}}
+        GITHUB_TOKEN: ${{secrets.PK_GITHUB_TOKEN}}
+
+    - name: Barometer alert
+      # if : ${{ steps.marketsetter.outputs.MARKET_STATUS == 'Open' || steps.marketsetter.outputs.MARKET_TRADED_TODAY == '1' }}
+      shell: bash
+      env:
+        RUNNER : "GitHub_Actions"
+        ALERT_TRIGGER : "Y"
+      run: |
+        /home/runner/work/PKScreener/PKScreener/pkscreenercli.bin -a Y -l -o X:12 -e --barometer
