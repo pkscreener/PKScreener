@@ -150,7 +150,16 @@ jobs:
       run: |
         curl -o /home/runner/work/PKScreener/PKScreener/pkscreenercli.bin -JL $exe_path
         chmod +x /home/runner/work/PKScreener/PKScreener/pkscreenercli.bin
-    
+
+    - name: Download latest executable on Mac
+      shell: bash
+      if: ${{ startsWith(runner.os, 'MacOS' ) }}
+      env:
+        exe_path: ${{ steps.releaseurlsetter.outputs.DOWNLOAD_URL }}
+      run: |
+        curl -o /home/runner/work/PKScreener/PKScreener/pkscreenercli.run -JL $exe_path
+        chmod +x /home/runner/work/PKScreener/PKScreener/pkscreenercli.run
+          
     - name: Install Chromium Dependencies
       if: ${{ startsWith(runner.os, 'Linux' ) }}
       continue-on-error: true
