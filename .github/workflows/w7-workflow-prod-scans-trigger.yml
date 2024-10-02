@@ -100,15 +100,15 @@ jobs:
         TOKEN_DEV : ${{secrets.TOKEN_DEV}}
         CHAT_IDADMIN_DEV : ${{secrets.CHAT_IDADMIN_DEV}}
 
-    - name: Trigger barometer
-      run: |
-        python3 .github/workflows/workflowtriggers.py -f --barometer
-      shell: bash
-      continue-on-error: true
-      env:
-        RUNNER : "GitHub_Actions"
-        ALERT_TRIGGER : "Y"
-        GITHUB_TOKEN : ${{secrets.GITHUB_TOKEN}}
+    # - name: Trigger barometer
+    #   run: |
+    #     python3 .github/workflows/workflowtriggers.py -f --barometer
+    #   shell: bash
+    #   continue-on-error: true
+    #   env:
+    #     RUNNER : "GitHub_Actions"
+    #     ALERT_TRIGGER : "Y"
+    #     GITHUB_TOKEN : ${{secrets.GITHUB_TOKEN}}
 
     - name: Trigger Scan alerts
       run: |
