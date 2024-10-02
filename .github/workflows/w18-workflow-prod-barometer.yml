@@ -114,18 +114,18 @@ jobs:
           pip3 install TA_Lib-0.4.28-cp312-cp312-win_amd64.whl
         fi
 
-    - name: Install TA-Lib for Linux
-      if: ${{ startsWith(runner.os, 'Linux') }}
-      run: |
-        cd .github/dependencies/
-        pwd
-        tar -xzf ta-lib-0.4.0-src.tar.gz
-        cd ta-lib/
-        ./configure --prefix=/usr
-        make
-        sudo make install
-        cd /home/runner/work/PKScreener/PKScreener/
-        pip3 install ta-lib==0.4.32
+    # - name: Install TA-Lib for Linux
+    #   if: ${{ startsWith(runner.os, 'Linux') }}
+    #   run: |
+    #     cd .github/dependencies/
+    #     pwd
+    #     tar -xzf ta-lib-0.4.0-src.tar.gz
+    #     cd ta-lib/
+    #     ./configure --prefix=/usr
+    #     make
+    #     sudo make install
+    #     cd /home/runner/work/PKScreener/PKScreener/
+    #     pip3 install ta-lib==0.4.32
           
     - name: Environment setup to get latest EXE
       shell: bash
