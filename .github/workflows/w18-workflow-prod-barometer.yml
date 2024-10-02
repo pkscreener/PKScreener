@@ -157,8 +157,8 @@ jobs:
       env:
         exe_path: ${{ steps.releaseurlsetter.outputs.DOWNLOAD_URL }}
       run: |
-        curl -o /home/runner/work/PKScreener/PKScreener/pkscreenercli.run -JL $exe_path
-        chmod +x /home/runner/work/PKScreener/PKScreener/pkscreenercli.run
+        curl -o /Users/runner/work/PKScreener/PKScreener/pkscreenercli.run -JL $exe_path
+        chmod +x /Users/runner/work/PKScreener/PKScreener/pkscreenercli.run
           
     - name: Install Chromium Dependencies
       if: ${{ startsWith(runner.os, 'Linux' ) }}
@@ -179,6 +179,7 @@ jobs:
         /home/runner/.local/share/pyppeteer/local-chromium/1181205/chrome-linux/chrome
         
     - name: Install Python Dependencies
+      shell: bash
       run: |
         pip3 install -r requirements.txt
         pip3 install .
@@ -220,4 +221,4 @@ jobs:
         RUNNER : "GitHub_Actions"
         ALERT_TRIGGER : "Y"
       run: |
-        /home/runner/work/PKScreener/PKScreener/pkscreenercli.run -a Y -l -o X:12 -e --barometer
+        /Users/runner/work/PKScreener/PKScreener/pkscreenercli.run -a Y -l -o X:12 -e --barometer
