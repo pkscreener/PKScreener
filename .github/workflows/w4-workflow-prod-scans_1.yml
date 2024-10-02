@@ -206,7 +206,18 @@ jobs:
         run: |
           pip3 install -r requirements.txt
           pip3 install .
-          
+
+      - name: Configure env.dev file
+        run: |
+          python3 -c "import os; file = open('.env.dev', 'w'); file.write('CHAT_ID='+os.environ['CHAT_ID_PROD']+'\n'); file.write('TOKEN='+os.environ['TOKEN_DEV']+'\n'); file.write('GITHUB_TOKEN='+os.environ['GITHUB_TOKEN']+'\n'); file.write('chat_idADMIN='+os.environ['CHAT_IDADMIN_DEV']+'\n'); file.close()"
+          python3 -c "import os; file = open('pkscreener/.env.dev', 'w'); file.write('CHAT_ID='+os.environ['CHAT_ID_PROD']+'\n'); file.write('TOKEN='+os.environ['TOKEN_DEV']+'\n'); file.write('GITHUB_TOKEN='+os.environ['GITHUB_TOKEN']+'\n'); file.write('chat_idADMIN='+os.environ['CHAT_IDADMIN_DEV']+'\n'); file.close()"
+        shell: bash
+        env:
+          CHAT_ID_PROD : ${{secrets.CHAT_ID_PROD}}
+          TOKEN_DEV : ${{secrets.TOKEN_DEV}}
+          CHAT_IDADMIN_DEV : ${{secrets.CHAT_IDADMIN_DEV}}
+          GITHUB_TOKEN: ${{secrets.PK_GITHUB_TOKEN}}
+
       - name: Update holidays
         shell: bash
         timeout-minutes: 5
