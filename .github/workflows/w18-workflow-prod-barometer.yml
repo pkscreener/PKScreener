@@ -166,7 +166,7 @@ jobs:
         # pip3 uninstall pyppeteer -y
         # pip3 install pyppeteer==1.0.0
         ls /home/runner/.local/share/pyppeteer/local-chromium/1181205
-        chmod +x /home/runner/.local/share/pyppeteer/local-chromium/1181205/chrome-linux/chrome
+        sudo chmod +x /home/runner/.local/share/pyppeteer/local-chromium/1181205/chrome-linux/chrome
         /home/runner/.local/share/pyppeteer/local-chromium/1181205/chrome-linux/chrome
         
     - name: Install Python Dependencies
