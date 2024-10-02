@@ -150,11 +150,6 @@ jobs:
       run: |
         curl -o /home/runner/work/PKScreener/PKScreener/pkscreenercli.bin -JL $exe_path
         chmod +x /home/runner/work/PKScreener/PKScreener/pkscreenercli.bin
-
-    - name: Install Python Dependencies
-      run: |
-        pip3 install -r requirements.txt
-        pip3 install .
     
     - name: Install Chromium Dependencies
       if: ${{ startsWith(runner.os, 'Linux' ) }}
@@ -173,6 +168,10 @@ jobs:
         /home/runner/.local/share/pyppeteer/local-chromium/1181205/chrome-linux/chrome
         chmod +x /home/runner/.local/share/pyppeteer/local-chromium/1181205/chrome-linux/*
         
+    - name: Install Python Dependencies
+      run: |
+        pip3 install -r requirements.txt
+        pip3 install .
 
     - name: Environment setup to check the market status
       shell: bash
