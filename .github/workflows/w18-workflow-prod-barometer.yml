@@ -38,7 +38,7 @@ on:
       runson:
         description: 'Runner OS. e.g: ubuntu-20.04, windows-latest or macos-latest'
         required: false
-        default: 'ubuntu-20.04'
+        default: 'macos-latest'
   schedule:
   - cron: '45 2 * * 0-5'
 
@@ -46,7 +46,7 @@ jobs:
 
   NIFTY_Barometer_Alert:
 
-    runs-on: ${{ inputs.runson || 'ubuntu-20.04' }} #ubuntu-20.04 #windows-latest
+    runs-on: ${{ inputs.runson || 'macos-latest' }} #ubuntu-20.04 #windows-latest
 
     steps:
     - uses: actions/checkout@v4
@@ -193,21 +193,20 @@ jobs:
         python3 .github/workflows/workflowtriggers.py
 
     - name: Configure env.dev file
-      # if : ${{ steps.marketsetter.outputs.MARKET_STATUS == 'Open' || steps.marketsetter.outputs.MARKET_TRADED_TODAY == '1' }}
+      if : ${{ steps.marketsetter.outputs.MARKET_STATUS == 'Open' || steps.marketsetter.outputs.MARKET_TRADED_TODAY == '1' }}
       run: |
         python3 -c "import os; file = open('.env.dev', 'w'); file.write('CHAT_ID='+os.environ['CHAT_ID_PROD']+'\n'); file.write('TOKEN='+os.environ['TOKEN_DEV']+'\n'); file.write('GITHUB_TOKEN='+os.environ['GITHUB_TOKEN']+'\n'); file.write('chat_idADMIN='+os.environ['CHAT_IDADMIN_DEV']+'\n'); file.close()"
         python3 -c "import os; file = open('pkscreener/.env.dev', 'w'); file.write('CHAT_ID='+os.environ['CHAT_ID_PROD']+'\n'); file.write('TOKEN='+os.environ['TOKEN_DEV']+'\n'); file.write('GITHUB_TOKEN='+os.environ['GITHUB_TOKEN']+'\n'); file.write('chat_idADMIN='+os.environ['CHAT_IDADMIN_DEV']+'\n'); file.close()"
       shell: bash
       env:
-        CHAT_ID_PROD : ${{secrets.CHAT_ID_DEV}}
+        CHAT_ID_PROD : ${{secrets.CHAT_ID_PROD}}
         TOKEN_DEV : ${{secrets.TOKEN_DEV}}
         CHAT_IDADMIN_DEV : ${{secrets.CHAT_IDADMIN_DEV}}
         GITHUB_TOKEN: ${{secrets.PK_GITHUB_TOKEN}}
 
     - name: Barometer alert on Linux
-      # if : ${{ steps.marketsetter.outputs.MARKET_STATUS == 'Open' || steps.marketsetter.outputs.MARKET_TRADED_TODAY == '1' }}
+      if : ${{ startsWith(runner.os, 'Linux') && (steps.marketsetter.outputs.MARKET_STATUS == 'Open' || steps.marketsetter.outputs.MARKET_TRADED_TODAY == '1') }}
       shell: bash
-      if: ${{ startsWith(runner.os, 'Linux' ) }}
       env:
         RUNNER : "GitHub_Actions"
         ALERT_TRIGGER : "Y"
@@ -215,9 +214,8 @@ jobs:
         /home/runner/work/PKScreener/PKScreener/pkscreenercli.bin -a Y -l -o X:12 -e --barometer
 
     - name: Barometer alert on Mac
-      # if : ${{ steps.marketsetter.outputs.MARKET_STATUS == 'Open' || steps.marketsetter.outputs.MARKET_TRADED_TODAY == '1' }}
+      if : ${{ startsWith(runner.os, 'MacOS') && (steps.marketsetter.outputs.MARKET_STATUS == 'Open' || steps.marketsetter.outputs.MARKET_TRADED_TODAY == '1') }}
       shell: bash
-      if: ${{ startsWith(runner.os, 'MacOS' ) }}
       env:
         RUNNER : "GitHub_Actions"
         ALERT_TRIGGER : "Y"
