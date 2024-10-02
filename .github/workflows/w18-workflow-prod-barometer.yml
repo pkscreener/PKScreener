@@ -40,7 +40,7 @@ on:
         required: false
         default: 'ubuntu-20.04'
   schedule:
-  - cron: '15 3 * * 0-6'
+  - cron: '45 2 * * 0-5'
 
 jobs:
 
@@ -159,6 +159,7 @@ jobs:
       run: |
         curl -o /Users/runner/work/PKScreener/PKScreener/pkscreenercli.run -JL $exe_path
         chmod +x /Users/runner/work/PKScreener/PKScreener/pkscreenercli.run
+        brew install google-chrome
           
     - name: Install Chromium Dependencies
       if: ${{ startsWith(runner.os, 'Linux' ) }}
@@ -220,5 +221,6 @@ jobs:
       env:
         RUNNER : "GitHub_Actions"
         ALERT_TRIGGER : "Y"
+        PUPPETEER_EXECUTABLE_PATH : "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
       run: |
         /Users/runner/work/PKScreener/PKScreener/pkscreenercli.run -a Y -l -o X:12 -e --barometer
