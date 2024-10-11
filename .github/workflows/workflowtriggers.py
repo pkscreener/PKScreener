@@ -177,7 +177,7 @@ original__stdout = sys.__stdout__
 # args.barometer = True
 # args.force = True
 # args.misc = True
-# args.scans = True
+args.scans = True
 # args.report = True
 # args.intraday = True
 # args.updateholidays = True
@@ -557,8 +557,7 @@ def triggerScanWorkflowActions(launchLocal=False, scanDaysInPast=0):
     if PKDateUtilities.currentDateTime() <= PKDateUtilities.currentDateTime(simulate=True,hour=MarketHours().closeHour,minute=MarketHours().closeMinute):
         if not shouldRunWorkflow():
             return
-        for scanIndex in PREDEFINED_SCAN_ALERT_MENU_KEYS:
-            triggerRemoteScanAlertWorkflow(f"P:1:{scanIndex}:", branch)
+
     if scanDaysInPast > 0 or "ALERT_TRIGGER" not in os.environ.keys():
         try:
             os.remove(os.path.join(os.getcwd(),".env.dev"))
@@ -596,7 +595,13 @@ def triggerScanWorkflowActions(launchLocal=False, scanDaysInPast=0):
                 sleep(5)
             else:
                 break
-    
+
+    if PKDateUtilities.currentDateTime() <= PKDateUtilities.currentDateTime(simulate=True,hour=MarketHours().closeHour,minute=MarketHours().closeMinute):
+        if not shouldRunWorkflow():
+            return
+        for scanIndex in PREDEFINED_SCAN_ALERT_MENU_KEYS:
+            triggerRemoteScanAlertWorkflow(f"P:1:{scanIndex}:", branch)
+
     runIntradayAnalysisScans(branch="main")
 
 def runIntradayAnalysisScans(branch="gh-pages"):
