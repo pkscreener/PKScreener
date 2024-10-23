@@ -40,7 +40,7 @@ on:
         required: false
         default: 'macos-latest'
   schedule:
-  - cron: '45 2 * * 0-5'
+  - cron: '15 2 * * 0-5'
 
 jobs:
 
@@ -211,7 +211,7 @@ jobs:
         RUNNER : "GitHub_Actions"
         ALERT_TRIGGER : "Y"
       run: |
-        /home/runner/work/PKScreener/PKScreener/pkscreenercli.bin -a Y -l -o X:12 -e --barometer
+        /home/runner/work/PKScreener/PKScreener/pkscreenercli.bin -a Y -o X:12 -e --barometer
 
     - name: Barometer alert on Mac
       if : ${{ startsWith(runner.os, 'MacOS') }} #&& (steps.marketsetter.outputs.MARKET_STATUS == 'Open' || steps.marketsetter.outputs.MARKET_TRADED_TODAY == '1') }}
