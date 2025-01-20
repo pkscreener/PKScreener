@@ -717,7 +717,7 @@ class tools:
             # Let's go to the next line
             rowPixelRunValue += artfont_line_height + 1
 
-        im = im.resize((int(im.size[0]*configManager.telegramImageCompressionRatio),int(im.size[1]*configManager.telegramImageCompressionRatio)), Image.ANTIALIAS, reducing_gap=2)
+        im = im.resize((int(im.size[0]*configManager.telegramImageCompressionRatio),int(im.size[1]*configManager.telegramImageCompressionRatio)), Image.LANCZOS, reducing_gap=2)
         im = tools.addQuickWatermark(im,xVertical,dataSrc="Yahoo!finance; Morningstar, Inc; National Stock Exchange of India Ltd;TradingHours.com;",dataSrcFontSize=ART_FONT_SIZE)
         im.save(filename, format=configManager.telegramImageFormat, bitmap_format=configManager.telegramImageFormat, optimize=True, quality=int(configManager.telegramImageQualityPercentage))
         # if 'RUNNER' not in os.environ.keys() and 'PKDevTools_Default_Log_Level' in os.environ.keys():
