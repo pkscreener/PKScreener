@@ -36,9 +36,9 @@ on:
         type: string
         default: '3.11'
       runson:
-        description: 'Runner OS. e.g: ubuntu-20.04, windows-latest or macos-latest'
+        description: 'Runner OS. e.g: ubuntu-latest, windows-latest or macos-latest'
         required: false
-        default: 'ubuntu-20.04'
+        default: 'ubuntu-latest'
   schedule:
   - cron: '55 9 * * 0-6'
 
@@ -46,7 +46,7 @@ jobs:
 
   NIFTY_Prediction_Alert:
 
-    runs-on: ${{ inputs.runson || 'ubuntu-20.04' }} #ubuntu-20.04 #windows-latest
+    runs-on: ${{ inputs.runson || 'ubuntu-latest' }} #ubuntu-latest #windows-latest
 
     steps:
     - uses: actions/checkout@v4
@@ -148,8 +148,8 @@ jobs:
       env:
         exe_path: ${{ steps.releaseurlsetter.outputs.DOWNLOAD_URL }}
       run: |
-        curl -o /home/runner/work/PKScreener/PKScreener/pkscreenercli.bin -JL $exe_path
-        chmod +x /home/runner/work/PKScreener/PKScreener/pkscreenercli.bin
+        curl -o /home/runner/work/PKScreener/PKScreener/pkscreenercli_x64.bin -JL $exe_path
+        chmod +x /home/runner/work/PKScreener/PKScreener/pkscreenercli_x64.bin
 
     - name: Install Python Dependencies
       run: |
@@ -181,10 +181,10 @@ jobs:
         RUNNER : "GitHub_Actions"
         ALERT_TRIGGER : "Y"
       run: |
-        /home/runner/work/PKScreener/PKScreener/pkscreenercli.bin -a Y -l -o X:N -e
+        /home/runner/work/PKScreener/PKScreener/pkscreenercli_x64.bin -a Y -l -o X:N -e
 
   HOLIDAYS_UPDATE:
-    runs-on: ${{ inputs.runson || 'ubuntu-20.04' }} #ubuntu-20.04 #windows-latest
+    runs-on: ${{ inputs.runson || 'ubuntu-latest' }} #ubuntu-latest #windows-latest
     steps:
       - uses: actions/checkout@v4
         with:
@@ -228,7 +228,7 @@ jobs:
           python3 .github/workflows/workflowtriggers.py --updateholidays
         
   # Delete_Workflow_Run:
-  #   runs-on: ubuntu-20.04
+  #   runs-on: ubuntu-latest
   #   needs: [NIFTY_Prediction_Alert]
   #   name: Delete workflow run
   #   steps:

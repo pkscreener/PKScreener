@@ -36,7 +36,7 @@ on:
         type: string
         default: '3.11'
       runson:
-        description: 'Runner OS. e.g: ubuntu-20.04, windows-latest or macos-latest'
+        description: 'Runner OS. e.g: ubuntu-latest, windows-latest or macos-latest'
         required: false
         default: 'macos-latest'
   schedule:
@@ -46,7 +46,7 @@ jobs:
 
   NIFTY_Barometer_Alert:
 
-    runs-on: ${{ inputs.runson || 'macos-latest' }} #ubuntu-20.04 #windows-latest
+    runs-on: ${{ inputs.runson || 'macos-latest' }} #ubuntu-latest #windows-latest
 
     steps:
     - uses: actions/checkout@v4
@@ -148,8 +148,8 @@ jobs:
       env:
         exe_path: ${{ steps.releaseurlsetter.outputs.DOWNLOAD_URL }}
       run: |
-        curl -o /home/runner/work/PKScreener/PKScreener/pkscreenercli.bin -JL $exe_path
-        chmod +x /home/runner/work/PKScreener/PKScreener/pkscreenercli.bin
+        curl -o /home/runner/work/PKScreener/PKScreener/pkscreenercli_x64.bin -JL $exe_path
+        chmod +x /home/runner/work/PKScreener/PKScreener/pkscreenercli_x64.bin
 
     - name: Download latest executable on Mac
       shell: bash
@@ -157,8 +157,8 @@ jobs:
       env:
         exe_path: ${{ steps.releaseurlsetter.outputs.DOWNLOAD_URL }}
       run: |
-        curl -o /Users/runner/work/PKScreener/PKScreener/pkscreenercli.run -JL $exe_path
-        chmod +x /Users/runner/work/PKScreener/PKScreener/pkscreenercli.run
+        curl -o /Users/runner/work/PKScreener/PKScreener/pkscreenercli_x64.run -JL $exe_path
+        chmod +x /Users/runner/work/PKScreener/PKScreener/pkscreenercli_x64.run
         brew install google-chrome
           
     - name: Install Chromium Dependencies
@@ -211,7 +211,7 @@ jobs:
         RUNNER : "GitHub_Actions"
         ALERT_TRIGGER : "Y"
       run: |
-        /home/runner/work/PKScreener/PKScreener/pkscreenercli.bin -a Y -o X:12 -e --barometer
+        /home/runner/work/PKScreener/PKScreener/pkscreenercli_x64.bin -a Y -o X:12 -e --barometer
 
     - name: Barometer alert on Mac
       if : ${{ startsWith(runner.os, 'MacOS') }} #&& (steps.marketsetter.outputs.MARKET_STATUS == 'Open' || steps.marketsetter.outputs.MARKET_TRADED_TODAY == '1') }}
@@ -221,4 +221,4 @@ jobs:
         ALERT_TRIGGER : "Y"
         PUPPETEER_EXECUTABLE_PATH : "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
       run: |
-        /Users/runner/work/PKScreener/PKScreener/pkscreenercli.run -a Y -l -o X:12 -e --barometer
+        /Users/runner/work/PKScreener/PKScreener/pkscreenercli_x64.run -a Y -l -o X:12 -e --barometer

@@ -40,9 +40,9 @@ on:
         type: string
         default: '3.11'
       runson:
-          description: 'Runner OS. e.g: ubuntu-20.04, windows-latest or macos-latest'
+          description: 'Runner OS. e.g: ubuntu-latest, windows-latest or macos-latest'
           required: false
-          default: 'ubuntu-20.04'
+          default: 'ubuntu-latest'
       cliOptions:
         description: 'Enable Logging in the target app or pass any args to bot'
         required: false
@@ -69,8 +69,8 @@ on:
 jobs:
 
   Prod_Telegram_Bot:
-
-    runs-on: ${{ inputs.runson || 'ubuntu-20.04' }} #ubuntu-20.04 #windows-latest
+    # https://docs.github.com/en/actions/using-github-hosted-runners/using-github-hosted-runners/about-github-hosted-runners#supported-runners-and-hardware-resources
+    runs-on: ${{ inputs.runson || 'ubuntu-latest' }} #ubuntu-latest #windows-latest ubuntu-24.04-arm, ubuntu-22.04-arm
 
     steps:
     - uses: actions/checkout@v4
@@ -168,8 +168,8 @@ jobs:
       env:
         exe_path: ${{ inputs.DOWNLOAD_URL || steps.releaseurlsetter.outputs.DOWNLOAD_URL }}
       run: |
-        curl -o /home/runner/work/PKScreener/PKScreener/pkscreenercli.bin -JL $exe_path
-        chmod +x /home/runner/work/PKScreener/PKScreener/pkscreenercli.bin
+        curl -o /home/runner/work/PKScreener/PKScreener/pkscreenercli_x64.bin -JL $exe_path
+        chmod +x /home/runner/work/PKScreener/PKScreener/pkscreenercli_x64.bin
         
     - name: Configure env.dev file
       run: |
@@ -203,7 +203,7 @@ jobs:
         RUNNER : "GitHub_Actions"
         MONITORING_BOT_RUNNER: "MONITORING_BOT_RUNNER"
       run: |
-        /home/runner/work/PKScreener/PKScreener/pkscreenercli.bin --bot --botavailable ${{ inputs.cliOptions || '' }}
+        /home/runner/work/PKScreener/PKScreener/pkscreenercli_x64.bin --bot --botavailable ${{ inputs.cliOptions || '' }}
 
     - name: Delete this repo workflow run
       shell: bash
@@ -224,7 +224,7 @@ jobs:
         GH_TOKEN : ${{secrets.PK_GITHUB_TOKEN}}
 
   # Delete_Workflow_Run:
-  #   runs-on: ubuntu-20.04
+  #   runs-on: ubuntu-latest
   #   needs: [Prod_Telegram_Bot]
   #   name: Delete workflow run
   #   steps:
