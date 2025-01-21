@@ -177,7 +177,7 @@ original__stdout = sys.__stdout__
 # args.barometer = True
 # args.force = True
 # args.misc = True
-args.scans = True
+# args.scans = True
 # args.report = True
 # args.intraday = True
 # args.updateholidays = True
@@ -247,7 +247,10 @@ if __name__ == '__main__':
                             not args.scans and \
                             not args.backtests and \
                             not args.cleanuphistoricalscans and \
-                            not args.updateholidays
+                            not args.updateholidays and \
+                            not args.barometer and \
+                            not args.runintradayanalysis and \
+                            not args.misc
     if args.skiplistlevel0 is None:
         args.skiplistlevel0 = ",".join(["S", "T", "E", "U", "Z", "B", "F", "H", "Y", "G", "C", "M", "D", "I", "L"])
     if args.skiplistlevel1 is None:

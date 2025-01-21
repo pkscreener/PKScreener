@@ -40,7 +40,7 @@ on:
         type: string
         default: '3.11'
       runson:
-          description: 'Runner OS. e.g: ubuntu-latest, windows-latest or macos-latest'
+          description: 'Runner OS. e.g: ubuntu-latest, windows-latest or macos-latest or ubuntu-22.04-arm or ubuntu-24.04-arm'
           required: false
           default: 'ubuntu-latest'
       cliOptions:
@@ -51,6 +51,11 @@ on:
         description: 'Download URL override for the bot. Provide full URL.'
         required: false
         default: ''
+      targetArch:
+        description: 'Target OS processor architecture? arm64 or x64 ?'
+        required: false
+        type: string
+        default: 'x64'
   push:
     branches: [ main ]
     # workflow_run:
