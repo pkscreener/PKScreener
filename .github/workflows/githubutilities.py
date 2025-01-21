@@ -27,6 +27,7 @@ import argparse
 import os
 import platform
 import uuid
+import sysconfig
 
 import requests
 
@@ -95,19 +96,21 @@ def cfetchURL(key, url):
 
 
 def dget_latest_release_url():
-    exe_name = "pkscreenercli_x64.bin"
+    machineArch = sysconfig.get_platform().split("-")[-1].lower()
+    exe_name = f"pkscreenercli_{machineArch}.bin"
     try:
         resp = cfetchURL(
             "ReleaseResponse",
             "https://api.github.com/repos/pkjmesra/PKScreener/releases/latest",
         )
         url = ""
+        
         if "Windows" in platform.system():
             exe_name = "pkscreenercli.exe"
         elif "Darwin" in platform.system():
-            exe_name = "pkscreenercli_x64.run"
+            exe_name = f"pkscreenercli_{machineArch}.run"
         else:
-            exe_name = "pkscreenercli_x64.bin"
+            exe_name = f"pkscreenercli_{machineArch}.bin"
         for asset in resp.json()["assets"]:
             url = asset["browser_download_url"]
             if url.endswith(exe_name):
