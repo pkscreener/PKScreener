@@ -97,6 +97,7 @@ def cfetchURL(key, url):
 
 def dget_latest_release_url():
     machineArch = sysconfig.get_platform().split("-")[-1].lower()
+    print(f"Machine arch: {machineArch}")
     exe_name = f"pkscreenercli_{machineArch}.bin"
     try:
         resp = cfetchURL(
