@@ -34,7 +34,7 @@ on:
         description: 'Target Python version: 3.9 , 3.10, 3.11 ?'
         required: false
         type: string
-        default: '3.11'
+        default: '3.12'
       runson:
         description: 'Runner OS. e.g: ubuntu-latest, windows-latest or macos-latest'
         required: false
@@ -63,7 +63,7 @@ jobs:
     - name: Set up Python 
       uses: actions/setup-python@v5
       with:
-        python-version: ${{ inputs.targetPythonVersion || 3.11 }}
+        python-version: ${{ inputs.targetPythonVersion || 3.12 }}
 
     - name: Restore Dependencies from Cache
       uses: actions/cache@v4
@@ -121,7 +121,7 @@ jobs:
         pwd
         sudo dpkg -i ta-lib_0.6.4_amd64.deb
         cd /home/runner/work/PKScreener/PKScreener/
-        pip3 install ta-lib==0.4.32
+        pip3 install ta-lib
           
     - name: Environment setup to get latest EXE
       shell: bash
