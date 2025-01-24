@@ -39,6 +39,7 @@ class CandlePatterns:
         "Dragonfly Doji",
         "Supply Drought",
         "Demand Rise",
+        "Cup and Handle",
     ]
     reversalPatternsBearish = [
         "Evening Star",
@@ -65,8 +66,8 @@ class CandlePatterns:
     #@measure_time
     # Find candle-stick patterns
     # Arrange if statements with max priority from top to bottom
-    def findPattern(self, data, dict, saveDict):
-        data = data.head(4)
+    def findPattern(self, processedData, dict, saveDict,filterPattern=None):
+        data = processedData.head(4)
         data = data[::-1]
         hasCandleStickPattern = False
         if "Pattern" not in saveDict.keys():
@@ -89,6 +90,16 @@ class CandlePatterns:
                 colorText.GREEN + f"Morning Star" + colorText.END 
             )
             saveDict["Pattern"] = self.findCurrentSavedValue(dict,saveDict,"Pattern")[1] +  f"Morning Star"
+            hasCandleStickPattern = True
+        
+        check = pktalib.CDLCUPANDHANDLE(
+            processedData["Open"], processedData["High"], processedData["Low"], processedData["Close"]
+        )
+        if check:
+            dict["Pattern"] = (self.findCurrentSavedValue(dict,saveDict,"Pattern")[0] + 
+                colorText.GREEN + f"Cup and Handle" + colorText.END 
+            )
+            saveDict["Pattern"] = self.findCurrentSavedValue(dict,saveDict,"Pattern")[1] +  f"Cup and Handle"
             hasCandleStickPattern = True
 
         check = pktalib.CDLMORNINGDOJISTAR(
@@ -338,5 +349,5 @@ class CandlePatterns:
                 saveDict["Pattern"] = self.findCurrentSavedValue(dict,saveDict,"Pattern")[1] +  f"Bearish Engulfing"
             hasCandleStickPattern = True
         if hasCandleStickPattern:
-            return True
+            return filterPattern in saveDict["Pattern"] if filterPattern is not None else hasCandleStickPattern
         return False

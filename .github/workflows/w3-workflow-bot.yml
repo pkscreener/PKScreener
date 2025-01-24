@@ -40,9 +40,9 @@ on:
         type: string
         default: '3.11'
       runson:
-          description: 'Runner OS. e.g: ubuntu-20.04, windows-latest or macos-latest'
+          description: 'Runner OS. e.g: ubuntu-latest, windows-latest or macos-latest or ubuntu-22.04-arm or ubuntu-24.04-arm'
           required: false
-          default: 'ubuntu-20.04'
+          default: 'ubuntu-latest'
       cliOptions:
         description: 'Enable Logging in the target app or pass any args to bot'
         required: false
@@ -51,6 +51,11 @@ on:
         description: 'Download URL override for the bot. Provide full URL.'
         required: false
         default: ''
+      targetArch:
+        description: 'Target OS processor architecture? arm64 or x64 ?'
+        required: false
+        type: string
+        default: 'x64'
   push:
     branches: [ main ]
     # workflow_run:
@@ -69,8 +74,8 @@ on:
 jobs:
 
   Prod_Telegram_Bot:
-
-    runs-on: ${{ inputs.runson || 'ubuntu-20.04' }} #ubuntu-20.04 #windows-latest
+    # https://docs.github.com/en/actions/using-github-hosted-runners/using-github-hosted-runners/about-github-hosted-runners#supported-runners-and-hardware-resources
+    runs-on: ${{ inputs.runson || 'ubuntu-latest' }} #ubuntu-latest #windows-latest ubuntu-24.04-arm, ubuntu-22.04-arm
 
     steps:
     - uses: actions/checkout@v4
@@ -139,11 +144,7 @@ jobs:
       run: |
         cd .github/dependencies/
         pwd
-        tar -xzf ta-lib-0.4.0-src.tar.gz
-        cd ta-lib/
-        ./configure --prefix=/usr
-        make
-        sudo make install
+        sudo dpkg -i ta-lib_0.6.4_amd64.deb
         cd /home/runner/work/PKScreener/PKScreener/
         pip3 install ta-lib==0.4.32
 
@@ -168,18 +169,20 @@ jobs:
       env:
         exe_path: ${{ inputs.DOWNLOAD_URL || steps.releaseurlsetter.outputs.DOWNLOAD_URL }}
       run: |
-        curl -o /home/runner/work/PKScreener/PKScreener/pkscreenercli.bin -JL $exe_path
-        chmod +x /home/runner/work/PKScreener/PKScreener/pkscreenercli.bin
+        curl -o /home/runner/work/PKScreener/PKScreener/pkscreenercli_x64.bin -JL $exe_path
+        chmod +x /home/runner/work/PKScreener/PKScreener/pkscreenercli_x64.bin
         
     - name: Configure env.dev file
       run: |
-        python3 -c "import os; file = open('.env.dev', 'w'); file.write('CHAT_ID='+os.environ['CHAT_ID_DEV']+'\n'); file.write('TOKEN='+os.environ['TOKEN_DEV']+'\n'); file.write('chat_idADMIN='+os.environ['CHAT_IDADMIN_DEV']+'\n'); file.write('GITHUB_TOKEN='+os.environ['GITHUB_TOKEN']+'\n'); file.close()"
+        python3 -c "import os; file = open('.env.dev', 'w'); file.write('CHAT_ID='+os.environ['CHAT_ID_DEV']+'\n'); file.write('TOKEN='+os.environ['TOKEN_DEV']+'\n'); file.write('chat_idADMIN='+os.environ['CHAT_IDADMIN_DEV']+'\n'); file.write('TDU='+os.environ['TDU']+'\n'); file.write('TAT='+os.environ['TAT']+'\n'); file.write('GITHUB_TOKEN='+os.environ['GITHUB_TOKEN']+'\n'); file.close()"
       shell: bash
       env:
         CHAT_ID_DEV : ${{secrets.CHAT_ID_DEV}}
         TOKEN_DEV : ${{secrets.TOKEN_DEV}}
         CHAT_IDADMIN_DEV : ${{secrets.CHAT_IDADMIN_DEV}}
         GITHUB_TOKEN : ${{secrets.GITHUB_TOKEN}}
+        TDU : ${{secrets.TURSO_DATABASE_URL}}
+        TAT : ${{secrets.TURSO_AUTH_TOKEN}}
 
     - name: Run Telegram bot on Windows
       shell: cmd
@@ -201,7 +204,7 @@ jobs:
         RUNNER : "GitHub_Actions"
         MONITORING_BOT_RUNNER: "MONITORING_BOT_RUNNER"
       run: |
-        /home/runner/work/PKScreener/PKScreener/pkscreenercli.bin --bot --botavailable ${{ inputs.cliOptions || '' }}
+        /home/runner/work/PKScreener/PKScreener/pkscreenercli_x64.bin --bot --botavailable ${{ inputs.cliOptions || '' }}
 
     - name: Delete this repo workflow run
       shell: bash
@@ -222,7 +225,7 @@ jobs:
         GH_TOKEN : ${{secrets.PK_GITHUB_TOKEN}}
 
   # Delete_Workflow_Run:
-  #   runs-on: ubuntu-20.04
+  #   runs-on: ubuntu-latest
   #   needs: [Prod_Telegram_Bot]
   #   name: Delete workflow run
   #   steps:

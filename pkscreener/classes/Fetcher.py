@@ -32,7 +32,11 @@ warnings.simplefilter("ignore", FutureWarning)
 import pandas as pd
 import yfinance as yf
 from yfinance import shared
-from yfinance.exceptions import YFPricesMissingError, YFInvalidPeriodError
+# from yfinance.exceptions import YFPricesMissingError, YFInvalidPeriodError
+class YFPricesMissingError(Exception):
+    pass
+class YFInvalidPeriodError(Exception):
+    pass
 from concurrent.futures import ThreadPoolExecutor
 from PKDevTools.classes.PKDateUtilities import PKDateUtilities
 from PKDevTools.classes.ColorText import colorText
@@ -54,19 +58,18 @@ class screenerStockDataFetcher(nseStockDataFetcher):
             stockCode,period,duration,exchangeSuffix = task.long_running_fn_args
         else:
             stockCode,period,duration,exchangeSuffix = args[0],args[1],args[2],args[3]
-        result = self.fetchStockData(stockCode,period,duration,None,0,0,0,exchangeSuffix=exchangeSuffix)
+        result = self.fetchStockData(stockCode,period,duration,None,0,0,0,exchangeSuffix=exchangeSuffix,printCounter=False)
         if task is not None:
-            if task.taskId > 0:
+            if task.taskId >= 0:
                 task.progressStatusDict[task.taskId] = {'progress': 0, 'total': 1}
                 task.resultsDict[task.taskId] = result
                 task.progressStatusDict[task.taskId] = {'progress': 1, 'total': 1}
-            else:
-                task.result = result
+            task.result = result
         return result
 
     def get_stats(self,ticker):
         info = yf.Tickers(ticker).tickers[ticker].fast_info
-        screenerStockDataFetcher._tickersInfoDict[ticker] = {"marketCap":info.market_cap}
+        screenerStockDataFetcher._tickersInfoDict[ticker] = {"marketCap":info.market_cap if info is not None else 0}
 
     def fetchAdditionalTickerInfo(self,ticker_list,exchangeSuffix=".NS"):
         if not isinstance(ticker_list,list):
@@ -126,26 +129,34 @@ class screenerStockDataFetcher(nseStockDataFetcher):
                     start=start,
                     end=end
                 )
-                if (data is None or data.empty) and isinstance(stockCode,str):
-                    for ticker in shared._ERRORS:
-                        err = shared._ERRORS.get(ticker)
-                        # Maybe this stock is recently listed. Let's try and fetch for the last month
-                        if "YFInvalidPeriodError" in err: #and "Period \'1mo\' is invalid" not in err:
-                            recommendedPeriod = period
-                            if isinstance(err,YFInvalidPeriodError):
-                                recommendedPeriod = err.valid_ranges[-1]
-                            else:
-                                recommendedPeriod = str(err).split("[")[1].split("]")[0].split(",")[-1].strip()
-                            recommendedPeriod = recommendedPeriod.replace("'","").replace("\"","")
-                            # default_logger().debug(f"Sending request again for {ticker} with period:{recommendedPeriod}")
-                            data = self.fetchStockData(stockCode=ticker,period=recommendedPeriod,duration=duration,printCounter=printCounter, start=start,end=end)
-                            return data
-            except (KeyError,YFPricesMissingError) as e:
+                if isinstance(stockCode,str):
+                    if (data is None or data.empty):
+                        for ticker in shared._ERRORS:
+                            err = shared._ERRORS.get(ticker)
+                            # Maybe this stock is recently listed. Let's try and fetch for the last month
+                            if "YFInvalidPeriodError" in err: #and "Period \'1mo\' is invalid" not in err:
+                                recommendedPeriod = period
+                                if isinstance(err,YFInvalidPeriodError):
+                                    recommendedPeriod = err.valid_ranges[-1]
+                                else:
+                                    recommendedPeriod = str(err).split("[")[1].split("]")[0].split(",")[-1].strip()
+                                recommendedPeriod = recommendedPeriod.replace("'","").replace("\"","")
+                                # default_logger().debug(f"Sending request again for {ticker} with period:{recommendedPeriod}")
+                                data = self.fetchStockData(stockCode=ticker,period=recommendedPeriod,duration=duration,printCounter=printCounter, start=start,end=end)
+                                return data
+                    else:
+                        multiIndex = data.keys()
+                        if isinstance(multiIndex, pd.MultiIndex):
+                            # If we requested for multiple stocks from yfinance
+                            # we'd have received a multiindex dataframe
+                            listStockCodes = multiIndex.get_level_values(0)
+                            data = data.get(listStockCodes[0])
+            except (KeyError,YFPricesMissingError) as e: # pragma: no cover
                 default_logger().debug(e,exc_info=True)
                 pass
-            except (YFInvalidPeriodError,Exception) as e:
+            except (YFInvalidPeriodError,Exception) as e: # pragma: no cover
                 default_logger().debug(e,exc_info=True)                    
-        if printCounter:
+        if printCounter and type(screenCounter) != int:
             sys.stdout.write("\r\033[K")
             try:
                 OutputControls().printOutput(

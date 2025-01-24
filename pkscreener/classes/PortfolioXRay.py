@@ -478,6 +478,7 @@ def getbacktestPeriod(args):
 
 def statScanCalculations(userArgs, saveResults, periods,progressLabel:str=None):
     scanResults = []
+    tasksList = []
     if saveResults is not None and len(saveResults) >= 1:
         task1 = PKTask(f"[{len(saveResults)}] RSI Stats",long_running_fn=statScanCalculationForRSI)
         task2 = PKTask(f"[{len(saveResults)}] Trend Stats",long_running_fn=statScanCalculationForTrend)
@@ -833,7 +834,7 @@ def formatGridOutput(df,replacenan=True):
     for col in df.columns:
         try:
             df[col] = df[col].astype(float).fillna(0)
-        except ValueError as e:
+        except ValueError as e: # pragma: no cover
             if len(str(e).split("-")) < 2:
                 # We want to allow value "-" in column values
                 # We don't want to allow '2024-12-03' or 'RSI >=50' or "Trends-50-to-60"
@@ -845,7 +846,7 @@ def formatGridOutput(df,replacenan=True):
             continue
         maxGrowth = df[col].max()
         if "Pd-%" in col:
-            df.loc[:, col] = df.loc[:, col].apply(
+            df.loc[:, col] = df.loc[:, col].astype(str).apply(
                 lambda x: x
                 if (str(x) == "-")
                 else (
@@ -867,7 +868,7 @@ def formatGridOutput(df,replacenan=True):
                 )
             )
         if "Pd-10k" in col:
-            df.loc[:, col] = df.loc[:, col].apply(
+            df.loc[:, col] = df.loc[:, col].astype(str).apply(
                 lambda x: x
                 if (str(x) == "-")
                 else (

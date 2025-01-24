@@ -1,5 +1,5 @@
-venv/
-.venv/
+venv*/
+.venv*/
 build/
 dist/
 test/*.ini
@@ -44,3 +44,4 @@ results/*.csv
 *.txt
 *.whl
 results
+pkscreener/*.txt

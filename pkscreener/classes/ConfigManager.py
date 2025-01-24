@@ -34,6 +34,7 @@ from PKDevTools.classes.log import default_logger
 from PKDevTools.classes.Singleton import SingletonType, SingletonMixin
 from PKDevTools.classes.OutputControls import OutputControls
 from PKDevTools.classes.MarketHours import MarketHours
+from pkscreener.classes import VERSION
 import re
 
 parser = configparser.ConfigParser(strict=False)
@@ -48,11 +49,22 @@ default_timeout = 2
 class tools(SingletonMixin, metaclass=SingletonType):
     def __init__(self):
         super(tools, self).__init__()
+        self.appVersion = None
+        self.userID = None
         self.alwaysHiddenDisplayColumns = ",52Wk-L,RSI,22-Pd,Consol.,Pattern,CCI"
         self.consolidationPercentage = 10
+        self.otpInterval = 120
         self.telegramImageFormat = "JPEG"
         self.telegramImageCompressionRatio = 0.6
         self.telegramImageQualityPercentage = 20
+
+        self.barometerx = 240
+        self.barometery = 305
+        self.barometerwidth = 1010
+        self.barometerheight = 630
+        self.barometerwindowwidth = 1920
+        self.barometerwindowheight = 1080
+
         self.volumeRatio = 2.5
         self.minLTP = 20.0
         self.maxLTP = 50000
@@ -66,6 +78,7 @@ class tools(SingletonMixin, metaclass=SingletonType):
         self.showunknowntrends = True
         self.enablePortfolioCalculations = False
         self.logsEnabled = False
+        self.tosAccepted = False
         self.generalTimeout = 2
         self.defaultIndex = 12
         self.longTimeout = 4
@@ -101,6 +114,7 @@ class tools(SingletonMixin, metaclass=SingletonType):
         self.maxNumResultRowsInMonitor = 3
         self.calculatersiintraday = False
         self.defaultMonitorOptions = "X:12:9:2.5:>|X:0:31:>|X:0:23:>|X:0:27:~X:12:9:2.5:>|X:0:31:>|X:0:27:~X:12:9:2.5:>|X:0:31:~X:12:9:2.5:>|X:0:27:~X:12:9:2.5:>|X:0:29:~X:12:9:2.5:>|X:0:27:>|X:12:30:1:~X:12:9:2.5:>|X:12:30:1:~X:12:31:>|X:0:27:~X:12:31:>|X:0:30:1:~X:12:27:>|X:0:30:1:~X:12:7:8:>|X:12:7:9:1:1:~X:12:7:4:>|X:12:7:9:1:1:~X:12:2:>|X:12:7:8:>|X:12:7:9:1:1:~X:12:30:1:>|X:12:7:8:~X:12:7:9:5:>|X:12:21:8:~X:12:7:4:~X:12:7:9:7:>|X:0:9:2.5:~X:12:7:9:7:>|X:0:31:>|X:0:30:1:~X:12:7:3:0.008:4:>|X:0:30:1:~X:12:7:3:0.008:4:>|X:12:7:9:7:>|X:0:7:3:0.008:4:~X:12:9:2.5~X:12:23~X:12:28~X:12:31~|{1}X:0:23:>|X:0:27:>|X:0:31:~|{2}X:0:31:~|{3}X:0:27:~X:12:7:3:.01:1~|{5}X:0:5:0:35:~X:12:7:6:1~X:12:11:~X:12:12:i 5m~X:12:17~X:12:24~X:12:6:7:1~X:12:6:3~X:12:6:8~X:12:6:9~X:12:2:>|X:12:7:8:>|X:12:7:9:1:1:~X:12:6:10:1~X:12:7:4:>|X:12:30:1:~X:12:7:3:.02:1~X:12:13:i 1m~X:12:2~|{1}X:0:29:"
+        self.myMonitorOptions = ""
         self.minimumChangePercentage = 0
         self.daysToLookback = 22 * self.backtestPeriodFactor  # 1 month
         self.periods = [1,2,3,4,5,10,15,22,30]
@@ -119,7 +133,7 @@ class tools(SingletonMixin, metaclass=SingletonType):
         temp = re.compile("([0-9]+)([a-zA-Z]+)")
         try:
             res = temp.match(self.duration).groups()
-        except:
+        except: # pragma: no cover
             return self.duration
         return int(res[0])
     
@@ -128,7 +142,7 @@ class tools(SingletonMixin, metaclass=SingletonType):
         temp = re.compile("([0-9]+)([a-zA-Z]+)")
         try:
             res = temp.match(self.duration).groups()
-        except:
+        except: # pragma: no cover
             return self.duration
         return res[1]
 
@@ -137,7 +151,7 @@ class tools(SingletonMixin, metaclass=SingletonType):
         temp = re.compile("([0-9]+)([a-zA-Z]+)")
         try:
             res = temp.match(self.period).groups()
-        except:
+        except: # pragma: no cover
             return self.period
         return int(res[0])
     
@@ -146,7 +160,7 @@ class tools(SingletonMixin, metaclass=SingletonType):
         temp = re.compile("([0-9]+)([a-zA-Z]+)")
         try:
             res = temp.match(self.period).groups()
-        except:
+        except: # pragma: no cover
             return self.period
         return res[1]
 
@@ -186,13 +200,13 @@ class tools(SingletonMixin, metaclass=SingletonType):
                     if not f.endswith(excludeFile):
                         try:
                             os.remove(f if os.sep in f else os.path.join(dir,f))
-                        except Exception as e:
+                        except Exception as e: # pragma: no cover
                             self.default_logger.debug(e, exc_info=True)
                             pass
                 else:
                     try:
                         os.remove(f if os.sep in f else os.path.join(dir,f))
-                    except Exception as e:
+                    except Exception as e: # pragma: no cover
                         self.default_logger.debug(e, exc_info=True)
                         pass
 
@@ -211,11 +225,18 @@ class tools(SingletonMixin, metaclass=SingletonType):
             parser.set("config", "alwaysExportToExcel", "y" if self.alwaysExportToExcel else "n")
             parser.set("config", "alwaysHiddenDisplayColumns", str(self.alwaysHiddenDisplayColumns))
             parser.set("config", "anchoredAVWAPPercentage", str(self.anchoredAVWAPPercentage))
+            parser.set("config", "appVersion", str(self.appVersion))
             parser.set("config", "atrtrailingstopemaperiod", str(self.atrTrailingStopEMAPeriod))
             parser.set("config", "atrtrailingstopperiod", str(self.atrTrailingStopPeriod))
             parser.set("config", "atrtrailingstopsensitivity", str(self.atrTrailingStopSensitivity))
             parser.set("config", "backtestPeriod", str(self.backtestPeriod))
             parser.set("config", "backtestPeriodFactor", str(self.backtestPeriodFactor))
+            parser.set("config", "barometerx", str(self.barometerx))
+            parser.set("config", "barometery", str(self.barometery))
+            parser.set("config", "barometerwidth", str(self.barometerwidth))
+            parser.set("config", "barometerheight", str(self.barometerheight))
+            parser.set("config", "barometerwindowwidth", str(self.barometerwindowwidth))
+            parser.set("config", "barometerwindowheight", str(self.barometerwindowheight))
             parser.set("config", "baseIndex", str(self.baseIndex))
             parser.set("config", "cacheStockData", "y" if self.cacheEnabled else "n")
             parser.set("config", "calculatersiintraday", "y" if self.calculatersiintraday else "n")
@@ -239,7 +260,9 @@ class tools(SingletonMixin, metaclass=SingletonType):
             parser.set("config", "maxNumResultRowsInMonitor", str(self.maxNumResultRowsInMonitor))
             parser.set("config", "morninganalysiscandlenumber", str(self.morninganalysiscandlenumber))
             parser.set("config", "morninganalysiscandleduration", self.morninganalysiscandleduration)
+            parser.set("config", "myMonitorOptions", str(self.myMonitorOptions))
             parser.set("config", "onlyStageTwoStocks", "y" if self.stageTwo else "n")
+            parser.set("config", "otpInterval", str(self.otpInterval))
             parser.set("config", "period", self.period)
             parser.set("config", "pinnedMonitorSleepIntervalSeconds", str(self.pinnedMonitorSleepIntervalSeconds))
             parser.set("config", "showPastStrategyData", "y" if self.showPastStrategyData else "n")
@@ -255,7 +278,9 @@ class tools(SingletonMixin, metaclass=SingletonType):
             parser.set("config", "telegramImageFormat", str(self.telegramImageFormat))
             parser.set("config", "telegramImageQualityPercentage", str(self.telegramImageQualityPercentage))
             parser.set("config", "telegramSampleNumberRows", str(self.telegramSampleNumberRows))
+            parser.set("config", "tosAccepted", "y" if self.tosAccepted else "n")
             parser.set("config", "useEMA", "y" if self.useEMA else "n")
+            parser.set("config", "userID", str(self.userID) if self.userID is not None and len(self.userID) >=1 else "")
             parser.set("config", "vcpLegsToCheckForConsolidation", str(self.vcpLegsToCheckForConsolidation))
             parser.set("config", "vcpRangePercentageFromTop", str(self.vcpRangePercentageFromTop))
             parser.set("config", "vcpVolumeContractionRatio", str(self.vcpVolumeContractionRatio))
@@ -277,7 +302,7 @@ class tools(SingletonMixin, metaclass=SingletonType):
                         + "  [+] Default configuration generated as user configuration is not found!"
                         + colorText.END
                     )
-                    input("Press <Enter> to continue...")
+                    OutputControls().takeUserInput("Press <Enter> to continue...")
                     return
             except IOError as e:  # pragma: no cover
                 self.default_logger.debug(e, exc_info=True)
@@ -286,7 +311,7 @@ class tools(SingletonMixin, metaclass=SingletonType):
                     + "  [+] Failed to save user config. Exiting.."
                     + colorText.END
                 )
-                input("Press <Enter> to continue...")
+                OutputControls().takeUserInput("Press <Enter> to continue...")
                 sys.exit(1)
         else:
             parser = configparser.ConfigParser(strict=False)
@@ -429,6 +454,9 @@ class tools(SingletonMixin, metaclass=SingletonType):
                 self.atrTrailingStopEMAPeriod = input(
                     f"  [+] ATR Trailing Stop EMA Period. (number)({colorText.GREEN}Optimal = 1 to 200{colorText.END}, Current: {colorText.FAIL}{self.atrTrailingStopEMAPeriod}{colorText.END}): "
                 ) or self.atrTrailingStopEMAPeriod
+                self.otpInterval = input(
+                    f"  [+] OTP validity in seconds (number)({colorText.GREEN}Optimal = 30 to 120{colorText.END}, Current: {colorText.FAIL}{self.otpInterval}{colorText.END}): "
+                ) or self.otpInterval
                 self.vcpLegsToCheckForConsolidation = input(
                     f"  [+] Number of consolidation legs to check for VCP. (number)({colorText.GREEN}Optimal = 2{colorText.END},[Recommended: 3], Current: {colorText.FAIL}{self.vcpLegsToCheckForConsolidation}{colorText.END}): "
                 ) or self.vcpLegsToCheckForConsolidation
@@ -465,7 +493,7 @@ class tools(SingletonMixin, metaclass=SingletonType):
                         f"  [+] Enable enforcing SMA-200 check for super-confluence? When enabled, at least one of 8/21/55-EMA should be lower than SMA-200 [Y/N, Current: {colorText.FAIL}{'y' if self.superConfluenceEnforce200SMA else 'n'}{colorText.END}]: "
                     ) or ('y' if self.superConfluenceEnforce200SMA else 'n')
                 ).lower()
-            except Exception as e:
+            except Exception as e: # pragma: no cover
                 default_logger().debug(e,exc_info=True)
                 from time import sleep
                 OutputControls().printOutput(colorText.FAIL + "Could not save configuration! Please check!" + colorText.END)
@@ -474,11 +502,18 @@ class tools(SingletonMixin, metaclass=SingletonType):
             try:
                 parser.set("config", "alwaysHiddenDisplayColumns", str(self.alwaysHiddenDisplayColumns))
                 parser.set("config", "anchoredAVWAPPercentage", str(self.anchoredAVWAPPercentage))
+                parser.set("config", "appVersion", str(self.appVersion))
                 parser.set("config", "atrtrailingstopemaperiod", str(self.atrTrailingStopEMAPeriod))
                 parser.set("config", "atrtrailingstopperiod", str(self.atrTrailingStopPeriod))
                 parser.set("config", "atrtrailingstopsensitivity", str(self.atrTrailingStopSensitivity))
                 parser.set("config", "backtestPeriod", str(self.backtestPeriod))
                 parser.set("config", "backtestPeriodFactor", str(self.backtestPeriodFactor))
+                parser.set("config", "barometerx", str(self.barometerx))
+                parser.set("config", "barometery", str(self.barometery))
+                parser.set("config", "barometerwidth", str(self.barometerwidth))
+                parser.set("config", "barometerheight", str(self.barometerheight))
+                parser.set("config", "barometerwindowwidth", str(self.barometerwindowwidth))
+                parser.set("config", "barometerwindowheight", str(self.barometerwindowheight))
                 parser.set("config", "baseIndex", str(self.baseIndex))
                 parser.set("config", "cacheStockData", str(self.cacheStockData))
                 parser.set("config", "calculatersiintraday", str(self.calculatersiintraday))
@@ -508,7 +543,9 @@ class tools(SingletonMixin, metaclass=SingletonType):
                     endMDuration = "d" if endMDuration not in ["m","h","d","k","o"] else ""
                 parser.set("config", "morninganalysiscandleduration", str(self.morninganalysiscandleduration + endMDuration))
                 parser.set("config", "morninganalysiscandlenumber", str(self.morninganalysiscandlenumber))
+                parser.set("config", "myMonitorOptions", str(self.myMonitorOptions))
                 parser.set("config", "onlyStageTwoStocks", str(self.stageTwoPrompt))
+                parser.set("config", "otpInterval", str(self.otpInterval))
                 if self.period:
                     endPeriod = str(self.period)[-1].lower()
                     endPeriod = "d" if endPeriod not in ["d","o","y","x"] else ""
@@ -526,7 +563,9 @@ class tools(SingletonMixin, metaclass=SingletonType):
                 parser.set("config", "telegramImageFormat", str(self.telegramImageFormat))
                 parser.set("config", "telegramImageQualityPercentage", str(self.telegramImageQualityPercentage))
                 parser.set("config", "telegramSampleNumberRows", str(self.telegramSampleNumberRows))
+                parser.set("config", "tosAccepted", str(self.tosAccepted))
                 parser.set("config", "useEMA", str(self.useEmaPrompt))
+                parser.set("config", "userID", str(self.userID) if self.userID is not None and len(self.userID) >=1 else "")
                 parser.set("config", "vcpLegsToCheckForConsolidation", str(self.vcpLegsToCheckForConsolidation))
                 parser.set("config", "vcpVolumeContractionRatio", str(self.vcpVolumeContractionRatio))
                 parser.set("config", "vcpRangePercentageFromTop", str(self.vcpRangePercentageFromTop))
@@ -538,7 +577,7 @@ class tools(SingletonMixin, metaclass=SingletonType):
                 parser.set("filters", "minPrice", str(self.minLTP))
                 parser.set("filters", "volumeRatio", str(self.volumeRatio))
 
-            except Exception as e:
+            except Exception as e: # pragma: no cover
                 default_logger().debug(e,exc_info=True)
                 from time import sleep
                 OutputControls().printOutput(colorText.FAIL + "Could not save configuration! Please check!" + colorText.END)
@@ -563,7 +602,7 @@ class tools(SingletonMixin, metaclass=SingletonType):
                     + "  [+] User configuration saved."
                     + colorText.END
                 )
-                input("Press <Enter> to continue...")
+                OutputControls().takeUserInput("Press <Enter> to continue...")
                 return
             except IOError as e:  # pragma: no cover
                 self.default_logger.debug(e, exc_info=True)
@@ -572,13 +611,19 @@ class tools(SingletonMixin, metaclass=SingletonType):
                     + "  [+] Failed to save user config. Exiting.."
                     + colorText.END
                 )
-                input("Press <Enter> to continue...")
+                OutputControls().takeUserInput("Press <Enter> to continue...")
                 sys.exit(1)
 
     # Load user config from file
     def getConfig(self, parser):
         if len(parser.read("pkscreener.ini")):
             try:
+                try:
+                    self.appVersion = parser.get("config", "appVersion")
+                except: # pragma: no cover
+                    pass
+                self.tosAccepted = self.appVersion == VERSION
+                self.userID = parser.get("config", "userID")
                 self.alwaysHiddenDisplayColumns = parser.get("config", "alwaysHiddenDisplayColumns")
                 self.duration = parser.get("config", "duration")
                 self.period = parser.get("config", "period")
@@ -647,6 +692,7 @@ class tools(SingletonMixin, metaclass=SingletonType):
                     else True
                 )
                 self.atrTrailingStopEMAPeriod = int(parser.get("config", "atrtrailingstopemaperiod"))
+                self.otpInterval = int(parser.get("config", "otpInterval"))
                 self.atrTrailingStopPeriod = int(parser.get("config", "atrtrailingstopperiod"))
                 self.atrTrailingStopSensitivity = float(parser.get("config", "atrtrailingstopsensitivity"))
                 self.generalTimeout = float(parser.get("config", "generalTimeout"))
@@ -676,11 +722,18 @@ class tools(SingletonMixin, metaclass=SingletonType):
                 self.minVolume = int(parser.get("filters", "minimumVolume"))
                 self.minimumChangePercentage = float(parser.get("filters", "minimumchangepercentage"))
                 self.backtestPeriodFactor = int(parser.get("config", "backtestPeriodFactor"))
+                self.barometerx = int(parser.get("config", "barometerx"))
+                self.barometery = int(parser.get("config", "barometery"))
+                self.barometerwidth = int(parser.get("config", "barometerwidth"))
+                self.barometerheight = int(parser.get("config", "barometerheight"))
+                self.barometerwindowwidth = int(parser.get("config", "barometerwindowwidth"))
+                self.barometerwindowheight = int(parser.get("config", "barometerwindowheight"))
                 self.defaultMonitorOptions = str(parser.get("config", "defaultMonitorOptions"))
                 self.marketOpen = str(parser.get("config", "marketOpen"))
                 self.marketClose = str(parser.get("config", "marketClose"))
                 self.maxDashboardWidgetsPerRow = int(parser.get("config", "maxDashboardWidgetsPerRow"))
                 self.maxNumResultRowsInMonitor = int(parser.get("config", "maxNumResultRowsInMonitor"))
+                self.myMonitorOptions = str(parser.get("config", "myMonitorOptions"))
                 self.vcpLegsToCheckForConsolidation = int(parser.get("config", "vcpLegsToCheckForConsolidation"))
                 self.vcpVolumeContractionRatio = float(parser.get("config", "vcpVolumeContractionRatio"))
                 self.vcpRangePercentageFromTop = float(parser.get("config", "vcpRangePercentageFromTop"))
@@ -719,17 +772,22 @@ class tools(SingletonMixin, metaclass=SingletonType):
 
     # Toggle the duration and period for use in intraday and swing trading
     def toggleConfig(self, candleDuration, clearCache=True):
+        from pkscreener.classes.MenuOptions import CANDLE_PERIOD_DICT, CANDLE_DURATION_DICT
         if candleDuration is None:
             candleDuration = self.duration.lower()
         self.getConfig(parser)
-        if candleDuration[-1] in ["d"]:
-            self.period = "1y"
+        if candleDuration in CANDLE_DURATION_DICT.keys():
             self.duration = candleDuration
-            self.cacheEnabled = True
-        if candleDuration[-1] in ["m", "h"]:
-            self.period = "1d"
-            self.duration = candleDuration
-            self.cacheEnabled = True
+            self.period = CANDLE_DURATION_DICT[candleDuration]
+        else:
+            if candleDuration[-1] in ["d"]:
+                self.period = "1y"
+                self.duration = candleDuration
+                self.cacheEnabled = True
+            if candleDuration[-1] in ["m", "h"]:
+                self.period = "1d"
+                self.duration = candleDuration
+                self.cacheEnabled = True
         if self.isIntradayConfig():
             self.duration = candleDuration if candleDuration[-1] in ["m", "h"] else "1m"
             candleType = candleDuration.replace("m","").replace("h","")
@@ -740,7 +798,7 @@ class tools(SingletonMixin, metaclass=SingletonType):
                 lookback = (int(24/int(candleType)) + 1 )*2 #  at least 24 hours
             self.daysToLookback = lookback  # At least the past 6 to 24 hours
         else:
-            self.duration = candleDuration if candleDuration[-1] in ["d","h","m"] else "1d"
+            self.duration = candleDuration if candleDuration[-1] in ["d","h","wk","mo"] else "1d"
             self.daysToLookback = 22  # At least the past 1.5 month
         self.setConfig(parser, default=True, showFileCreatedText=False)
         if clearCache:
@@ -771,7 +829,7 @@ class tools(SingletonMixin, metaclass=SingletonType):
             f.close()
             OutputControls().printOutput("\n" + configData)
             if defaultAnswer is None:
-                input("Press <Enter> to continue...")
+                OutputControls().takeUserInput("Press <Enter> to continue...")
             return f"{prompt}\n{configData}"
         except Exception as e:  # pragma: no cover
             self.default_logger.debug(e, exc_info=True)

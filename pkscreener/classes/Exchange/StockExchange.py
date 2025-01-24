@@ -22,16 +22,18 @@
     SOFTWARE.
 
 """
-from pkscreener.classes import PKScheduler
-class PKScheduledTaskProgress:
-    def __init__(self):
-        self.tasksDict = {}
+class Exchange:
+    NSE = "INDIA"
+    NASDAQ = "NASDAQ"
+
+    def allExchanges():
+        return [Exchange.NSE,Exchange.NASDAQ]
+
+class StockExchange:
+    def __init__(self,exchange:Exchange):
+        self.exchange = exchange
+        
     
-    def updateProgress(self,taskId):
-        task = self.tasksDict.get(taskId)
-        global progressUpdater
-        progressUpdater = PKScheduler.progressUpdater
-        if task is not None:
-            task.progressStatusDict[taskId] = {"progress": task.progress, "total": task.total}
-            if progressUpdater is not None:
-                progressUpdater.refresh()
+    def getIndices():
+        return
+    

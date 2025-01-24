@@ -174,6 +174,7 @@ args = argsv[0]
 originalStdOut = sys.stdout
 original__stdout = sys.__stdout__
 
+# args.barometer = True
 # args.force = True
 # args.misc = True
 # args.scans = True
@@ -187,7 +188,7 @@ original__stdout = sys.__stdout__
 # args.scanDaysInPast = 7
 # args.reScanForZeroSize = True
 # args.user = "-1001785195297"
-# args.skiplistlevel0 = "S,T,E,U,Z,H,Y,B,G,C,M,D,I,L,P"
+# args.skiplistlevel0 = "S,T,E,U,Z,F,H,Y,B,G,C,M,D,I,L,P"
 # args.skiplistlevel1 = "W,N,E,M,Z,S,0,2,3,4,6,7,9,10,13,14,15"
 # args.skiplistlevel2 = "0,22,29,42,50,M,Z"
 # args.skiplistlevel3 = "0"
@@ -204,6 +205,15 @@ m4 = menus()
 objectDictionary = {}
 nse = nseStockDataFetcher()
 
+if args.user is None and "ALERT_TRIGGER" in os.environ.keys():
+    try:
+        from PKDevTools.classes.Environment import PKEnvironment
+        Channel_Id, _, _, _ = PKEnvironment().secrets
+        if Channel_Id is not None and len(str(Channel_Id)) > 0:
+            args.user = int(f"-{Channel_Id}")
+    except:
+        pass
+        
 def aset_output(name, value):
     if "GITHUB_OUTPUT" in os.environ.keys():
         with open(os.environ["GITHUB_OUTPUT"], "a") as fh:
@@ -223,7 +233,7 @@ try:
             marketStatusFromNSE = NSEMarketStatus({},None).status
             willTradeOnDate = PKDateUtilities.willNextTradeOnDate()
             wasTradedToday = PKDateUtilities.wasTradedOn()
-        except Exception as e:
+        except Exception as e: # pragma: no cover
             print(e)
             pass
         aset_output("MARKET_STATUS", marketStatus)
@@ -239,7 +249,7 @@ if __name__ == '__main__':
                             not args.cleanuphistoricalscans and \
                             not args.updateholidays
     if args.skiplistlevel0 is None:
-        args.skiplistlevel0 = ",".join(["S", "T", "E", "U", "Z", "B", "H", "Y", "G", "C", "M", "D", "I", "L"])
+        args.skiplistlevel0 = ",".join(["S", "T", "E", "U", "Z", "B", "F", "H", "Y", "G", "C", "M", "D", "I", "L"])
     if args.skiplistlevel1 is None:
         args.skiplistlevel1 = ",".join(["W,N,E,M,Z,S,0,1,2,3,4,5,6,7,8,9,10,11,13,14,15"])
     if args.skiplistlevel2 is None:
@@ -252,7 +262,7 @@ if __name__ == '__main__':
     if noActionableArguments:
         # By default, just generate the report
         args.report = True
-        args.skiplistlevel0 = "S,T,E,U,Z,H,Y,X,G,C,M,D,I,L,P" 
+        args.skiplistlevel0 = "S,T,E,U,Z,F,H,Y,X,G,C,M,D,I,L,P" 
         args.skiplistlevel1 = "W,N,E,M,Z,S,0,2,3,4,6,7,9,10,13,14,15"
         args.skiplistlevel2 = "0,21,22,29,42,50,M,Z"
         args.skiplistlevel3 = "0"
@@ -492,8 +502,8 @@ def run_workflow(workflow_name, postdata, option=""):
     owner = os.popen('git ls-remote --get-url origin | cut -d/ -f4').read().replace("\n","")
     repo = os.popen('git ls-remote --get-url origin | cut -d/ -f5').read().replace(".git","").replace("\n","")
     ghp_token = ""
-    # from PKDevTools.classes.Telegram import get_secrets
-    # _, _, _, ghp_token = get_secrets()
+    # from PKDevTools.classes.Environment import PKEnvironment
+    # _, _, _, ghp_token = PKEnvironment().secrets
     
     if "GITHUB_TOKEN" in os.environ.keys():
         ghp_token = os.environ["GITHUB_TOKEN"]
@@ -511,7 +521,7 @@ def run_workflow(workflow_name, postdata, option=""):
         print(f"{datetime.datetime.now(pytz.timezone('Asia/Kolkata'))}: [{resp.status_code}] Something went wrong while triggering {workflow_name}")
     return resp
 
-def cleanuphistoricalscans(scanDaysInPast=270):
+def cleanuphistoricalscans(scanDaysInPast=450):
     removedFileCount = 0
     options = "X:"
     for key in objectDictionary.keys():
@@ -528,6 +538,8 @@ def cleanuphistoricalscans(scanDaysInPast=270):
                 os.remove(fileName)
                 Committer.execOSCommand(f"git rm {fileName}")
                 removedFileCount += 1
+            if removedFileCount > 50:
+                tryCommitOutcomes(options, pathSpec=None, delete=True)
             daysInPast -=1
     if removedFileCount > 0:
         tryCommitOutcomes(options, pathSpec=None, delete=True)
@@ -543,9 +555,18 @@ def triggerScanWorkflowActions(launchLocal=False, scanDaysInPast=0):
         sleep(60) # Wait for alert time
     # Trigger intraday pre-defined piped scanners
     if PKDateUtilities.currentDateTime() <= PKDateUtilities.currentDateTime(simulate=True,hour=MarketHours().closeHour,minute=MarketHours().closeMinute):
-        for scanIndex in PREDEFINED_SCAN_ALERT_MENU_KEYS:
-            triggerRemoteScanAlertWorkflow(f"P:1:{scanIndex}:", branch)
+        if not shouldRunWorkflow():
+            return
 
+    if scanDaysInPast > 0 or "ALERT_TRIGGER" not in os.environ.keys():
+        try:
+            os.remove(os.path.join(os.getcwd(),".env.dev"))
+        except:
+            pass
+        try:
+            os.remove(os.path.join(os.getcwd(),f"pkscreener{os.sep}.env.dev"))
+        except:
+            pass
     for key in objectDictionary.keys():
         scanOptions = f'{objectDictionary[key]["td3"]}_D_D_D_D_D'
         options = f'{scanOptions.replace("_",":").replace("B:","X:")}:D:D:D'.replace("::",":")
@@ -574,17 +595,25 @@ def triggerScanWorkflowActions(launchLocal=False, scanDaysInPast=0):
                 sleep(5)
             else:
                 break
-    
-    runIntradayAnalysisScans(branch="main")
+
+    if PKDateUtilities.currentDateTime() <= PKDateUtilities.currentDateTime(simulate=True,hour=MarketHours().closeHour,minute=MarketHours().closeMinute):
+        if not shouldRunWorkflow():
+            return
+        for scanIndex in PREDEFINED_SCAN_ALERT_MENU_KEYS:
+            triggerRemoteScanAlertWorkflow(f"P:1:{scanIndex}:12:", branch)
+
+    # runIntradayAnalysisScans(branch="main")
 
 def runIntradayAnalysisScans(branch="gh-pages"):
+    if not shouldRunWorkflow():
+        return
     # Trigger the intraday analysis only in the 2nd half after it gets trigerred anytime after 3 PM IST
     if PKDateUtilities.currentDateTime() >= PKDateUtilities.currentDateTime(simulate=True,hour=MarketHours().closeHour,minute=MarketHours().closeMinute-30):
-        while (PKDateUtilities.currentDateTime() < PKDateUtilities.currentDateTime(simulate=True,hour=MarketHours().closeHour+1,minute=MarketHours().closeMinute-15)):
+        while (PKDateUtilities.currentDateTime() < PKDateUtilities.currentDateTime(simulate=True,hour=MarketHours().closeHour+1,minute=MarketHours().closeMinute+15)):
             print(f"Waiting for {(MarketHours().closeHour+1):02}:{(MarketHours().closeMinute):02} PM IST...")
             sleep(300) # Wait for 4:15 PM IST because the download data will take time and we need the downloaded data
             # to be uploaded to actions-data-download folder on github before the intraday analysis can be run.
-        triggerRemoteScanAlertWorkflow("C:12: --runintradayanalysis -u -1001785195297", branch)
+        triggerRemoteScanAlertWorkflow(f"C:12: --runintradayanalysis", branch)
 
 def triggerRemoteScanAlertWorkflow(scanOptions, branch):
     cmd_options = scanOptions.replace("_",":")
@@ -592,7 +621,7 @@ def triggerRemoteScanAlertWorkflow(scanOptions, branch):
         alertTrigger = 'Y'
     else:
         alertTrigger = 'N'
-    if args.user is None or len(args.user) == 0:
+    if args.user is None or len(str(args.user)) == 0:
         args.user = ""
         postdata = (
                     '{"ref":"'
@@ -651,7 +680,7 @@ def triggerHistoricalScanWorkflowActions(scanDaysInPast=0):
                                 '{"ref":"'
                                 + branch
                                 + '","inputs":{"installtalib":"N","skipDownload":"Y","scanOptions":"'
-                                + f'--scanDaysInPast {scanDaysInPast} -s2 {skip2ListStr} -s1 {skip1ListStr} -s0 S,T,E,U,Z,H,Y,B,G,C,M,D,I,L,P -s3 {str(0)} -s4 {str(0)} --branchname actions-data-download --scans --local -f","name":"X_{index}_{option}"'
+                                + f'--scanDaysInPast {scanDaysInPast} -s2 {skip2ListStr} -s1 {skip1ListStr} -s0 S,T,E,U,Z,F,H,Y,B,G,C,M,D,I,L,P -s3 {str(0)} -s4 {str(0)} --branchname actions-data-download --scans --local -f","name":"X_{index}_{option}"'
                                 + ',"cleanuphistoricalscans":"N"}'
                                 + '}'
                                 )
@@ -665,7 +694,7 @@ def triggerHistoricalScanWorkflowActions(scanDaysInPast=0):
         '{"ref":"'
         + branch
         + '","inputs":{"installtalib":"N","skipDownload":"Y","scanOptions":"'
-        + '--scanDaysInPast 251 -s0 S,T,E,U,Z,H,Y,B,G,C,M,D,I,L,P -s1 W,N,E,M,Z,S,0,2,3,4,6,7,9,10,13,15 -s2 0,22,29,42,50,M,Z -s3 0 -s4 0 --branchname actions-data-download","name":"X_Cleanup"'
+        + '--scanDaysInPast 450 -s0 S,T,E,U,Z,F,H,Y,G,M,D,I,L -s1 "" -s2 "" -s3 "" -s4 "" --branchname actions-data-download","name":"X_Cleanup"'
         + (',"cleanuphistoricalscans":"Y"}')
         + '}'
         )
@@ -779,7 +808,7 @@ def triggerBacktestWorkflowActions(launchLocal=False):
                 + '","inputs":{"user":"'
                 + f"{args.user}"
                 + '","runson":"'
-                + f'{"ubuntu-20.04" if key % 2 == 0 else "windows-latest"}'
+                + f'{"ubuntu-latest" if key % 2 == 0 else "windows-latest"}'
                 + '","params":"'
                 + f'{options}{" -i 1m" if args.intraday else ""}'
                 + '","name":"'
@@ -809,7 +838,7 @@ def triggerBacktestWorkflowActions(launchLocal=False):
         + f'-a Y -e -p -o S:S'
         + f'","ref":"{branch}"'
         + ',"postrun":"'
-        + f'git config user.name github-actions && git config user.email github-actions@github.com && git pull && git commit -m {cmt_msg} && git push -v -u origin +{branch}'
+        + f'git config user.name github-actions && git config user.email github-actions@github.com && git config --global http.postBuffer 150000000 && git pull && git commit -m {cmt_msg} && git push -v -u origin +{branch}'
         + '"}}')
     resp = run_workflow("w8-workflow-alert-scan_generic.yml", postdata,"S:")
     if launchLocal:
@@ -870,8 +899,8 @@ def triggerMiscellaneousTasks():
 
 if __name__ == '__main__':
     if args.barometer:
-        if PKDateUtilities.currentDateTime() <= PKDateUtilities.currentDateTime(simulate=True,hour=MORNING_ALERT_HOUR+1,minute=MORNING_ALERT_MINUTE):
-            triggerRemoteScanAlertWorkflow("X:12: --barometer", "main")
+        if args.force or (PKDateUtilities.currentDateTime() <= PKDateUtilities.currentDateTime(simulate=True,hour=MORNING_ALERT_HOUR+1,minute=MORNING_ALERT_MINUTE)):
+            triggerRemoteScanAlertWorkflow("X:12: --barometer -l", "main")
     if args.report:
         generateBacktestReportMainPage()
     if args.backtests:
@@ -890,7 +919,7 @@ if __name__ == '__main__':
             else:
                 triggerScanWorkflowActions(args.local, scanDaysInPast=daysInPast)
     if args.cleanuphistoricalscans:
-        daysInPast = 270
+        daysInPast = 450
         if args.scanDaysInPast is not None:
             daysInPast = int(args.scanDaysInPast)
         cleanuphistoricalscans(daysInPast)

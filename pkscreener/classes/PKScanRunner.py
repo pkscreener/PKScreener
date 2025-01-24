@@ -280,7 +280,7 @@ class PKScanRunner:
         if choices.endswith("_"):
             choices = choices[:-1]
         choices = f"{choices}{'_i' if isIntraday else ''}"
-        return choices
+        return f'{choices.strip()}{"_IA" if userArgs is not None and userArgs.runintradayanalysis else ""}'
 
     def refreshDatabase(consumers,stockDictPrimary,stockDictSecondary):
         for worker in consumers:
@@ -295,14 +295,14 @@ class PKScanRunner:
                 import tensorflow as tf
                 with tf.device("/device:GPU:0"):
                     tasks_queue, results_queue, consumers,logging_queue = PKScanRunner.prepareToRunScan(menuOption,keyboardInterruptEvent,screenCounter, screenResultsCounter, stockDictPrimary,stockDictSecondary, items,executeOption,userPassedArgs)
-            except:
+            except: # pragma: no cover
                 tasks_queue, results_queue, consumers,logging_queue = PKScanRunner.prepareToRunScan(menuOption,keyboardInterruptEvent,screenCounter, screenResultsCounter, stockDictPrimary,stockDictSecondary, items,executeOption,userPassedArgs)
                 pass
             try:
                 if logging_queue is not None:
                     log_queue_reader = LogQueueReader(logging_queue)
                     log_queue_reader.start()
-            except:
+            except: # pragma: no cover
                 pass
 
         # if executeOption == 29: # Intraday Bid/Ask, for which we need to fetch data from NSE instead of yahoo
@@ -351,7 +351,7 @@ class PKScanRunner:
         sec_cache_file = cache_file if "intraday_" in cache_file else f"intraday_{cache_file}"
         # Get RS rating stock value of the index
         from pkscreener.classes.Fetcher import screenerStockDataFetcher
-        nsei_df = screenerStockDataFetcher().fetchStockData(PKScanRunner.configManager.baseIndex,PKScanRunner.configManager.period,PKScanRunner.configManager.duration,None,0,0,0,exchangeSuffix="")
+        nsei_df = screenerStockDataFetcher().fetchStockData(PKScanRunner.configManager.baseIndex,PKScanRunner.configManager.period,PKScanRunner.configManager.duration,None,0,0,0,exchangeSuffix="",printCounter=False)
         rs_score_index = -1
         PKScanRunner.configManager.getConfig(parser)
         if nsei_df is not None:
@@ -387,7 +387,7 @@ class PKScanRunner:
         try:
             intradayFetcher = None
             intradayFetcher = Intra_Day("SBINEQN") # This will initialise the cookies etc.
-        except:
+        except: # pragma: no cover
             pass
         for consumer in consumers:
             consumer.intradayNSEFetcher = intradayFetcher
@@ -442,7 +442,7 @@ class PKScanRunner:
                         # while worker.is_alive():
                     worker.terminate()
                     default_logger().debug("Worker terminated!")
-                    # except:
+                    # except: # pragma: no cover
                     #     continue
                 except OSError as e: # pragma: no cover
                     default_logger().debug(e, exc_info=True)
