@@ -207,8 +207,8 @@ nse = nseStockDataFetcher()
 
 if args.user is None and "ALERT_TRIGGER" in os.environ.keys():
     try:
-        from PKDevTools.classes.Telegram import get_secrets
-        Channel_Id, _, _, _ = get_secrets()
+        from PKDevTools.classes.Environment import PKEnvironment
+        Channel_Id, _, _, _ = PKEnvironment().secrets
         if Channel_Id is not None and len(str(Channel_Id)) > 0:
             args.user = int(f"-{Channel_Id}")
     except:
@@ -233,7 +233,7 @@ try:
             marketStatusFromNSE = NSEMarketStatus({},None).status
             willTradeOnDate = PKDateUtilities.willNextTradeOnDate()
             wasTradedToday = PKDateUtilities.wasTradedOn()
-        except Exception as e:
+        except Exception as e: # pragma: no cover
             print(e)
             pass
         aset_output("MARKET_STATUS", marketStatus)
@@ -247,10 +247,7 @@ if __name__ == '__main__':
                             not args.scans and \
                             not args.backtests and \
                             not args.cleanuphistoricalscans and \
-                            not args.updateholidays and \
-                            not args.barometer and \
-                            not args.runintradayanalysis and \
-                            not args.misc
+                            not args.updateholidays
     if args.skiplistlevel0 is None:
         args.skiplistlevel0 = ",".join(["S", "T", "E", "U", "Z", "B", "F", "H", "Y", "G", "C", "M", "D", "I", "L"])
     if args.skiplistlevel1 is None:
@@ -505,8 +502,8 @@ def run_workflow(workflow_name, postdata, option=""):
     owner = os.popen('git ls-remote --get-url origin | cut -d/ -f4').read().replace("\n","")
     repo = os.popen('git ls-remote --get-url origin | cut -d/ -f5').read().replace(".git","").replace("\n","")
     ghp_token = ""
-    # from PKDevTools.classes.Telegram import get_secrets
-    # _, _, _, ghp_token = get_secrets()
+    # from PKDevTools.classes.Environment import PKEnvironment
+    # _, _, _, ghp_token = PKEnvironment().secrets
     
     if "GITHUB_TOKEN" in os.environ.keys():
         ghp_token = os.environ["GITHUB_TOKEN"]
@@ -605,7 +602,7 @@ def triggerScanWorkflowActions(launchLocal=False, scanDaysInPast=0):
         for scanIndex in PREDEFINED_SCAN_ALERT_MENU_KEYS:
             triggerRemoteScanAlertWorkflow(f"P:1:{scanIndex}:12:", branch)
 
-    runIntradayAnalysisScans(branch="main")
+    # runIntradayAnalysisScans(branch="main")
 
 def runIntradayAnalysisScans(branch="gh-pages"):
     if not shouldRunWorkflow():
@@ -841,7 +838,7 @@ def triggerBacktestWorkflowActions(launchLocal=False):
         + f'-a Y -e -p -o S:S'
         + f'","ref":"{branch}"'
         + ',"postrun":"'
-        + f'git config user.name github-actions && git config user.email github-actions@github.com && git pull && git commit -m {cmt_msg} && git push -v -u origin +{branch}'
+        + f'git config user.name github-actions && git config user.email github-actions@github.com && git config --global http.postBuffer 150000000 && git pull && git commit -m {cmt_msg} && git push -v -u origin +{branch}'
         + '"}}')
     resp = run_workflow("w8-workflow-alert-scan_generic.yml", postdata,"S:")
     if launchLocal:

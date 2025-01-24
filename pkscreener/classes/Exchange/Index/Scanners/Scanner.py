@@ -22,16 +22,6 @@
     SOFTWARE.
 
 """
-from pkscreener.classes import PKScheduler
-class PKScheduledTaskProgress:
+class Scanner:
     def __init__(self):
-        self.tasksDict = {}
-    
-    def updateProgress(self,taskId):
-        task = self.tasksDict.get(taskId)
-        global progressUpdater
-        progressUpdater = PKScheduler.progressUpdater
-        if task is not None:
-            task.progressStatusDict[taskId] = {"progress": task.progress, "total": task.total}
-            if progressUpdater is not None:
-                progressUpdater.refresh()
+        return

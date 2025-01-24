@@ -35,6 +35,12 @@ configManager = ConfigManager.tools()
 MENU_SEPARATOR = ""
 LINE_SEPARATOR = "\n"
 
+STOCK_EXCHANGE_DICT = {
+    "1" : "NSE - India",
+    "2" : "NASDAQ - US",
+    "3" : "Borso - Turkey",
+}
+
 level0MenuDict = {
     "X": "Scanners",
     "F": "Find a stock in scanners",
@@ -116,8 +122,8 @@ LEVEL_1_DATA_DOWNLOADS = {
     "S": "NSE Symbols with Sector/Industry Details",
     "M": "Back to the Top/Main menu",
 }
-PREDEFINED_SCAN_ALERT_MENU_KEYS = ["1","5","6","8","18","22","25","27","28","29","30","31"]
-PREDEFINED_SCAN_MENU_KEYS = ["1","2","3","4","5","6","7","8","9","10","11","12","13","14","15","16","17","18","19","20", "21", "22", "23", "24", "25","26","27","28","29","30","31","32"]
+PREDEFINED_SCAN_ALERT_MENU_KEYS = ["1","5","6","8","18","22","25","27","28","29","30","31","32","33"]
+PREDEFINED_SCAN_MENU_KEYS = ["1","2","3","4","5","6","7","8","9","10","11","12","13","14","15","16","17","18","19","20", "21", "22", "23", "24", "25","26","27","28","29","30","31","32","33"]
 PREDEFINED_SCAN_MENU_TEXTS = [
     "Volume Scanners | High Momentum | Breaking Out Now | ATR Cross     ",  # 1
     "Volume Scanners | High Momentum | ATR Cross",                          # 2
@@ -151,6 +157,7 @@ PREDEFINED_SCAN_MENU_TEXTS = [
     "VCP | Super-Confluence                                             ",  # 30
     "Bullish Today x PDO/PDC | VCP                                      ",  # 31
     "Intraday(15m) VCP | Breaking out now                               ",  # 32
+    "ATR Cross | Low RSI (<=40)                                         ",  # 33
 ]
 level2_P_MenuDict = {}
 for key in PREDEFINED_SCAN_MENU_KEYS:
@@ -168,9 +175,9 @@ PREDEFINED_SCAN_MENU_VALUES =[
     "--systemlaunched -a y -e -o 'X:12:31:>|X:0:27:'",                      # 8
     "--systemlaunched -a y -e -o 'X:12:31:>|X:0:30:1:'",                    # 9
     "--systemlaunched -a y -e -o 'X:12:27:>|X:0:30:1:'",                    # 10
-    "--systemlaunched -a y -e -o 'X:12:7:6:1:>|X:0:5:0:54:'",               # 11
-    "--systemlaunched -a y -e -o 'X:12:9:2.5:>|X:0:31:>|X:0:23:>|X:0:27:>|X:0:5:0:54:'", # 12
-    "--systemlaunched -a y -e -o 'X:12:9:2.5:>|X:0:27:>|X:0:5:0:54:'",      # 13
+    "--systemlaunched -a y -e -o 'X:12:7:6:1:>|X:0:5:0:54: i 1m'",               # 11
+    "--systemlaunched -a y -e -o 'X:12:9:2.5:>|X:0:31:>|X:0:23:>|X:0:27:>|X:0:5:0:54:i 1m'", # 12
+    "--systemlaunched -a y -e -o 'X:12:9:2.5:>|X:0:27:>|X:0:5:0:54:i 1m'",      # 13
     "--systemlaunched -a y -e -o 'X:12:7:8:>|X:12:7:9:1:1:'",               # 14
     "--systemlaunched -a y -e -o 'X:12:7:4:>|X:12:7:9:1:1:'",               # 15
     "--systemlaunched -a y -e -o 'X:12:2:>|X:12:7:8:>|X:12:7:9:1:1:'",      # 16
@@ -191,7 +198,8 @@ PREDEFINED_SCAN_MENU_VALUES =[
     "--systemlaunched -a y -e -o 'X:12:7:4:>|X:0:9:2.5:>|X:0:27:'",         # 29
     "--systemlaunched -a y -e -o 'X:12:7:4:>|X:0:7:3:0.008:4:'",            # 30
     "--systemlaunched -a y -e -o 'X:12:33:2:>|X:0:7:4:'",                   # 31
-    "--systemlaunched -a y -e -o 'X:14:7:4:i 15m:>|X:0:23:i 15m:'",         # 32
+    "--systemlaunched -a y -e -o 'X:14:7:4:i 15m:>|X:0:23:'",               # 32
+    "--systemlaunched -a y -e -o 'X:12:27:>|X:0:5:0:40:i 1m:'",             # 33
 ]
 PREDEFINED_PIPED_MENU_ANALYSIS_OPTIONS = []
 PREDEFINED_PIPED_MENU_OPTIONS = {}
@@ -233,7 +241,7 @@ level2_T_MenuDict_L = {
     "1": "Daily (1y, 1d)",
     "2": "Weekly (5y, 1wk)",
     "3": "Monthly (max, 1mo)",
-    "4": "Hourly (3mo, 1h)",
+    "4": "Hourly (4mo, 1h)",
     "5": "Custom",
 
     "M": "Back to the Top/Main menu",
@@ -242,35 +250,32 @@ level2_T_MenuDict_S = {
     "1": "1m (1d, 1m)",
     "2": "5m (5d, 5m)",
     "3": "15m (1mo, 15m)",
-    "4": "30m (1mo, 30m)",
+    "4": "30m (2mo, 30m)",
     "5": "Custom",
 
     "M": "Back to the Top/Main menu",
 }
+CANDLE_PERIOD_DICT={}
+CANDLE_DURATION_DICT={}
+frequencyDicts = [level2_T_MenuDict_L,level2_T_MenuDict_S]
+for frequencyDict in frequencyDicts:
+    for candlePeriodKey in frequencyDict.keys():
+        if frequencyDict[candlePeriodKey] != "Custom" and candlePeriodKey != "M":
+            periodDurationTuple = frequencyDict[candlePeriodKey].split("(")[1].split(")")[0]
+            period = periodDurationTuple.split(",")[0].strip()
+            duration = periodDurationTuple.split(",")[1].strip()
+            CANDLE_PERIOD_DICT[period] = duration
+            CANDLE_DURATION_DICT[duration] = period
+
 level1_S_MenuDict = {
     "S": "Summary",
 
     "M": "Back to the Top/Main menu",
     "Z": "Exit (Ctrl + C)",
 }
-INDICES_MAP = {
-    "1": "Nifty 50          ",
-    "2": "Nifty Next 50     ",
-    "3": "Nifty 100         ",
-    "4": "Nifty 200         ",
-    "5": "Nifty 500         ",
-    "6": "Nifty Smallcap 50 ",
-    "7": "Nifty Smallcap 100",
-    "8": "Nifty Smallcap 250",
-    "9": "Nifty Midcap 50   ",
-    "10": "Nifty Midcap 100",
-    "11": "Nifty Midcap 150 ",
-    "12": "Nifty (All Stocks)",
-    "14": "F&O Stocks Only", #Discontinued:  https://nsearchives.nseindia.com/content/circulars/FAOP61157.pdf
-    "15": "NASDAQ",
 
-    "M": "Back to the Top/Main menu",
-}
+INDICES_MAP = {}
+
 level1_X_MenuDict = {
     "W": "Screen stocks from my own Watchlist",
     "N": "Nifty Prediction using Artifical Intelligence (Use for Gap-Up/Gap-Down/BTST/STBT)",
@@ -296,6 +301,10 @@ level1_X_MenuDict = {
     "M": "Back to the Top/Main menu",
     "Z": "Exit (Ctrl + C)",
 }
+for indexKey in level1_X_MenuDict.keys():
+    if (indexKey.isnumeric() and int(indexKey) > 0) or (indexKey in ["M"]):
+        INDICES_MAP[indexKey] = level1_X_MenuDict[indexKey].strip()
+
 level2_X_MenuDict = {
     "0": "Full Screening (Shows Technical Parameters without any criterion)",
     "1": "Probable Breakouts/Breakdowns             ",
@@ -338,12 +347,13 @@ level2_X_MenuDict = {
     "38": "Intraday Short Sell (PSAR / Volume SMA)  ",
     "39": "IPO-Lifetime First day bullish break     ",
     "40": "Price Action                             ",
+    "41": "Pivot Points                             ",
     "50": "Show Last Screened Results               ",
 
     "M": "Back to the Top/Main menu                 ",
     "Z": "Exit (Ctrl + C)                           ",
 }
-MAX_SUPPORTED_MENU_OPTION = 40
+MAX_SUPPORTED_MENU_OPTION = 41
 MAX_MENU_OPTION = 50
 
 level3_X_Reversal_MenuDict = {
@@ -445,7 +455,8 @@ Pin_MenuDict = {
     "1": "Pin this scan category or piped scan {0}",
     "2": "Pin these {0} stocks in the scan results (Just keep tracking only these {0} stocks)",
     "3": "Use Sliding-Window-Timeframe to run this scan category or piped scan {0}",
-    # "4": "Use Sliding-Window-Timeframe to just keep track of only these {0} stocks",
+    "4": "Add {0} to my monitoring options",
+    "5": "Pipe outputs of {0} into another scanner",
 
     "M": "Back to the Top/Main menu",
 }
@@ -456,13 +467,37 @@ PRICE_CROSS_SMA_EMA_TYPE_MENUDICT = {
 
     "0": "Cancel"
 }
+PRICE_CROSS_PIVOT_POINT_TYPE_MENUDICT = {
+    "1": "Pivot Point (PP)",
 
+    "2": "Support Level 1 (S1)",
+    "3": "Support Level 2 (S2)",
+    "4": "Support Level 3 (S3)",
+
+    "5": "Resistance Level 1 (R1)",
+    "6": "Resistance Level 2 (R2)",
+    "7": "Resistance Level 3 (R3)",
+
+    "0": "Cancel"
+}
 PRICE_CROSS_SMA_EMA_DIRECTION_MENUDICT = {
     "1": "Price Crosses From Above (Sell)",
     "2": "Price Crosses From Below (Buy)",
 
     "0": "Cancel"
 }
+
+from pkscreener.classes.CandlePatterns import CandlePatterns
+CANDLESTICK_DICT = {}
+candleStickMenuIndex = 1
+for candlestickPattern in CandlePatterns.reversalPatternsBullish:
+    CANDLESTICK_DICT[str(candleStickMenuIndex)] = candlestickPattern
+    candleStickMenuIndex += 1
+for candlestickPattern in CandlePatterns.reversalPatternsBearish:
+    CANDLESTICK_DICT[str(candleStickMenuIndex)] = candlestickPattern
+    candleStickMenuIndex += 1
+CANDLESTICK_DICT["0"] = "No Filter"
+CANDLESTICK_DICT["M"] = "Cancel"
 
 class MenuRenderStyle(Enum):
     STANDALONE = 1
@@ -560,6 +595,8 @@ class menus:
     
     @staticmethod
     def allMenus(topLevel="X",index=12):
+        if index > MAX_MENU_OPTION:
+            return [], {}
         menuOptions = [topLevel]
         indexOptions =[index]
         # Ignore the option "0" and the last 3 menu keys because 
@@ -580,6 +617,7 @@ class menus:
             scanOptionKeys.remove(scanOption)
         scanOptions = scanOptionKeys
         runOptions = []
+        runKeyOptions = {}
         topMenu = menu(menuKey=topLevel,level=0)
         for menuOption in menuOptions:
             for indexOption in indexOptions:
@@ -593,6 +631,7 @@ class menus:
                     if level1ChildMenus is None:
                         runOption = f"{menuOption}:{indexOption}:{childMenu.menuKey}:D:D:D:D:D"
                         runOptions.append(runOption)
+                        runKeyOptions[runOption.replace(":D","")] = childMenu.menuText.strip()
                     else:
                         for level1ChildMenu in level1ChildMenus:
                             if level1ChildMenu.menuText in ["Any/All","Cancel"]:
@@ -601,6 +640,7 @@ class menus:
                             if level2ChildMenus is None:
                                 runOption = f"{menuOption}:{indexOption}:{childMenu.menuKey}:{level1ChildMenu.menuKey}:D:D:D:D:D"
                                 runOptions.append(runOption)
+                                runKeyOptions[runOption.replace(":D","")] = f"{childMenu.menuText.strip()}>{level1ChildMenu.menuText.strip()}"
                             else:
                                 for level2ChildMenu in level2ChildMenus:
                                     if level2ChildMenu.menuText in ["Any/All","Cancel"]:
@@ -609,6 +649,7 @@ class menus:
                                     if level3ChildMenus is None:
                                         runOption = f"{menuOption}:{indexOption}:{childMenu.menuKey}:{level1ChildMenu.menuKey}:{level2ChildMenu.menuKey}:D:D:D:D:D"
                                         runOptions.append(runOption)
+                                        runKeyOptions[runOption.replace(":D","")] = f"{childMenu.menuText.strip()}>{level1ChildMenu.menuText.strip()}>{level2ChildMenu.menuText.strip()}"
                                     else:
                                         for level3ChildMenu in level3ChildMenus:
                                             if level3ChildMenu.menuText in ["Any/All","Cancel"]:
@@ -617,6 +658,7 @@ class menus:
                                             if level4ChildMenus is None:
                                                 runOption = f"{menuOption}:{indexOption}:{childMenu.menuKey}:{level1ChildMenu.menuKey}:{level2ChildMenu.menuKey}:{level3ChildMenu.menuKey}:D:D:D:D:D"
                                                 runOptions.append(runOption)
+                                                runKeyOptions[runOption.replace(":D","")] = f"{childMenu.menuText.strip()}>{level1ChildMenu.menuText.strip()}>{level2ChildMenu.menuText.strip()}>{level3ChildMenu.menuText.strip()}"
                                             else:
                                                 for level4ChildMenu in level4ChildMenus:
                                                     if level4ChildMenu.menuText in ["Any/All","Cancel"]:
@@ -625,15 +667,21 @@ class menus:
                                                     if level5ChildMenus is None:
                                                         runOption = f"{menuOption}:{indexOption}:{childMenu.menuKey}:{level1ChildMenu.menuKey}:{level2ChildMenu.menuKey}:{level3ChildMenu.menuKey}:{level4ChildMenu.menuKey}:D:D:D:D:D"
                                                         runOptions.append(runOption)
+                                                        runKeyOptions[runOption.replace(":D","")] = f"{childMenu.menuText.strip()}>{level1ChildMenu.menuText.strip()}>{level2ChildMenu.menuText.strip()}>{level3ChildMenu.menuText.strip()}>{level4ChildMenu.menuText.strip()}"
                                                     else:
                                                         for level5ChildMenu in level5ChildMenus:
                                                             if level5ChildMenu.menuText in ["Any/All","Cancel"]:
                                                                 continue
-                                                            level6ChildMenus  = menuItems.renderForMenu(level5ChildMenu,asList=True)
+                                                            try:
+                                                                level6ChildMenus  = menuItems.renderForMenu(level5ChildMenu,asList=True)
+                                                            except: # pragma: no cover
+                                                                level6ChildMenus = None
+                                                                pass
                                                             if level6ChildMenus is None:
                                                                 runOption = f"{menuOption}:{indexOption}:{childMenu.menuKey}:{level1ChildMenu.menuKey}:{level2ChildMenu.menuKey}:{level3ChildMenu.menuKey}:{level4ChildMenu.menuKey}:{level5ChildMenu.menuKey}:D:D:D:D:D"
                                                                 runOptions.append(runOption)
-        return runOptions
+                                                                runKeyOptions[runOption.replace(":D","")] = f"{childMenu.menuText.strip()}>{level1ChildMenu.menuText.strip()}>{level2ChildMenu.menuText.strip()}>{level3ChildMenu.menuText.strip()}>{level4ChildMenu.menuText.strip()}>{level5ChildMenu.menuText.strip()}"
+        return runOptions, runKeyOptions
 
     def __init__(self):
         self.level = 0
@@ -654,13 +702,23 @@ class menus:
         line = 0
         lineIndex = 1
         substituteIndex = 0
+        rawDictionary = { k:v.strip() for k, v in rawDictionary.items()}
+        dictToRender = dict((key,rawDictionary[key]) for key in rawDictionary.keys() if str(key).isnumeric())
+        dictToRenderOnTheirOwnLine = {key: rawDictionary[key] for key in renderExceptionKeys}
+        keysToRender = set(dictToRender) - set(dictToRenderOnTheirOwnLine)
+        dictToRender = {key: rawDictionary[key] for key in keysToRender}
+        if len(dictToRender.keys()) > 0:
+            maxLengthOfItem = len(max(dictToRender.values(), key=len)) + 4
+        else:
+            maxLengthOfItem = 0
         for key in rawDictionary:
             if skip is not None and key in skip:
                 continue
             m = menu()
-            menuText = rawDictionary[key]
+            menuText = str(rawDictionary[key]).ljust(maxLengthOfItem) if key in dictToRender.keys() else str(rawDictionary[key])
             if "{0}" in menuText and len(substitutes) > 0:
-                if substitutes[substituteIndex] == 0:
+                if isinstance(substitutes[substituteIndex],int) and substitutes[substituteIndex] == 0:
+                    substituteIndex += 1
                     continue
                 menuText = menuText.format(f"{colorText.WARN}{substitutes[substituteIndex]}{colorText.END}")
                 substituteIndex += 1
@@ -707,6 +765,15 @@ class menus:
                                                  coloredValues=(["M"]),
                                                  defaultMenu="M",
                                                  substitutes = substitutes,
+                                                 skip=skip)
+    
+    def renderCandleStickPatterns(self,skip=[]):
+        return self.renderMenuFromDictionary(dict=CANDLESTICK_DICT,
+                                                 exceptionKeys=["0","M"],
+                                                 coloredValues=(["0"]),
+                                                 defaultMenu="0",
+                                                 renderStyle=MenuRenderStyle.TWO_PER_ROW,
+                                                 optionText="  [+] Would you like to filter by a specific Candlestick pattern? Select filter:",
                                                  skip=skip)
     
     def renderForMenu(self, selectedMenu:menu=None, skip=[], asList=False, renderStyle=None):
@@ -933,6 +1000,15 @@ class menus:
                                                          renderStyle=renderStyle,
                                                          skip=skip, 
                                                          parent=selectedMenu)
+                elif selectedMenu.menuKey in ["41"]:
+                    return self.renderMenuFromDictionary(dict=PRICE_CROSS_PIVOT_POINT_TYPE_MENUDICT,
+                                                         exceptionKeys=["0","1","2","5"],
+                                                         coloredValues=["1"],
+                                                         defaultMenu="1",
+                                                         asList=asList,
+                                                         renderStyle=renderStyle,
+                                                         skip=skip, 
+                                                         parent=selectedMenu)
             elif selectedMenu.level == 3:
                 self.level = 4
                 # next levelsub-menu of the selected sub-menu
@@ -972,7 +1048,10 @@ class menus:
                                                          renderStyle=renderStyle,
                                                          skip=skip, 
                                                          parent=selectedMenu)
-                if selectedMenu.parent.menuKey == "40" and selectedMenu.menuKey in PRICE_CROSS_SMA_EMA_TYPE_MENUDICT.keys():
+                if ((selectedMenu.parent.menuKey == "40" and 
+                        selectedMenu.menuKey in PRICE_CROSS_SMA_EMA_TYPE_MENUDICT.keys()) or 
+                    (selectedMenu.parent.menuKey == "41" and 
+                        selectedMenu.menuKey in PRICE_CROSS_PIVOT_POINT_TYPE_MENUDICT.keys())):
                     return self.renderMenuFromDictionary(dict=PRICE_CROSS_SMA_EMA_DIRECTION_MENUDICT,
                                                          exceptionKeys=["0"],
                                                          coloredValues=["2"],
@@ -1025,7 +1104,7 @@ class menus:
                 if checkUpdate:
                     try:
                         OTAUpdater.checkForUpdate(VERSION, skipDownload=True)
-                    except:
+                    except: # pragma: no cover
                         pass
             return menuText
         
@@ -1038,4 +1117,4 @@ class menus:
 # Cash rich small caps
 # https://www.tickertape.in/screener/equity/prebuilt/SCR0017
 
-m = menus.allMenus()
+# m = menus.allMenus()

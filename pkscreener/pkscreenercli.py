@@ -35,6 +35,8 @@ import traceback
 import datetime
 # Keep module imports prior to classes
 import os
+import csv
+import re
 import sys
 import tempfile
 os.environ["PYTHONWARNINGS"]="ignore::UserWarning"
@@ -61,12 +63,18 @@ import pkscreener.classes.ConfigManager as ConfigManager
 
 if __name__ == '__main__':
     multiprocessing.freeze_support()
+    # fix to https://stackoverflow.com/q/62748654/9191338
+    # Python incorrectly tracks shared memory even if it is not
+    # created by the process. The following patch is a workaround.
+    from unittest.mock import patch
+    patch("multiprocessing.resource_tracker.register",lambda *args, **kwargs: None)
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 os.environ["AUTOGRAPH_VERBOSITY"] = "0"
 
 printenabled=False
 originalStdOut=None
 original__stdout=None
+LoggedIn = False
 cron_runs=0
 
 def decorator(func):
@@ -305,6 +313,17 @@ argParser.add_argument(
     required=False,
 )
 
+def csv_split(s):
+    return list(csv.reader([s], delimiter=' '))[0]
+
+def re_split(s):
+    def strip_quotes(s):
+        if s and (s[0] == '"' or s[0] == "'") and s[0] == s[-1]:
+            return s[1:-1]
+        return s
+    # pieces = [p for p in re.split("( |\\\".*?\\\"|'.*?')", s) if p.strip()]
+    return [strip_quotes(p).replace('\\"', '"').replace("\\'", "'") for p in re.findall(r'(?:[^"\s]*"(?:\\.|[^"])*"[^"\s]*)+|(?:[^\'\s]*\'(?:\\.|[^\'])*\'[^\'\s]*)+|[^\s]+', s)]
+
 def get_debug_args():
     global args
     try:
@@ -312,17 +331,21 @@ def get_debug_args():
             # make sure that args are mutable
             args = list(args)
         return args
-    except NameError as e:
+    except NameError as e: # pragma: no cover
         args = sys.argv[1:]
         if isinstance(args,list):
             if len(args) == 1:
-                return args[0].split(" ")
+                # re.findall(r'[^"\s]\S*|".+?"', line)
+                # list(csv.reader([line], delimiter=" "))
+                # pieces = [p for p in re.split("( |\\\".*?\\\"|'.*?')", test) if p.strip()]
+                return re_split(args[0]) #args[0].split(" ")
             else:
                 return args
         return None
-    except TypeError as e: # NameSpace object is not iterable
+    except TypeError as e: # pragma: no cover
+        # NameSpace object is not iterable
         return args
-    except Exception as e:
+    except Exception as e: # pragma: no cover
         return None
     # return ' --systemlaunched -a y -e -o "X:12:9:2.5:>|X:0:31:>|X:0:23:>|X:0:27:" -u -1001785195297 --stocklist GLS,NESCO,SBICARD,DREAMFOLKS,JAGRAN,ACEINTEG,RAMASTEEL'.split(" ")
 
@@ -347,7 +370,7 @@ def exitGracefully():
         filePath = None
         try:
             filePath = os.path.join(Archiver.get_user_data_dir(), "monitor_outputs")
-        except:
+        except: # pragma: no cover
             pass
         if filePath is None:
             return
@@ -355,7 +378,7 @@ def exitGracefully():
         while index < configManager.maxDashboardWidgetsPerRow*configManager.maxNumResultRowsInMonitor:
             try:
                 os.remove(f"{filePath}_{index}.txt")
-            except:
+            except: # pragma: no cover
                 pass
             index += 1
 
@@ -369,7 +392,7 @@ def exitGracefully():
                 del os.environ['PKDevTools_Default_Log_Level']
         configManager.logsEnabled = False
         configManager.setConfig(ConfigManager.parser,default=True,showFileCreatedText=False)
-    except RuntimeError:
+    except RuntimeError: # pragma: no cover
         OutputControls().printOutput(f"{colorText.WARN}If you're running from within docker, please run like this:{colorText.END}\n{colorText.FAIL}docker run -it pkjmesra/pkscreener:latest\n{colorText.END}")
         pass
 
@@ -433,39 +456,41 @@ def warnAboutDependencies():
                 + "  [+] Neither ta-lib nor pandas_ta was located. You need at least one of them to continue! \n  [+] Please follow instructions from README file under PKScreener repo: https://github.com/pkjmesra/PKScreener"
                 + colorText.END
             )
-            input("Press any key to try anyway...")
+            OutputControls().takeUserInput("Press any key to try anyway...")
     
 def runApplication():
-    from pkscreener.globals import main, sendQuickScanResult,sendMessageToTelegramChannel, sendGlobalMarketBarometer, updateMenuChoiceHierarchy, isInterrupted, refreshStockData, closeWorkersAndExit, resetUserMenuChoiceOptions
+    from pkscreener.globals import main, sendQuickScanResult,sendMessageToTelegramChannel, sendGlobalMarketBarometer, updateMenuChoiceHierarchy, isInterrupted, refreshStockData, closeWorkersAndExit, resetUserMenuChoiceOptions,menuChoiceHierarchy
     # From a previous call to main with args, it may have been mutated.
     # Let's stock to the original args passed by user
     try:
         savedPipedArgs = None
         savedPipedArgs = args.pipedmenus if args is not None and args.pipedmenus is not None else None
-    except:
+    except: # pragma: no cover
         pass
     global results, resultStocks, plainResults, dbTimestamp, elapsed_time, start_time,argParser
     from pkscreener.classes.MenuOptions import menus, PREDEFINED_SCAN_MENU_TEXTS, PREDEFINED_PIPED_MENU_ANALYSIS_OPTIONS,PREDEFINED_SCAN_MENU_VALUES
     args = get_debug_args()
     monitorOption = None
-    if not isinstance(args,argparse.Namespace):
+    if not isinstance(args,argparse.Namespace) and not hasattr(args, "side_effect"):
         argsv = argParser.parse_known_args(args=args)
         # argsv = argParser.parse_known_args()
         args = argsv[0]
-    if args is not None and not args.exit:
+    # During the previous run, we may have made several changes to the original args variable.
+    # We need to re-load the original args
+    if args is not None and not args.exit and not args.monitor:
         argsv = argParser.parse_known_args()
         args = argsv[0]
     # args.slicewindow = "2024-09-06 10:55:12.481253+05:30"
     if args.user is None:
-        from PKDevTools.classes.Telegram import get_secrets
-        Channel_Id, _, _, _ = get_secrets()
+        from PKDevTools.classes.Environment import PKEnvironment
+        Channel_Id, _, _, _ = PKEnvironment().secrets
         if Channel_Id is not None and len(str(Channel_Id)) > 0:
             args.user = int(f"-{Channel_Id}")
     if args.triggertimestamp is None:
         args.triggertimestamp = int(PKDateUtilities.currentDateTimestamp())
     else:
         args.triggertimestamp = int(args.triggertimestamp)
-    if args.systemlaunched:
+    if args.systemlaunched and args.options is not None:
         args.systemlaunched = args.options
     
     # if sys.argv[0].endswith(".py"):
@@ -482,7 +507,7 @@ def runApplication():
         generateIntradayAnalysisReports(args)
     else:
         if args.testalloptions:
-            allMenus = menus.allMenus(index=0)
+            allMenus,_ = menus.allMenus(index=0)
             for scanOption in allMenus:
                  args.options = f"{scanOption}:SBIN,"
                  _, _ = main(userArgs=args)
@@ -490,6 +515,7 @@ def runApplication():
 
         if args.barometer:
             sendGlobalMarketBarometer(userArgs=args)
+            sys.exit(0)
         else:
             monitorOption_org = ""
             # args.monitor = configManager.defaultMonitorOptions
@@ -530,7 +556,7 @@ def runApplication():
                             monitorOption = ":>|".join(innerPipes)
                             monitorOption = monitorOption.replace("::",":").replace(":>:>",":>")
                             # monitorOption = f"{monitorOption}:{savedStocks}:"
-                        except:
+                        except: # pragma: no cover
                             # Probably wrong (non-integer) index passed. Let's continue anyway
                             pass
                     elif resultStocks is not None:
@@ -546,6 +572,10 @@ def runApplication():
                 results = None
                 plainResults = None
                 resultStocks = None
+                if args is not None and ((args.options is not None and "|" in args.options) or args.systemlaunched):
+                    args.maxdisplayresults = 2000
+                updateConfigDurations(args=args)
+                updateConfig(args=args)
                 results, plainResults = main(userArgs=args)
                 if args.pipedmenus is not None:
                     while args.pipedmenus is not None:
@@ -570,12 +600,16 @@ def runApplication():
                                     + colorText.END
                                 )
                             if args.answerdefault is None:
-                                input("Press <Enter> to continue...")
-            except SystemExit:
+                                OutputControls().takeUserInput("Press <Enter> to continue...")
+            except SystemExit: # pragma: no cover
                 closeWorkersAndExit()
                 exitGracefully()
                 sys.exit(0)
-            except Exception as e:
+            except KeyboardInterrupt: # pragma: no cover
+                closeWorkersAndExit()
+                exitGracefully()
+                sys.exit(0)
+            except Exception as e: # pragma: no cover
                 default_logger().debug(e, exc_info=True)
                 if args.log:
                     traceback.print_exc()
@@ -584,11 +618,11 @@ def runApplication():
             if plainResults is not None and not plainResults.empty:
                 try:
                     plainResults.set_index("Stock", inplace=True)
-                except:
+                except: # pragma: no cover
                     pass
                 try:
                     results.set_index("Stock", inplace=True)
-                except:
+                except: # pragma: no cover
                     pass
                 plainResults = plainResults[~plainResults.index.duplicated(keep='first')]
                 results = results[~results.index.duplicated(keep='first')]
@@ -598,6 +632,8 @@ def runApplication():
                 if results is not None and len(monitorOption_org) > 0:
                     chosenMenu = args.pipedtitle if args.pipedtitle is not None else updateMenuChoiceHierarchy()
                     MarketMonitor().refresh(screen_df=results,screenOptions=monitorOption_org, chosenMenu=chosenMenu[:120],dbTimestamp=f"{dbTimestamp} | CycleTime:{elapsed_time}s",telegram=args.telegram)
+                    menuChoiceHierarchy = ""
+                    args.pipedtitle = ""
 
 def updateProgressStatus(args,monitorOptions=None):
     from pkscreener.classes.MenuOptions import PREDEFINED_SCAN_MENU_TEXTS,PREDEFINED_SCAN_MENU_VALUES
@@ -606,12 +642,18 @@ def updateProgressStatus(args,monitorOptions=None):
         if args.systemlaunched or monitorOptions is not None:
             optionsToUse = args.options if monitorOptions is None else monitorOptions
             choices = f"--systemlaunched -a y -e -o '{optionsToUse.replace('C:','X:').replace('D:','')}'"
-            indexNum = PREDEFINED_SCAN_MENU_VALUES.index(choices)
-            choices = f"{'P_1_'+str(indexNum +1) if '>|' in choices else choices}"
+            from pkscreener.classes.MenuOptions import INDICES_MAP
+            searchChoices = choices
+            for indexKey in INDICES_MAP.keys():
+                if indexKey.isnumeric():
+                    searchChoices = searchChoices.replace(f"X:{indexKey}:","X:12:")
+            indexNum = PREDEFINED_SCAN_MENU_VALUES.index(searchChoices)
+            selectedIndexOption = choices.split(":")[1]
+            choices = f"P_1_{str(indexNum +1)}_{str(selectedIndexOption)}" if ">|" in choices else choices
             args.progressstatus = f"  [+] {choices} => Running {choices}"
             args.usertag = PREDEFINED_SCAN_MENU_TEXTS[indexNum]
             args.maxdisplayresults = 2000 #if monitorOptions is None else 100
-    except:
+    except: # pragma: no cover
         choices = ""
         pass
     return args, choices
@@ -643,7 +685,7 @@ def generateIntradayAnalysisReports(args):
             runOptionName = f"--systemlaunched -a y -e -o '{runOption.replace('C:','X:').replace('D:','')}'"
             indexNum = PREDEFINED_SCAN_MENU_VALUES.index(runOptionName)
             runOptionName = f"{'  [+] P_1_'+str(indexNum +1) if '>|' in runOption else runOption}"
-        except Exception as e:
+        except Exception as e: # pragma: no cover
             default_logger().debug(e,exc_info=True)
             runOptionName = f"  [+] {runOption.replace('D:','').replace(':D','').replace(':','_').replace('_D','').replace('C_','X_')}"
             pass
@@ -676,7 +718,11 @@ def generateIntradayAnalysisReports(args):
                 configManager.deleteFileWithPattern(rootDir=Archiver.get_user_data_dir(), pattern="*intraday_stock_data_*.pkl")
             if isInterrupted():
                 break
-        except Exception as e:
+        except KeyboardInterrupt: # pragma: no cover
+            closeWorkersAndExit()
+            exitGracefully()
+            sys.exit(0)
+        except Exception as e: # pragma: no cover
             OutputControls().printOutput(e)
             if args.log:
                 traceback.print_exc()
@@ -704,7 +750,7 @@ def saveSendFinalOutcomeDataframe(optionalFinalOutcome_df):
                         final_df = df_group[["Pattern","LTP","LTP@Alert","SqrOffLTP","SqrOffDiff","EoDDiff","DayHigh","DayHighDiff"]]
                     else:
                         final_df = pd.concat([final_df, df_group[["Pattern","LTP","LTP@Alert","SqrOffLTP","SqrOffDiff","EoDDiff","DayHigh","DayHighDiff"]]], axis=0)
-        except:
+        except: # pragma: no cover
             pass
         if final_df is not None and not final_df.empty:
             with pd.option_context('mode.chained_assignment', None):
@@ -729,14 +775,14 @@ def saveSendFinalOutcomeDataframe(optionalFinalOutcome_df):
                                 ).encode("utf-8").decode(Utility.STD_ENCODING)
             showBacktestResults(final_df,optionalName="Intraday_Backtest_Result_Summary",choices="Summary")
             OutputControls().printOutput(mark_down)
-            from PKDevTools.classes.Telegram import get_secrets
-            Channel_Id, _, _, _ = get_secrets()
+            from PKDevTools.classes.Environment import PKEnvironment
+            Channel_Id, _, _, _ = PKEnvironment().secrets
             if Channel_Id is not None and len(str(Channel_Id)) > 0:
                 sendQuickScanResult(menuChoiceHierarchy="IntradayAnalysis",
                                         user=int(f"-{Channel_Id}"),
                                         tabulated_results=mark_down,
                                         markdown_results=mark_down,
-                                        caption="IntradayAnalysis - Morning alert vs Market Close",
+                                        caption="Intraday Analysis Summary - Morning alert vs Market Close",
                                         pngName= f"PKS_IA_{PKDateUtilities.currentDateTime().strftime('%Y-%m-%d_%H:%M:%S')}",
                                         pngExtension= ".png",
                                         forceSend=True
@@ -761,18 +807,43 @@ def checkIntradayComponent(args, monitorOption):
         configManager.toggleConfig(candleDuration='1d', clearCache=False)
     return monitorOption
 
+def updateConfigDurations(args):
+    if args is None or args.options is None:
+        return
+    nextOnes = args.options.split(">")
+    if len(nextOnes) > 1:
+        monitorOption = nextOnes[0]
+        if len(monitorOption) == 0:
+            return
+        lastComponent = ":".join(monitorOption.split(":")[-2:])
+        if "i" in lastComponent and "," not in lastComponent and " " in lastComponent:
+            if "i" in lastComponent.split(":")[-2]:
+                lastComponent = lastComponent.split(":")[-2]
+            else:
+                lastComponent = lastComponent.split(":")[-1]
+            # We need to switch to intraday scan
+            args.intraday = lastComponent.replace("i","").strip()
+            configManager.toggleConfig(candleDuration=args.intraday, clearCache=False)
+        else:
+            # We need to switch to daily scan
+            args.intraday = None
+            configManager.toggleConfig(candleDuration='1d', clearCache=False)
 
 def pipeResults(prevOutput,args):
     if args is None or args.options is None:
         return False
-    nextOnes = args.options.split(">")
     hasFoundStocks = False
+    nextOnes = args.options.split(">")
     if len(nextOnes) > 1:
         monitorOption = nextOnes[1]
         if len(monitorOption) == 0:
             return False
-        lastComponent = monitorOption.split(":")[-1]
-        if "i" in lastComponent:
+        lastComponent = ":".join(monitorOption.split(":")[-2:])
+        if "i" in lastComponent and "," not in lastComponent and " " in lastComponent:
+            if "i" in lastComponent.split(":")[-2]:
+                lastComponent = lastComponent.split(":")[-2]
+            else:
+                lastComponent = lastComponent.split(":")[-1]
             # We need to switch to intraday scan
             monitorOption = monitorOption.replace(lastComponent,"")
             args.intraday = lastComponent.replace("i","").strip()
@@ -793,7 +864,7 @@ def pipeResults(prevOutput,args):
             if prevOutput is not None and not prevOutput.empty:
                 try:
                     prevOutput.set_index("Stock", inplace=True)
-                except:
+                except: # pragma: no cover
                     pass
                 prevOutput_results = prevOutput[~prevOutput.index.duplicated(keep='first')]
                 prevOutput_results = prevOutput_results.index
@@ -806,6 +877,34 @@ def pipeResults(prevOutput,args):
         args.options = args.options.replace("::",":")
         return True and hasFoundStocks
     return False
+
+def removeOldInstances():
+    import glob
+    pattern = "pkscreenercli*"
+    thisInstance = sys.argv[0]
+    for f in glob.glob(pattern, root_dir=os.getcwd(), recursive=True):
+        fileToDelete = f if (os.sep in f and f.startswith(thisInstance[:10])) else os.path.join(os.getcwd(),f)
+        if not fileToDelete.endswith(thisInstance):
+            try:
+                os.remove(fileToDelete)
+            except: # pragma: no cover
+                pass
+
+def updateConfig(args):
+    if args is None:
+        return
+    configManager.getConfig(ConfigManager.parser)
+    if args.intraday:
+        configManager.toggleConfig(candleDuration=args.intraday, clearCache=False)
+        if configManager.candlePeriodFrequency not in ["d","mo"] or configManager.candleDurationFrequency not in ["m"]:
+            configManager.period = "1d"
+            configManager.duration = args.intraday
+            configManager.setConfig(ConfigManager.parser,default=True, showFileCreatedText=False)
+    elif configManager.candlePeriodFrequency not in ["y","max","mo"] or configManager.candleDurationFrequency not in ["d","wk","mo","h"]:
+        if args.answerdefault is not None or args.systemlaunched:
+            configManager.period = "1y"
+            configManager.duration = "1d"
+            configManager.setConfig(ConfigManager.parser,default=True, showFileCreatedText=False)
 
 def pkscreenercli():
     global originalStdOut, args
@@ -821,15 +920,41 @@ def pkscreenercli():
                 traceback.print_exc()
             pass
     try:
-        OutputControls(enableMultipleLineOutput=(args is None or args.monitor is None or args.runintradayanalysis)).printOutput("",end="\r")
+        removeOldInstances()
+        OutputControls(enableMultipleLineOutput=(args is None or args.monitor is None or args.runintradayanalysis),enableUserInput=(args is None or args.answerdefault is None)).printOutput("",end="\r")
         configManager.getConfig(ConfigManager.parser)
+        userAcceptance = configManager.tosAccepted
+        if not configManager.tosAccepted:
+            if (args is not None and args.answerdefault is not None and str(args.answerdefault).lower() == "n"):
+                OutputControls().printOutput(f"{colorText.FAIL}You seem to have passed disagreement to the Disclaimer and Terms Of Service of PKScreener by passing in {colorText.END}{colorText.WARN}--answerdefault N or -a N{colorText.END}. Exiting now!")
+                sleep(5)
+                sys.exit(0)
+            allArgs = args.__dict__
+            disclaimerLink = '\x1b[97m\x1b]8;;https://pkjmesra.github.io/PKScreener/Disclaimer.txt\x1b\\https://pkjmesra.github.io/PKScreener/Disclaimer.txt\x1b]8;;\x1b\\\x1b[0m'
+            tosLink = '\x1b[97m\x1b]8;;https://pkjmesra.github.io/PKScreener/tos.txt\x1b\\https://pkjmesra.github.io/PKScreener/tos.txt\x1b]8;;\x1b\\\x1b[0m'
+            for argKey in allArgs.keys():
+                arg = allArgs[argKey]
+                if arg is not None and arg:
+                    userAcceptance = True
+                    OutputControls().printOutput(f"{colorText.GREEN}By using this Software and passing a value for [{argKey}={arg}], you agree to\n[+] having read through the Disclaimer{colorText.END} ({disclaimerLink})\n[+]{colorText.GREEN} and accept Terms Of Service {colorText.END}({tosLink}){colorText.GREEN} of PKScreener. {colorText.END}\n[+] {colorText.WARN}If that is not the case, you MUST immediately terminate PKScreener by pressing Ctrl+C now!{colorText.END}")
+                    sleep(2)
+                    break
+        if not userAcceptance and ((args is not None and args.answerdefault is not None and str(args.answerdefault).lower() != "y") or (args is not None and args.answerdefault is None)):
+            userAcceptance = OutputControls().takeUserInput(f"{colorText.WARN}By using this Software, you agree to\n[+] having read through the Disclaimer {colorText.END}({disclaimerLink}){colorText.WARN}\n[+] and accept Terms Of Service {colorText.END}({tosLink}){colorText.WARN} of PKScreener ? {colorText.END}(Y/N){colorText.GREEN} [Default: {colorText.END}{colorText.FAIL}N{colorText.END}{colorText.GREEN}] :{colorText.END}",defaultInput="N",enableUserInput=True) or "N"
+            if str(userAcceptance).lower() != "y":
+                OutputControls().printOutput(f"\n{colorText.WARN}You seem to have\n    [+] passed disagreement to the Disclaimer and \n    [+] not accepted Terms Of Service of PKScreener.\n{colorText.END}{colorText.FAIL}[+] You MUST read and agree to the disclaimer and MUST accept the Terms of Service to use PKScreener.{colorText.END}\n\n{colorText.WARN}Exiting now!{colorText.END}")
+                sleep(5)
+                sys.exit(0)
         try:
+            from pkscreener.classes import VERSION
             # Reset logging. If the user indeed passed the --log flag, it will be enabled later anyways
             del os.environ['PKDevTools_Default_Log_Level']
-            configManager.logsEnabled = False
-            configManager.setConfig(ConfigManager.parser,default=True,showFileCreatedText=False)
-        except:
+        except: # pragma: no cover
             pass
+        configManager.logsEnabled = False
+        configManager.tosAccepted = True
+        configManager.appVersion = VERSION
+        configManager.setConfig(ConfigManager.parser,default=True,showFileCreatedText=False)
         import atexit
         atexit.register(exitGracefully)
         # Set the trigger timestamp
@@ -841,7 +966,7 @@ def pkscreenercli():
         # args.monitor = configManager.defaultMonitorOptions
         if args.monitor is not None:
             from pkscreener.classes.MenuOptions import NA_NON_MARKET_HOURS
-            configuredMonitorOptions = configManager.defaultMonitorOptions.split("~")
+            configuredMonitorOptions = configManager.defaultMonitorOptions.split("~") if len(configManager.myMonitorOptions) < 1 else configManager.myMonitorOptions.split("~")
             for monitorOption in NA_NON_MARKET_HOURS:
                 if monitorOption in configuredMonitorOptions and not PKDateUtilities.isTradingTime():
                     # These can't be run in non-market hours
@@ -858,8 +983,8 @@ def pkscreenercli():
             setupLogger(shouldLog=True, trace=args.testbuild)
             if not args.prodbuild and args.answerdefault is None:
                 try:
-                    input("Press <Enter> to continue...")
-                except EOFError:
+                    OutputControls().takeUserInput("Press <Enter> to continue...")
+                except EOFError: # pragma: no cover
                     OutputControls().printOutput(f"{colorText.WARN}If you're running from within docker, please run like this:{colorText.END}\n{colorText.FAIL}docker run -it pkjmesra/pkscreener:latest\n{colorText.END}")
                     pass
         else:
@@ -903,7 +1028,7 @@ def pkscreenercli():
             configManager.setConfig(
                 ConfigManager.parser, default=True, showFileCreatedText=False
             )
-        if args.systemlaunched:
+        if args.systemlaunched and args.options is not None:
             args.systemlaunched = args.options
             
         if args.telegram:
@@ -924,11 +1049,7 @@ def pkscreenercli():
             from pkscreener import pkscreenerbot
             pkscreenerbot.runpkscreenerbot(availability=args.botavailable)
             return
-        
-        if args.intraday:
-            configManager.toggleConfig(candleDuration=args.intraday, clearCache=False)
-        # else:
-        #     configManager.toggleConfig(candleDuration='1d', clearCache=False)
+        updateConfig(args)
         if args.options is not None:
             if str(args.options) == "0":
                 # Must be from unit tests to be able to break out of loops via eventing
@@ -941,6 +1062,12 @@ def pkscreenercli():
         if args.minprice:
             configManager.minLTP = args.minprice
             configManager.setConfig(ConfigManager.parser, default=True, showFileCreatedText=False)
+        global LoggedIn
+        if not LoggedIn and not args.telegram and not args.bot and not args.systemlaunched and not args.testbuild:
+            from pkscreener.classes.PKUserRegistration import PKUserRegistration
+            if not PKUserRegistration.login():
+                sys.exit(0)
+            LoggedIn = True
         if args.testbuild and not args.prodbuild:
             OutputControls().printOutput(
                 colorText.FAIL
@@ -968,7 +1095,12 @@ def pkscreenercli():
             sys.exit(0)
         else:
             runApplicationForScreening()
-    except Exception as e:
+    except KeyboardInterrupt: # pragma: no cover
+        from pkscreener.globals import closeWorkersAndExit
+        closeWorkersAndExit()
+        exitGracefully()
+        sys.exit(0)
+    except Exception as e: # pragma: no cover
         if "RUNNER" not in os.environ.keys() and ('PKDevTools_Default_Log_Level' in os.environ.keys() and os.environ["PKDevTools_Default_Log_Level"] != str(log.logging.NOTSET)):
                 OutputControls().printOutput(
                     "  [+] RuntimeError with 'multiprocessing'.\n  [+] Please contact the Developer, if this does not work!"
@@ -999,7 +1131,7 @@ def runApplicationForScreening():
         closeWorkersAndExit()
         exitGracefully()
         sys.exit(0)
-    except SystemExit:
+    except SystemExit: # pragma: no cover
         closeWorkersAndExit()
         exitGracefully()
         sys.exit(0)
@@ -1063,5 +1195,8 @@ def scheduleNextRun():
 if __name__ == "__main__":
     try:
         pkscreenercli()
-    except KeyboardInterrupt:
+    except KeyboardInterrupt: # pragma: no cover
+        from pkscreener.globals import closeWorkersAndExit
+        closeWorkersAndExit()
+        exitGracefully()
         sys.exit(0)

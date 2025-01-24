@@ -28,7 +28,7 @@ import sys
 import warnings
 import datetime
 import numpy as np
-
+import os
 warnings.simplefilter("ignore", DeprecationWarning)
 warnings.simplefilter("ignore", FutureWarning)
 import pandas as pd
@@ -38,6 +38,7 @@ import pkscreener.classes.Utility as Utility
 from pkscreener import Imports
 from pkscreener.classes.Pktalib import pktalib
 from PKDevTools.classes.OutputControls import OutputControls
+from PKDevTools.classes import Archiver
 from PKNSETools.morningstartools import Stock
 
 if sys.version_info >= (3, 11):
@@ -85,7 +86,7 @@ class StockDataNotAdequate(Exception):
 
 # This Class contains methods for stock analysis and screening validation
 class ScreeningStatistics:
-    def __init__(self, configManager, default_logger,shouldLog=False) -> None:
+    def __init__(self, configManager=None, default_logger=None,shouldLog=False) -> None:
         self.configManager = configManager
         self.default_logger = default_logger
         self.shouldLog = shouldLog
@@ -125,7 +126,7 @@ class ScreeningStatistics:
                     ema = pktalib.EMA(df["Close"], ema_period) if ema_period > 1 else df["Close"]#short_name='EMA', ewm=True)        
                     df["Above"] = ema > df["ATRTrailingStop"]
                     df["Below"] = ema < df["ATRTrailingStop"]
-        except (OSError,FileNotFoundError) as e:
+        except (OSError,FileNotFoundError) as e: # pragma: no cover
             OutputControls().printOutput(f"{colorText.FAIL}Some dependencies are missing. Try and run this option again.{colorText.END}")
             # OSError:RALLIS: [Errno 2] No such file or directory: '/tmp/_MEIzoTV6A/vectorbt/templates/light.json'
             # if "No such file or directory" in str(e):
@@ -134,21 +135,21 @@ class ScreeningStatistics:
                 outputFolder = None
                 try:
                     outputFolder = os.sep.join(e.filename.split(os.sep)[:-1])
-                except Exception as e:
+                except Exception as e: # pragma: no cover
                     outputFolder = os.sep.join(str(e).split("\n")[0].split(": ")[1].replace("'","").split(os.sep)[:-1])
-            except Exception as e:
+            except Exception as e: # pragma: no cover
                 pass
             self.downloadSaveTemplateJsons(outputFolder)
             if retry:
                 return self.computeBuySellSignals(df,ema_period=ema_period,retry=False)
             return None
-        except ImportError as e:
+        except ImportError as e: # pragma: no cover
             OutputControls().printOutput(f"{colorText.FAIL}The main module needed for best Buy/Sell result calculation is missing. Falling back on an alternative, but it is not very reliable.{colorText.END}")
             if df is not None:
                 ema = pktalib.EMA(df["Close"], ema_period) if ema_period > 1 else df["Close"]#short_name='EMA', ewm=True)        
                 df["Above"] = ema > df["ATRTrailingStop"]
                 df["Below"] = ema < df["ATRTrailingStop"]
-        except Exception as e:
+        except Exception as e: # pragma: no cover
             pass
                 
         if df is not None:
@@ -200,7 +201,7 @@ class ScreeningStatistics:
                 # else:
                 #     if self.shouldLog:
                 #         self.default_logger.debug(f"Already exists: {path}")
-            except Exception as e:
+            except Exception as e: # pragma: no cover
                 # if self.shouldLog:
                 #     self.default_logger.debug(e, exc_info=True)
                 continue
@@ -1141,6 +1142,152 @@ class ScreeningStatistics:
         screenDict["B/S"] = (colorText.GREEN + "Buy") if trend == 1 else ((colorText.FAIL+ "Sell") if trend == -1 else (colorText.WARN + "NA")) + colorText.END
         return buySellAll == trend
 
+    # 1. Cup Formation (Bowl)
+    # During the cup formation phase, the price experiences a prolonged downtrend or consolidation, 
+    # creating a rounded or U-shaped bottom. This phase represents a period of price stabilization, 
+    # where investors who bought at higher levels are selling to cut their losses, and new buyers 
+    # cautiously enter the market as they see potential value at these lower price levels. The 
+    # psychology during this phase includes:
+        # Capitulation and Despair:
+        # The initial phase of the cup is marked by capitulation, where panicked investors sell off 
+        # their holdings due to fear and negative sentiment.
+    # Value Perception:
+        # As the price stabilizes and gradually starts to rise, some investors perceive value in the 
+        # stock at these lower levels, leading to accumulation of shares.
+    
+    # 2. Handle Formation
+    # The handle formation phase follows the cup’s rounded bottom, characterized by a short-term 
+    # decline in price. This decline typically ranges from 10% to 20% and is often referred to as 
+    # the “handle” of the pattern. During this phase, the psychology involves:
+    # Consolidation and Profit-Taking:
+        # After the cup’s advance, some investors decide to take profits, leading to a brief pullback 
+        # in price. This retracement is seen as a normal part of the market cycle.
+    # Temporary Skepticism:
+        # The pullback in price could make some investors skeptical about the stock’s future prospects, 
+        # creating a cautious sentiment.
+    
+    # 3. Breakout and Upside Potential
+    # The psychology behind the breakout from the handle involves the culmination of buying pressure 
+    # exceeding selling pressure. This breakout is signaled when the price breaks above the resistance 
+    # level formed by the cup’s rim. Investors who missed the earlier opportunity or who had been 
+    # waiting for confirmation now step in, leading to renewed buying interest. The psychology during 
+    # this phase includes:
+    # Confirmation of Strength:
+        # The breakout above the resistance level validates the bullish sentiment and confirms that the 
+        # consolidation phase is ending. This attracts traders looking for confirmation before committing 
+        # capital.
+    # Fear of Missing Out (FOMO):
+        # As the price starts to rise and gain momentum, FOMO can kick in, driving more investors to buy 
+        # in at fear of missing out on potential gains.
+    # Recovery and Optimism:
+        # The price’s ability to surpass previous highs reinforces optimism, encouraging further buying 
+        # from both existing and new investors.
+    def findCupAndHandlePattern(self, df, stockName):
+        if df is None or len(df) == 0:
+            return False
+        data = df.copy()
+        data = data.fillna(0)
+        data = data.replace([np.inf, -np.inf], 0)
+        data = data[::-1]  # Reverse the dataframe so that its the oldest date first
+
+        df_point = pd.DataFrame(columns=['StockName', 'DateK', 'DateA', 'DateB', 'DateC', 'DateD', 'Gamma'])
+
+        data = data.reset_index()
+        data['Date'] = data['Date'].apply(lambda x : x.strftime('%Y-%m-%d'))
+        data['Close_ch'] = data['Close'].shift(+1)
+        data['rpv'] = ((data['Close'] / data['Close_ch']) - 1) * data['Volume']
+        data['SMA50_Volume'] = data.Volume.rolling(50).mean()
+        data['SMA50_rpv'] = data.rpv.rolling(50).mean()
+
+        T = 0
+        i = 1
+        t = 51
+        foundStockWithCupNHandle = False
+        while t < len(data)-T:
+            dat = data.loc[t:]
+            Dk = dat.loc[t]['Date']
+            Pk = dat.loc[t]['Close']   
+            # search for region K to A
+            k = 25
+            while k > 15:
+                #print('Searching SETUP with width = ', k)
+                datA = dat.loc[:t+k] # Dk = t
+                # first find absolute maxima point A
+                Da_index = datA[datA['Close'] == max(datA['Close'])]['Date'].index[0]
+                Da_value = datA[datA['Close'] == max(datA['Close'])]['Date'].values[0]
+                Pa_index = datA[datA['Close'] == max(datA['Close'])]['Close'].index[0]
+                Pa_value = datA[datA['Close'] == max(datA['Close'])]['Close'].values[0]
+                uprv1 = abs(datA.loc[t:Da_index].loc[datA['rpv'] > 0, :]['rpv'].mean())
+                dprv1 = abs(datA.loc[t:Da_index].loc[datA['rpv'] <= 0, :]['rpv'].mean())
+                if (dprv1 == 'NaN') | (dprv1 == 0):
+                    dprv1 = datA['SMA50_rpv'].mean()   
+                alpha1 = uprv1/dprv1
+                #delta = Pa_index/t 
+                delta = Pa_value/Pk
+                if (delta > 1) & (alpha1 > 1):
+                    #print('Okay good setup! Lets move on now')
+                    a = 40
+                    while a > 10:
+                        #print('Lets search for LEFT SIDE CUP with width = ', a)
+                        datB = dat.loc[Da_index:Da_index+a]
+                        Db_index = datB[datB['Close'] == min(datB['Close'])]['Date'].index[0]
+                        Db_value = datB[datB['Close'] == min(datB['Close'])]['Date'].values[0]
+                        Pb_index = datB[datB['Close'] == min(datB['Close'])]['Close'].index[0]
+                        Pb_value = datB[datB['Close'] == min(datB['Close'])]['Close'].values[0]
+                        avg_vol = datB['Volume'].mean()
+                        avg_ma_vol = data['SMA50_Volume'].mean()
+                        if (Pb_value < Pa_value) & (avg_vol < avg_ma_vol):
+                            #print("Voila! You found the bottom, it's all uphill from here")
+                            b = a
+                            while b > round(a/3):
+                                #print("Let's search for RIGHT SIDE CUP with width = ", b)
+                                datC = dat.loc[Db_index:Db_index+b+1]
+                                Dc_index = datC[datC['Close'] == max(datC['Close'])]['Date'].index[0]
+                                Dc_value = datC[datC['Close'] == max(datC['Close'])]['Date'].values[0]
+                                Pc_index = datC[datC['Close'] == max(datC['Close'])]['Close'].index[0]
+                                Pc_value = datC[datC['Close'] == max(datC['Close'])]['Close'].values[0]
+                                uprv2 = abs(datC.loc[datC['rpv'] > 0, :]['rpv'].mean())
+                                dprv2 = abs(datC.loc[datC['rpv'] <= 0, :]['rpv'].mean())
+                                if (dprv2 == 'NaN') | (dprv2 == 0):
+                                    dprv2 = datC['SMA50_rpv'].mean()      
+                                alpha2 = uprv2/dprv2
+                                if (Pc_value > Pb_value) & (alpha2 > 1):
+                                    #print("Almost there... be patient now! :D")
+                                    # search for region C to D
+                                    c = b/2
+                                    while c > round(b/4):
+                                        #print("Let's search for the handle now with width = ", c)
+                                        #print(t, " ", k, " ", a, " ", b, " ", c)
+                                        datD = dat.loc[Dc_index:Dc_index+c+1]
+                                        Dd_index = datD[datD['Close'] == min(datD['Close'])]['Date'].index[0]
+                                        Dd_value = datD[datD['Close'] == min(datD['Close'])]['Date'].values[0]
+                                        Pd_index = datD[datD['Close'] == min(datD['Close'])]['Close'].index[0]
+                                        Pd_value = datD[datD['Close'] == min(datD['Close'])]['Close'].values[0]
+                                        uprv3 = abs(datD.loc[datD['rpv'] > 0, :]['rpv'].mean())
+                                        dprv3 = abs(datD.loc[datD['rpv'] <= 0, :]['rpv'].mean())
+                                        if (dprv3 == 'NaN') | (dprv3 == 0):
+                                            dprv3 = datD['SMA50_rpv'].mean()      
+                                        beta = uprv2/dprv3
+                                        if (Pd_value <= Pc_value) & (Pd_value > 0.8 * Pc_value + 0.2 * Pb_value) & (beta > 1):
+                                            if (Pc_value <= Pa_value) & (Pd_value > Pb_value):
+                                                foundStockWithCupNHandle = True
+                                                gamma = math.log(alpha2) + math.log(beta) + delta
+                                                df_point.loc[len(df_point)] = [stockName, Dk, Da_value, Db_value, Dc_value, Dd_value, gamma]
+                                                #print("Hurrah! Got "+str(i)+" hits!")
+                                                k = 15
+                                                a = 10
+                                                b = round(a/3)
+                                                c = round(b/4)
+                                                i = i+1
+                                                t = t+15
+                                                break
+                                        c = c-1
+                                b = b-1
+                        a = a-1
+                k = k-1
+            t = t + 1
+        return foundStockWithCupNHandle, df_point
+
     def findCurrentSavedValue(self, screenDict, saveDict, key):
         existingScreen = screenDict.get(key)
         existingSave = saveDict.get(key)
@@ -1206,7 +1353,7 @@ class ScreeningStatistics:
             # Let's only consider those candles that are after the alert issue-time in the mornings + 2 candles (for buy/sell)
             diff_df = data[data.index >=  pd.to_datetime(f'{PKDateUtilities.tradingDate().strftime(f"%Y-%m-%d")} {MarketHours().openHour:02}:{MarketHours().openMinute+self.configManager.morninganalysiscandlenumber + 2}:00+05:30').to_datetime64()]
             # brokerSqrOfftime = pd.to_datetime(f'{PKDateUtilities.tradingDate().strftime(f"%Y-%m-%d")} 15:14:00+05:30').to_datetime64()
-        except:
+        except: # pragma: no cover
             diff_df = data[data.index >=  pd.to_datetime(f'{PKDateUtilities.tradingDate().strftime(f"%Y-%m-%d")} {MarketHours().openHour:02}:{MarketHours().openMinute+self.configManager.morninganalysiscandlenumber + 2}:00+05:30', utc=True)]
             # brokerSqrOfftime = pd.to_datetime(f'{PKDateUtilities.tradingDate().strftime(f"%Y-%m-%d")} 15:14:00+05:30', utc=True)
             pass
@@ -1231,7 +1378,7 @@ class ScreeningStatistics:
         for candle1MinuteNumberSinceMarketStarted in candleDurations:
             try:
                 int_df = df_intraday[df_intraday.index <=  pd.to_datetime(f'{PKDateUtilities.tradingDate().strftime(f"%Y-%m-%d")} {MarketHours().openHour:02}:{MarketHours().openMinute+candle1MinuteNumberSinceMarketStarted}:00+05:30').to_datetime64()]
-            except:
+            except: # pragma: no cover
                 int_df = df_intraday[df_intraday.index <=  pd.to_datetime(f'{PKDateUtilities.tradingDate().strftime(f"%Y-%m-%d")} {MarketHours().openHour:02}:{MarketHours().openMinute+candle1MinuteNumberSinceMarketStarted}:00+05:30', utc=True)]
                 pass
             if int_df is not None and len(int_df) > 0:
@@ -1313,7 +1460,7 @@ class ScreeningStatistics:
             # Let's only consider those candles that are after the alert issue-time in the mornings + 2 candles (for buy/sell)
             diff_df = diff_df[diff_df.index >=  pd.to_datetime(f'{PKDateUtilities.tradingDate().strftime(f"%Y-%m-%d")} {MarketHours().openHour:02}:{MarketHours().openMinute+self.configManager.morninganalysiscandlenumber + 2}:00+05:30').to_datetime64()]
             # brokerSqrOfftime = pd.to_datetime(f'{PKDateUtilities.tradingDate().strftime(f"%Y-%m-%d")} 15:14:00+05:30').to_datetime64()
-        except:
+        except: # pragma: no cover
             diff_df = diff_df[diff_df.index >=  pd.to_datetime(f'{PKDateUtilities.tradingDate().strftime(f"%Y-%m-%d")} {MarketHours().openHour:02}:{MarketHours().openMinute+self.configManager.morninganalysiscandlenumber + 2}:00+05:30', utc=True)]
             # brokerSqrOfftime = pd.to_datetime(f'{PKDateUtilities.tradingDate().strftime(f"%Y-%m-%d")} 15:14:00+05:30', utc=True)
             pass
@@ -1331,7 +1478,7 @@ class ScreeningStatistics:
                     while((diff_df["diff"][index-1] >= 0 and index >=0)): # and diff_df.index <= brokerSqrOfftime): # or diff_df["rsi"][index-1] <= minRSI):
                         # Loop until signal line has not crossed yet and is above the zero line
                         index -= 1
-            except:
+            except: # pragma: no cover
                 continue
             crossOver += 1
         ts = diff_df.tail(len(diff_df)-index +1).head(1).index[-1]
@@ -1881,11 +2028,42 @@ class ScreeningStatistics:
                 mf = f"MFI:{colorText.DOWNARROW} {change_millions}"
                 mfs = colorText.FAIL + mf + colorText.END
 
+        # Let's get the large deals for the stock
+        try:
+            dealsInfo = ""
+            symbolKeys = ["Ⓑ","Ⓛ","Ⓢ"]
+            largeDealsData, filePath, modifiedDateTime = Archiver.findFileInAppResultsDirectory(directory=Archiver.get_user_data_dir(), fileName="large_deals.json")
+            dealsFileSize = os.stat(filePath).st_size if os.path.exists(filePath) else 0
+            if dealsFileSize > 0 and len(largeDealsData) > 0:
+                import json
+                countKeys = ["BULK_DEALS","BLOCK_DEALS","SHORT_DEALS"]
+                dataKeys = ["BULK_DEALS_DATA","BLOCK_DEALS_DATA","SHORT_DEALS_DATA"]
+                jsonDeals = json.loads(largeDealsData)
+                index = 0
+                for countKey in countKeys:
+                    if countKey in jsonDeals.keys() and int(jsonDeals[countKey]) > 0 and dataKeys[index] in jsonDeals.keys() and len(jsonDeals[dataKeys[index]]) > 0:
+                        for deal in jsonDeals[dataKeys[index]]:
+                            if stock.upper() == deal["symbol"]:
+                                buySellInfo = "" if deal["buySell"] is None else (f"({'B' if deal['buySell'] == 'BUY' else 'S'})")
+                                qty = int(deal["qty"])
+                                qtyInfo = f"({int(qty/1000000)}M)" if qty >= 1000000 else (f"({int(qty/1000)}K)" if qty >= 1000 else f"({qty})")
+                                dealsInfo = f"{dealsInfo} {buySellInfo}{qtyInfo}{symbolKeys[index]}"
+                    index += 1
+        except: # pragma: no cover
+            pass
+
         saved = self.findCurrentSavedValue(screenDict,saveDict,"Trend")
         decision_scr = (colorText.GREEN if isUptrend else (colorText.FAIL if isDowntrend else colorText.WARN)) + f"{decision}" + colorText.END
         dma50decision_scr = (colorText.GREEN if is50DMAUptrend else (colorText.FAIL if is50DMADowntrend else colorText.WARN)) + f"{dma50decision}" + colorText.END
-        saveDict["Trend"] = f"{saved[1]} {decision} {dma50decision} {mf}"
-        screenDict["Trend"] = f"{saved[0]} {decision_scr} {dma50decision_scr} {mfs}"
+        saveDict["Trend"] = f"{saved[1]} {decision} {dma50decision} {mf}{dealsInfo}"
+        for symbol in symbolKeys:
+            dealParts = dealsInfo.split(" ")
+            dealPartsRefined = []
+            for dealPart in dealParts:
+                dealPart = dealPart.replace(symbol,(colorText.GREEN+symbol+colorText.END) if ("(B)" in dealPart) else ((colorText.FAIL+symbol+colorText.END) if ("(S)" in dealPart) else symbol))
+                dealPartsRefined.append(dealPart)
+            dealsInfo = " ".join(dealPartsRefined).strip()
+        screenDict["Trend"] = f"{saved[0]} {decision_scr} {dma50decision_scr} {mfs}{dealsInfo}"
         saveDict["MFI"] = mf_inst_ownershipChange
         screenDict["MFI"] = mf_inst_ownershipChange
         return isUptrend, mf_inst_ownershipChange, fairValueDiff
@@ -1922,7 +2100,7 @@ class ScreeningStatistics:
                 except (TimeoutError, ConnectionError) as e:
                     self.default_logger.debug(e, exc_info=True)
                     pass
-                except Exception as e:
+                except Exception as e: # pragma: no cover
                     self.default_logger.debug(e, exc_info=True)
                     pass
                 if security is not None:
@@ -1933,7 +2111,7 @@ class ScreeningStatistics:
                             fvResponseValue = fv["latestFairValue"]
                             if fvResponseValue is not None:
                                 fairValue = float(fvResponseValue)
-                        except: # pragma: no cover
+                        except: # pragma: no cover # pragma: no cover
                             pass
                             # self.default_logger.debug(f"{e}\nResponse:fv:\n{fv}", exc_info=True)
                     fairValue = round(float(fairValue),1)
@@ -1960,7 +2138,7 @@ class ScreeningStatistics:
         except (TimeoutError, ConnectionError) as e:
             self.default_logger.debug(e, exc_info=True)
             pass
-        except Exception as e:
+        except Exception as e: # pragma: no cover
             self.default_logger.debug(e, exc_info=True)
             pass
         if security is not None:
@@ -1970,7 +2148,7 @@ class ScreeningStatistics:
                     changeStatusRowsInst = security.institutionOwnership(top=5)
                     changeStatusDataMF = security.mutualFundFIIChangeData(changeStatusRowsMF)
                     changeStatusDataInst = security.mutualFundFIIChangeData(changeStatusRowsInst)
-            except Exception as e:
+            except Exception as e: # pragma: no cover
                 self.default_logger.debug(e, exc_info=True)
                 # TypeError or ConnectionError because we could not find the stock or MFI data isn't available?
                 pass
@@ -2431,10 +2609,10 @@ class ScreeningStatistics:
                 )
                 data.insert(len(data.columns), "FASTK", fastk)
                 data.insert(len(data.columns), "FASTD", fastd)
-            except Exception as e:
+            except Exception as e: # pragma: no cover
                 self.default_logger.debug(e, exc_info=True)
                 pass
-        except Exception as e:
+        except Exception as e: # pragma: no cover
                 self.default_logger.debug(e, exc_info=True)
                 pass
         data = data[::-1]  # Reverse the dataframe
@@ -2854,7 +3032,10 @@ class ScreeningStatistics:
             top2 = dfc["tops"].iloc[index+2]
             top = max(top1,top2)
             bot = dfc["bots"].iloc[index+1]
-            legConsolidation = int(round((top-bot)*100/bot,0))
+            if bot != 0 and not np.isnan(top) and not np.isnan(bot):
+                legConsolidation = int(round((top-bot)*100/bot,0))
+            else:
+                legConsolidation = 0
             consolidationPercentages.append(legConsolidation)
             if len(consolidationPercentages) >= relativeLegsTocheck:
                 break
@@ -2868,9 +3049,9 @@ class ScreeningStatistics:
                 index = 0
                 while (index+1) < legsToCheck:
                     # prev one < new one.
-                    if consolidationPercentages[index] <= consolidationPercentages[index+1]:
+                    if len(consolidationPercentages) >= index+2 and consolidationPercentages[index] <= consolidationPercentages[index+1]:
                         return False, consolidationPercentages[:relativeLegsTocheck], devScore
-                    if index < relativeLegsTocheck:
+                    if index < relativeLegsTocheck and len(consolidationPercentages) >= index+2:
                         devScore += 2-(consolidationPercentages[index]/consolidationPercentages[index+1])
                     index += 1
         
@@ -3018,7 +3199,7 @@ class ScreeningStatistics:
 
     #@measure_time
     # Validate Lorentzian Classification signal
-    def validateLorentzian(self, df, screenDict, saveDict, lookFor=3):
+    def validateLorentzian(self, df, screenDict, saveDict, lookFor=3,stock=None):
         if df is None or len(df) == 0:
             return False
         data = df.copy()
@@ -3035,7 +3216,38 @@ class ScreeningStatistics:
         )
         try:
             with SuppressOutput(suppress_stdout=True, suppress_stderr=True):
-                lc = ata.LorentzianClassification(data=data)
+                lc = ata.LorentzianClassification(data=data,
+                features=[
+                    ata.LorentzianClassification.Feature("RSI", 14, 2),  # f1
+                    ata.LorentzianClassification.Feature("WT", 10, 11),  # f2
+                    ata.LorentzianClassification.Feature("CCI", 20, 2),  # f3
+                    ata.LorentzianClassification.Feature("ADX", 20, 2),  # f4
+                    ata.LorentzianClassification.Feature("RSI", 9, 2),   # f5
+                    pktalib.MFI(data['high'], data['low'], data['close'], data['volume'], 14) #f6
+                ],
+                settings=ata.LorentzianClassification.Settings(
+                    source=data['close'],
+                    neighborsCount=8,
+                    maxBarsBack=2000,
+                    useDynamicExits=False
+                ),
+                filterSettings=ata.LorentzianClassification.FilterSettings(
+                    useVolatilityFilter=True,
+                    useRegimeFilter=True,
+                    useAdxFilter=False,
+                    regimeThreshold=-0.1,
+                    adxThreshold=20,
+                    kernelFilter = ata.LorentzianClassification.KernelFilter(
+                        useKernelSmoothing = False,
+                        lookbackWindow = 8,
+                        relativeWeight = 8.0,
+                        regressionLevel = 25,
+                        crossoverLag = 2,
+                    )
+                ))
+            # if stock is not None:
+            #     lc.dump(f'{stock}_result.csv')
+            #     lc.plot(f'{stock}_result.jpg')
             saved = self.findCurrentSavedValue(screenDict, saveDict, "Pattern")
             if lc.df.iloc[-1]["isNewBuySignal"]:
                 screenDict["Pattern"] = (
@@ -3051,7 +3263,7 @@ class ScreeningStatistics:
                 saveDict["Pattern"] = saved[1] + "Lorentzian-Sell"
                 if lookFor != 1: # Not Buy
                     return True
-        except Exception:  # pragma: no cover
+        except Exception as e:  # pragma: no cover
             # ValueError: operands could not be broadcast together with shapes (20,) (26,)
             # File "/opt/homebrew/lib/python3.11/site-packages/advanced_ta/LorentzianClassification/Classifier.py", line 186, in __init__
             # File "/opt/homebrew/lib/python3.11/site-packages/advanced_ta/LorentzianClassification/Classifier.py", line 395, in __classify
@@ -3060,7 +3272,7 @@ class ScreeningStatistics:
             # File "/opt/homebrew/lib/python3.11/site-packages/pandas/core/series.py", line 5810, in _logical_method
             # File "/opt/homebrew/lib/python3.11/site-packages/pandas/core/ops/array_ops.py", line 456, in logical_op
             # File "/opt/homebrew/lib/python3.11/site-packages/pandas/core/ops/array_ops.py", line 364, in na_logical_op
-            # self.default_logger.debug(e, exc_info=True)
+            self.default_logger.debug(e, exc_info=True)
             pass
         return False
 
@@ -3151,6 +3363,25 @@ class ScreeningStatistics:
                 ltpValid = float(str(pct_save).replace("%","")) >= minChange
             saveDict["LTP"] = round(ltp, 2)
             screenDict["LTP"] = (colorText.GREEN if ltpValid else colorText.FAIL) + ("%.2f" % ltp) + colorText.END
+            try:
+                dateTimePart = str(recent.index[0]).split(" ")
+                if len(dateTimePart) == 1:
+                    indexDate = PKDateUtilities.dateFromYmdString(dateTimePart[0])
+                    dayDate = f"{indexDate.day}/{indexDate.month}"
+                elif len(dateTimePart) == 2:
+                    today = PKDateUtilities.currentDateTime()
+                    try:
+                        indexDate = datetime.datetime.strptime(str(recent.index[0]),"%Y-%m-%d %H:%M:%S").replace(tzinfo=today.tzinfo)
+                    except: # pragma: no cover
+                        indexDate = datetime.datetime.strptime(str(recent.index[0]),"%Y-%m-%d %H:%M:%S%z").replace(tzinfo=today.tzinfo)
+                        pass
+                    dayDate = f"{indexDate.day}/{indexDate.month} {indexDate.hour}:{indexDate.minute}" if indexDate.hour > 0 else f"{indexDate.day}/{indexDate.month} {today.hour}:{today.minute}"
+                    screenDict["Time"] = f"{colorText.WHITE}{dayDate}{colorText.END}"
+                    saveDict["Time"] = str(dayDate)
+            except Exception as e: # pragma: no cover
+                self.default_logger.debug(e, exc_info=True)
+                pass
+            
             return ltpValid, verifyStageTwo
         screenDict["LTP"] = colorText.FAIL + ("%.2f" % ltp) + colorText.END
         saveDict["LTP"] = round(ltp, 2)
@@ -3468,7 +3699,32 @@ class ScreeningStatistics:
                 saveDict["MA-Signal"] = saved[1] + maText + f"({percentageDiff}%)"
                 screenDict["MA-Signal"] = saved[0] + f"{colorText.GREEN}{maText}{colorText.END}{colorText.FAIL if abs(percentageDiff) > 1 else colorText.WARN}({percentageDiff}%){colorText.END}"
         return hasAtleastOneMACross
-    
+
+    def validatePriceActionCrossesForPivotPoint(self, df, screenDict, saveDict, pivotPoint="1", crossDirectionFromBelow=True):
+        if df is None or len(df) == 0:
+            return False
+        hasPriceCross = False
+        data = df.copy()
+        pp_map = {"1":"PP","2":"S1","3":"S2","4":"S3","5":"R1","6":"R2","7":"R3"}
+        if pivotPoint is not None and pivotPoint != "0" and str(pivotPoint).isnumeric():
+            ppToCheck = pp_map[str(pivotPoint)]
+            ppsr_df = pktalib.get_ppsr_df(data["High"],data["Low"],data["Close"],ppToCheck)
+            if ppsr_df is None:
+                return False
+            if crossDirectionFromBelow:
+                hasPriceCross = (ppsr_df["Close"].iloc[0] > ppsr_df[ppToCheck].iloc[0] and 
+                             ppsr_df["Close"].iloc[1] <= ppsr_df[ppToCheck].iloc[1])
+            else:
+                hasPriceCross = (ppsr_df["Close"].iloc[0] < ppsr_df[ppToCheck].iloc[0] and 
+                             ppsr_df["Close"].iloc[1] >= ppsr_df[ppToCheck].iloc[1])
+            if hasPriceCross:
+                percentageDiff = round(100*(ppsr_df["Close"].iloc[0]-ppsr_df[ppToCheck].iloc[0])/ppsr_df[ppToCheck].iloc[0],1)
+                saved = self.findCurrentSavedValue(screenDict,saveDict,"MA-Signal")
+                maText = f"Cross-{'FromBelow' if crossDirectionFromBelow else 'FromAbove'}({ppToCheck}:{ppsr_df[ppToCheck].iloc[0]})"
+                saveDict["MA-Signal"] = saved[1] + maText + f"({percentageDiff}%)"
+                screenDict["MA-Signal"] = saved[0] + f"{colorText.GREEN}{maText}{colorText.END}{colorText.FAIL if abs(percentageDiff) > 1 else colorText.WARN}({percentageDiff}%){colorText.END}"
+        return hasPriceCross
+
     # Validate if the stock prices are at least rising by 2% for the last 3 sessions
     def validatePriceRisingByAtLeast2Percent(self, df, screenDict, saveDict):
         if df is None or len(df) == 0:

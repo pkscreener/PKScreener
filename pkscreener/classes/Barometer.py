@@ -29,20 +29,31 @@ import datetime
 from PIL import Image,ImageDraw,ImageFont
 try:
     from pyppeteer import launch
-except:
+except: # pragma: no cover
     pass
 from PKDevTools.classes import Archiver
 from PKDevTools.classes.log import default_logger
 from pkscreener.classes import Utility
 from pkscreener.classes.MarketStatus import MarketStatus
+from pkscreener.classes import ConfigManager
+configManager = ConfigManager.tools()
 
 QUERY_SELECTOR_TIMEOUT = 1000
 
 async def takeScreenshot(page,saveFileName=None,text=""):
-    clip_x = 240
-    clip_y = 245
-    clip_width = 1010
-    clip_height = 650
+    configManager.getConfig(ConfigManager.parser)
+    clip_x = configManager.barometerx
+    clip_y = configManager.barometery
+    clip_width = configManager.barometerwidth
+    clip_height = configManager.barometerheight
+    window_width = configManager.barometerwindowwidth
+    window_height = configManager.barometerwindowheight
+
+    countriesSVG = await page.querySelector(selector='.countries.zoomable')
+    await page.waitFor(selectorOrFunctionOrTimeout=QUERY_SELECTOR_TIMEOUT)
+    elementWidth = await page.evaluate(f'(countriesSVG) => countriesSVG.parentElement.parentElement.width.baseVal.valueInSpecifiedUnits', countriesSVG)
+    clip_x = int((window_width - elementWidth)/2)
+    clip_width = elementWidth
     folderPath = Archiver.get_user_data_dir()
     indiaElement = await page.querySelector(selector='#India')
     await page.waitFor(selectorOrFunctionOrTimeout=QUERY_SELECTOR_TIMEOUT)
@@ -79,14 +90,18 @@ async def takeScreenshot(page,saveFileName=None,text=""):
 # behaviour  of the pop-ups.
 async def getScreenshotsForGlobalMarketBarometer():
     # https://scrapeops.io/python-web-scraping-playbook/python-pyppeteer/#how-to-click-on-buttons-with-pyppeteer
-    browser = await launch({
-            "headless": False,
+    launchDict = {
+            "headless": True,
             "args": [
                 '--start-maximized',
                 '--window-size=1920,1080',
+                '--no-sandbox'
             ],
             "defaultViewport": None,
-        }); 
+        }
+    if "PUPPETEER_EXECUTABLE_PATH" in os.environ.keys():
+        launchDict["executablePath"] = os.environ["PUPPETEER_EXECUTABLE_PATH"]
+    browser = await launch(launchDict); 
     page = await browser.newPage()
     # # Must use this when headless = True above. Not needed when headless = False
     # await page._client.send('Emulation.clearDeviceMetricsOverride')
@@ -115,13 +130,16 @@ async def getScreenshotsForGlobalMarketBarometer():
 # adds the watermarks, repository details and then saves it as a
 # PNG file that can then be shared with others.
 def getGlobalMarketBarometerValuation():
+    gmbPath = None
     try:
         asyncio.get_event_loop().run_until_complete(getScreenshotsForGlobalMarketBarometer())
-    except Exception as e:
+    except (asyncio.exceptions.IncompleteReadError,asyncio.exceptions.InvalidStateError): # pragma: no cover
+        return gmbPath
+    except Exception as e: # pragma: no cover
         default_logger().debug(e, exc_info=True)
         pass
     folderPath = Archiver.get_user_data_dir()
-    gmbPath = None
+
     try:
         gapHeight = 65
         bgColor = (0,0,0)
@@ -147,7 +165,7 @@ def getGlobalMarketBarometerValuation():
         gmbPath = os.path.join(folderPath,"gmb.png")
         srcFileSize = os.stat(gmbPath).st_size if os.path.exists(gmbPath) else 0
         default_logger().debug(f"gmb.png saved at {gmbPath} with size {srcFileSize} bytes")
-    except Exception as e:
+    except Exception as e: # pragma: no cover
         default_logger().debug(e, exc_info=True)
         pass
     return gmbPath
