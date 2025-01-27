@@ -34,6 +34,8 @@ import requests
 from PKDevTools.classes.PKDateUtilities import PKDateUtilities
 from PKDevTools.classes.Committer import Committer
 from PKDevTools.classes.MarketHours import MarketHours
+from PKDevTools.classes.UserSubscriptions import PKUserSusbscriptions,PKSubscriptionModel
+from PKDevTools.classes import Archiver
 from PKNSETools.PKNSEStockDataFetcher import nseStockDataFetcher
 
 MORNING_ALERT_HOUR = 9
@@ -148,6 +150,35 @@ argParser.add_argument(
     required=required,
 )
 argParser.add_argument(
+    "--updatesubscriptions",
+    action="store_true",
+    help="Triggers subscription update",
+    required=required,
+)
+argParser.add_argument(
+    "--addsubscription",
+    action="store_true",
+    help="Triggers subscription update for a user",
+    required=required,
+)
+argParser.add_argument(
+    "--removesubscription",
+    action="store_true",
+    help="Triggers subscription update for a user",
+    required=required,
+)
+argParser.add_argument(
+    "--subscriptionvalue",
+    help="Subscription value for the user",
+    required=required,
+)
+argParser.add_argument(
+    "--userid",
+    action="store_true",
+    help="Telegram userID for a user",
+    required=required,
+)
+argParser.add_argument(
     "-t",
     "--triggerRemotely",
     help="Launch Remote trigger",
@@ -194,6 +225,10 @@ original__stdout = sys.__stdout__
 # args.skiplistlevel3 = "0"
 # args.skiplistlevel4 = "0"
 # args.branchname = "actions-data-download"
+# args.addsubscription = True
+# args.removesubscription = True
+# args.subscriptionvalue = 22000
+# args.userid = 6186237493
 
 from pkscreener.classes.MenuOptions import MenuRenderStyle, menus, PREDEFINED_SCAN_ALERT_MENU_KEYS
 
@@ -247,7 +282,10 @@ if __name__ == '__main__':
                             not args.scans and \
                             not args.backtests and \
                             not args.cleanuphistoricalscans and \
-                            not args.updateholidays
+                            not args.updateholidays and \
+                            not args.updatesubscriptions and \
+                            not args.addsubscription and \
+                            not args.removesubscription
     if args.skiplistlevel0 is None:
         args.skiplistlevel0 = ",".join(["S", "T", "E", "U", "Z", "B", "F", "H", "Y", "G", "C", "M", "D", "I", "L"])
     if args.skiplistlevel1 is None:
@@ -897,6 +935,21 @@ def triggerMiscellaneousTasks():
             if resp.status_code == 204:
                 sleep(5)
 
+def triggerSubscriptionsUpdate():
+    PKUserSusbscriptions.updateSubscriptions()
+    pathSpec = f"{os.path.join(Archiver.get_user_data_dir(),'*.pdf')}"
+    tryCommitOutcomes(options="UpdateSubscriptions",pathSpec=pathSpec,delete=True)
+
+def triggerAddSubscription():
+    PKUserSusbscriptions.updateSubscription(userID=args.userid,subscription=PKSubscriptionModel(int(args.subscriptionvalue)))
+    pathSpec = f"{os.path.join(Archiver.get_user_data_dir(),'*.pdf')}"
+    tryCommitOutcomes(options=f"AddSubscriptionFor-{args.userid}",pathSpec=pathSpec,delete=False)
+
+def triggerRemoveSubscription():
+    PKUserSusbscriptions.updateSubscription(userID=args.userid,subscription=PKSubscriptionModel.No_Subscription)
+    pathSpec = f"{os.path.join(Archiver.get_user_data_dir(),'*.pdf')}"
+    tryCommitOutcomes(options=f"RemoveSubscriptionFor-{args.userid}",pathSpec=pathSpec,delete=True)
+
 if __name__ == '__main__':
     if args.barometer:
         if args.force or (PKDateUtilities.currentDateTime() <= PKDateUtilities.currentDateTime(simulate=True,hour=MORNING_ALERT_HOUR+1,minute=MORNING_ALERT_MINUTE)):
@@ -927,6 +980,12 @@ if __name__ == '__main__':
         updateHolidays()
     if args.runintradayanalysis:
         triggerRemoteScanAlertWorkflow("C:12: --runintradayanalysis -u -1001785195297", branch="main")
+    if args.updatesubscriptions:
+        triggerSubscriptionsUpdate()
+    if args.addsubscription:
+        triggerAddSubscription()
+    if args.removesubscription:
+        triggerRemoveSubscription()
 
 
     print(f"{datetime.datetime.now(pytz.timezone('Asia/Kolkata'))}: All done!")
