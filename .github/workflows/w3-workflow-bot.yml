@@ -174,7 +174,7 @@ jobs:
         
     - name: Configure env.dev file
       run: |
-        python3 -c "import os; file = open('.env.dev', 'w'); file.write('CHAT_ID='+os.environ['CHAT_ID_DEV']+'\n'); file.write('TOKEN='+os.environ['TOKEN_DEV']+'\n'); file.write('chat_idADMIN='+os.environ['CHAT_IDADMIN_DEV']+'\n'); file.write('TDU='+os.environ['TDU']+'\n'); file.write('TAT='+os.environ['TAT']+'\n'); file.write('GITHUB_TOKEN='+os.environ['GITHUB_TOKEN']+'\n'); file.write('MCU='+os.environ['MAIL_CLIENT_USERNAME']+'\n'); file.write('MCAP='+os.environ['MAIL_CLIENT_APP_PWD']+'\n'); file.write('MCL='+os.environ['MAIL_CLIENT_LABEL']+'\n'); file.write('MS='+os.environ['MAIL_SENDER']+'\n'); file.close()"
+        python3 -c "import os; file = open('.env.dev', 'w'); file.write('CHAT_ID='+os.environ['CHAT_ID_DEV']+'\n'); file.write('TOKEN='+os.environ['TOKEN_DEV']+'\n'); file.write('chat_idADMIN='+os.environ['CHAT_IDADMIN_DEV']+'\n'); file.write('TDU='+os.environ['TDU']+'\n'); file.write('TAT='+os.environ['TAT']+'\n'); file.write('GITHUB_TOKEN='+os.environ['GITHUB_TOKEN']+'\n'); file.write('MCU='+os.environ['MCU']+'\n'); file.write('MCAP='+os.environ['MCAP']+'\n'); file.write('MCL='+os.environ['MCL']+'\n'); file.write('MS='+os.environ['MS']+'\n'); file.close()"
       shell: bash
       env:
         CHAT_ID_DEV : ${{secrets.CHAT_ID_DEV}}
