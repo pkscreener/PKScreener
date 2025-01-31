@@ -146,7 +146,8 @@ jobs:
       shell: bash
       id: releaseurlsetter
       run: |
-        pip3 install requests
+        pip3 install PKDevTools
+        pip3 install PKNSETools
         python3 .github/workflows/githubutilities.py -d
 
     - name: Download latest executable on Windows
