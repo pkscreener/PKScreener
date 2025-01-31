@@ -642,7 +642,7 @@ def triggerScanWorkflowActions(launchLocal=False, scanDaysInPast=0):
 
     # runIntradayAnalysisScans(branch="main")
 
-def runIntradayAnalysisScans(branch="gh-pages"):
+def runIntradayAnalysisScans(branch="main"):
     if not shouldRunWorkflow():
         return
     # Trigger the intraday analysis only in the 2nd half after it gets trigerred anytime after 3 PM IST
@@ -651,7 +651,7 @@ def runIntradayAnalysisScans(branch="gh-pages"):
             print(f"Waiting for {(MarketHours().closeHour+1):02}:{(MarketHours().closeMinute):02} PM IST...")
             sleep(300) # Wait for 4:15 PM IST because the download data will take time and we need the downloaded data
             # to be uploaded to actions-data-download folder on github before the intraday analysis can be run.
-        triggerRemoteScanAlertWorkflow(f"C:12: --runintradayanalysis", branch)
+        triggerRemoteScanAlertWorkflow(f"C:12: --runintradayanalysis -u -1001785195297", branch)
 
 def triggerRemoteScanAlertWorkflow(scanOptions, branch):
     cmd_options = scanOptions.replace("_",":")
@@ -979,7 +979,8 @@ if __name__ == '__main__':
     if args.updateholidays:
         updateHolidays()
     if args.runintradayanalysis:
-        triggerRemoteScanAlertWorkflow("C:12: --runintradayanalysis -u -1001785195297", branch="main")
+        runIntradayAnalysisScans(branch="main")
+        # triggerRemoteScanAlertWorkflow("C:12: --runintradayanalysis -u -1001785195297", branch="main")
     if args.updatesubscriptions:
         triggerSubscriptionsUpdate()
     if args.addsubscription:
