@@ -446,11 +446,11 @@ class StockScreener:
                                 filterPattern = CANDLESTICK_DICT[str(maLength)]
                         except: # pragma: no cover
                             pass
-                        # if "Cup and Handle" in filterPattern:
-                        #     isCandlePattern = screener.findCupAndHandlePattern(processedData,stock)
-                        # else:
-                        isCandlePattern = candlePatterns.findPattern(
-                            processedData, screeningDictionary, saveDictionary,filterPattern)
+                        if "Cup and Handle" in filterPattern:
+                            isCandlePattern,_ = screener.find_cup_and_handle(fullData,saveDictionary,screeningDictionary)
+                        else:
+                            isCandlePattern = candlePatterns.findPattern(
+                                processedData, screeningDictionary, saveDictionary,filterPattern)
                         if not isCandlePattern:
                             return returnLegibleData(f"isCandlePattern:{isCandlePattern}")
                     elif respChartPattern == 8:
