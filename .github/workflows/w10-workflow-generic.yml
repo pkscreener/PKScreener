@@ -46,7 +46,7 @@ on:
       scanOptions:
         description: 'Scan options for historical scans. cleanuphistoricalscans MUST to be left empty to run historical scans.'
         required: false
-        default: '--runintradayanalysis -u -1002097332564'
+        default: '--runintradayanalysis -u -1001785195297'
 
   # schedule:
   # - cron: '58 9 * * 0-6'
