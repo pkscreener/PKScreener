@@ -149,6 +149,9 @@ jobs:
       run: |
         pip3 install pkscreener
         python3 .github/workflows/workflowtriggers.py ${{ inputs.scanOptions }}
+      env:
+        GITHUB_TOKEN: ${{secrets.PK_GITHUB_TOKEN}}
+        RUNNER : "GitHub_Actions"
 
     - name: Delete this workflow run
       continue-on-error: true
