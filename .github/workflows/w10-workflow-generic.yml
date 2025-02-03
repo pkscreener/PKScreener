@@ -147,6 +147,7 @@ jobs:
       continue-on-error: true
       shell: bash
       run: |
+        pip3 install pkscreener
         python3 .github/workflows/workflowtriggers.py ${{ inputs.scanOptions }}
 
     - name: Delete this workflow run
