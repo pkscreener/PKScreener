@@ -238,7 +238,7 @@ jobs:
       shell: bash
       run: |
         pip3 install pkscreener
-        python3 .github/workflows/workflowtriggers.py --runintradayanalysis
+        python3 .github/workflows/workflowtriggers.py --runintradayanalysis -u -1002097332564
       env:
         GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
         RUNNER : "GitHub_Actions"

@@ -150,35 +150,6 @@ argParser.add_argument(
     required=required,
 )
 argParser.add_argument(
-    "--updatesubscriptions",
-    action="store_true",
-    help="Triggers subscription update",
-    required=required,
-)
-argParser.add_argument(
-    "--addsubscription",
-    action="store_true",
-    help="Triggers subscription update for a user",
-    required=required,
-)
-argParser.add_argument(
-    "--removesubscription",
-    action="store_true",
-    help="Triggers subscription update for a user",
-    required=required,
-)
-argParser.add_argument(
-    "--subscriptionvalue",
-    help="Subscription value for the user",
-    required=required,
-)
-argParser.add_argument(
-    "--userid",
-    action="store_true",
-    help="Telegram userID for a user",
-    required=required,
-)
-argParser.add_argument(
     "-t",
     "--triggerRemotely",
     help="Launch Remote trigger",
@@ -282,10 +253,7 @@ if __name__ == '__main__':
                             not args.scans and \
                             not args.backtests and \
                             not args.cleanuphistoricalscans and \
-                            not args.updateholidays and \
-                            not args.updatesubscriptions and \
-                            not args.addsubscription and \
-                            not args.removesubscription
+                            not args.updateholidays
     if args.skiplistlevel0 is None:
         args.skiplistlevel0 = ",".join(["S", "T", "E", "U", "Z", "B", "F", "H", "Y", "G", "C", "M", "D", "I", "L"])
     if args.skiplistlevel1 is None:
@@ -535,6 +503,46 @@ def generateBacktestReportMainPage():
     f.write(HTMLFOOTER_TEXT)
     f.close()
 
+def scanOutputDirectory(backtest=False):
+    dirName = 'actions-data-scan' if not backtest else "Backtest-Reports"
+    outputFolder = os.path.join(os.getcwd(),dirName)
+    if not os.path.isdir(outputFolder):
+        print("This must be run with actions-data-download or gh-pages branch checked-out")
+        print("Creating actions-data-scan directory now...")
+        os.makedirs(os.path.dirname(os.path.join(os.getcwd(),f"{dirName}{os.sep}")), exist_ok=True)
+    return outputFolder
+
+def getFormattedChoices(options):
+    isIntraday = args.intraday
+    selectedChoice = options.split(":")
+    choices = ""
+    for choice in selectedChoice:
+        if len(choice) > 0 and choice != 'D':
+            if len(choices) > 0:
+                choices = f"{choices}_"
+            choices = f"{choices}{choice}"
+    if choices.endswith("_"):
+        choices = choices[:-1]
+    choices = f"{choices}{'_i' if isIntraday else ''}"
+    return choices
+
+def scanChoices(options, backtest=False):
+    choices = getFormattedChoices(options).replace("B:30","X").replace("B_30","X").replace("B","X").replace("G","X")
+    return choices if not backtest else choices.replace("X","B")
+
+def tryCommitOutcomes(options,pathSpec=None,delete=False):
+    choices = scanChoices(options)
+    if delete:
+        choices =f"Cleanup-{choices}"
+    if pathSpec is None:
+        scanResultFilesPath = f"{os.path.join(scanOutputDirectory(),choices)}_*.txt"
+    else:
+        scanResultFilesPath = pathSpec
+        if delete:
+            scanResultFilesPath = f"-A {scanResultFilesPath}"
+
+    if args.branchname is not None:
+        Committer.commitTempOutcomes(addPath=scanResultFilesPath,commitMessage=f"[Temp-Commit-{choices}]",branchName=args.branchname)
 
 def run_workflow(workflow_name, postdata, option=""):
     owner = os.popen('git ls-remote --get-url origin | cut -d/ -f4').read().replace("\n","")
@@ -642,7 +650,7 @@ def triggerScanWorkflowActions(launchLocal=False, scanDaysInPast=0):
 
     # runIntradayAnalysisScans(branch="main")
 
-def runIntradayAnalysisScans(branch="main"):
+def runIntradayAnalysisScans(branch="gh-pages"):
     if not shouldRunWorkflow():
         return
     # Trigger the intraday analysis only in the 2nd half after it gets trigerred anytime after 3 PM IST
@@ -651,7 +659,7 @@ def runIntradayAnalysisScans(branch="main"):
             print(f"Waiting for {(MarketHours().closeHour+1):02}:{(MarketHours().closeMinute):02} PM IST...")
             sleep(300) # Wait for 4:15 PM IST because the download data will take time and we need the downloaded data
             # to be uploaded to actions-data-download folder on github before the intraday analysis can be run.
-        triggerRemoteScanAlertWorkflow(f"C:12: --runintradayanalysis -u -1001785195297", branch)
+        triggerRemoteScanAlertWorkflow(f"C:12: --runintradayanalysis -u {args.user if args.user is not None else '-1002097332564'}", branch) # -1001785195297
 
 def triggerRemoteScanAlertWorkflow(scanOptions, branch):
     cmd_options = scanOptions.replace("_",":")
@@ -737,34 +745,6 @@ def triggerHistoricalScanWorkflowActions(scanDaysInPast=0):
         + '}'
         )
     resp = run_workflow("w9-workflow-download-data.yml", postdata, "X_Cleanup")
-    
-    
-def tryCommitOutcomes(options,pathSpec=None,delete=False):
-    choices = scanChoices(options)
-    if delete:
-        choices =f"Cleanup-{choices}"
-    if pathSpec is None:
-        scanResultFilesPath = f"{os.path.join(scanOutputDirectory(),choices)}_*.txt"
-    else:
-        scanResultFilesPath = pathSpec
-        if delete:
-            scanResultFilesPath = f"-A {scanResultFilesPath}"
-
-    if args.branchname is not None:
-        Committer.commitTempOutcomes(addPath=scanResultFilesPath,commitMessage=f"[Temp-Commit-{choices}]",branchName=args.branchname)
-
-def scanOutputDirectory(backtest=False):
-    dirName = 'actions-data-scan' if not backtest else "Backtest-Reports"
-    outputFolder = os.path.join(os.getcwd(),dirName)
-    if not os.path.isdir(outputFolder):
-        print("This must be run with actions-data-download or gh-pages branch checked-out")
-        print("Creating actions-data-scan directory now...")
-        os.makedirs(os.path.dirname(os.path.join(os.getcwd(),f"{dirName}{os.sep}")), exist_ok=True)
-    return outputFolder
-
-def scanChoices(options, backtest=False):
-    choices = getFormattedChoices(options).replace("B:30","X").replace("B_30","X").replace("B","X").replace("G","X")
-    return choices if not backtest else choices.replace("X","B")
 
 def scanResultExists(options, nthDay=0,returnFalseIfSizeZero=True):
     choices = scanChoices(options)
@@ -894,20 +874,6 @@ def shouldRunBacktests(backtestName="",df=None):
                 pass
     return shouldRun
 
-def getFormattedChoices(options):
-    isIntraday = args.intraday
-    selectedChoice = options.split(":")
-    choices = ""
-    for choice in selectedChoice:
-        if len(choice) > 0 and choice != 'D':
-            if len(choices) > 0:
-                choices = f"{choices}_"
-            choices = f"{choices}{choice}"
-    if choices.endswith("_"):
-        choices = choices[:-1]
-    choices = f"{choices}{'_i' if isIntraday else ''}"
-    return choices
-
 def updateHolidays():
     _, raw = nse.updatedHolidays()
     if raw is None or len(raw) == 0:
@@ -934,21 +900,6 @@ def triggerMiscellaneousTasks():
             resp = triggerRemoteScanAlertWorkflow(scanOptions, branch)
             if resp.status_code == 204:
                 sleep(5)
-
-def triggerSubscriptionsUpdate():
-    PKUserSusbscriptions.updateSubscriptions()
-    pathSpec = f"{os.path.join(Archiver.get_user_data_dir(),'*.pdf')}"
-    tryCommitOutcomes(options="UpdateSubscriptions",pathSpec=pathSpec,delete=True)
-
-def triggerAddSubscription():
-    PKUserSusbscriptions.updateSubscription(userID=args.userid,subscription=PKSubscriptionModel(int(args.subscriptionvalue)))
-    pathSpec = f"{os.path.join(Archiver.get_user_data_dir(),'*.pdf')}"
-    tryCommitOutcomes(options=f"AddSubscriptionFor-{args.userid}",pathSpec=pathSpec,delete=False)
-
-def triggerRemoveSubscription():
-    PKUserSusbscriptions.updateSubscription(userID=args.userid,subscription=PKSubscriptionModel.No_Subscription)
-    pathSpec = f"{os.path.join(Archiver.get_user_data_dir(),'*.pdf')}"
-    tryCommitOutcomes(options=f"RemoveSubscriptionFor-{args.userid}",pathSpec=pathSpec,delete=True)
 
 if __name__ == '__main__':
     if args.barometer:
@@ -981,13 +932,6 @@ if __name__ == '__main__':
     if args.runintradayanalysis:
         runIntradayAnalysisScans(branch="main")
         # triggerRemoteScanAlertWorkflow("C:12: --runintradayanalysis -u -1001785195297", branch="main")
-    if args.updatesubscriptions:
-        triggerSubscriptionsUpdate()
-    if args.addsubscription:
-        triggerAddSubscription()
-    if args.removesubscription:
-        triggerRemoveSubscription()
-
 
     print(f"{datetime.datetime.now(pytz.timezone('Asia/Kolkata'))}: All done!")
     sys.exit(0)
