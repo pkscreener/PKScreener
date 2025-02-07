@@ -259,7 +259,7 @@ if __name__ == '__main__':
     if args.skiplistlevel1 is None:
         args.skiplistlevel1 = ",".join(["W,N,E,M,Z,S,0,1,2,3,4,5,6,7,8,9,10,11,13,14,15"])
     if args.skiplistlevel2 is None:
-        args.skiplistlevel2 = ",".join(["0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,50,M,Z"])
+        args.skiplistlevel2 = ",".join(["0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,50,M,Z"])
     if args.skiplistlevel3 is None:
         args.skiplistlevel3 = ",".join(["0,1,2,3,4,5,6,7,8,9,10"])
     if args.skiplistlevel4 is None:
@@ -270,7 +270,7 @@ if __name__ == '__main__':
         args.report = True
         args.skiplistlevel0 = "S,T,E,U,Z,F,H,Y,X,G,C,M,D,I,L,P" 
         args.skiplistlevel1 = "W,N,E,M,Z,S,0,2,3,4,6,7,9,10,13,14,15"
-        args.skiplistlevel2 = "0,21,22,29,42,50,M,Z"
+        args.skiplistlevel2 = "0,21,22,29,50,M,Z"
         args.skiplistlevel3 = "0"
         args.skiplistlevel4 = "0"
 
@@ -698,7 +698,7 @@ def triggerRemoteScanAlertWorkflow(scanOptions, branch):
 
 def triggerHistoricalScanWorkflowActions(scanDaysInPast=0):
     defaultS1 = "W,N,E,M,Z,S,0,2,3,4,6,7,9,10,13,15" if args.skiplistlevel1 is None else args.skiplistlevel1
-    defaultS2 = "42,0,22,29,M,Z,S,50" if args.skiplistlevel2 is None else args.skiplistlevel2
+    defaultS2 = "0,22,29,M,Z,S,50" if args.skiplistlevel2 is None else args.skiplistlevel2
     runForIndices = [12,5,8,1,11,14]
     runForOptions = [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39]
     runForIndicesStr = ",".join(str(x) for x in runForIndices)
