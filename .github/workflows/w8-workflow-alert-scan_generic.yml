@@ -198,7 +198,7 @@ jobs:
         ALERT_TRIGGER: ${{ inputs.alertTrigger || 'N' }}
       run: |
         ${{ inputs.prerequisites }}
-        pkscreenercli.exe ${{ inputs.params }} --maxdisplayresults 100
+        pkscreenercli.exe ${{ inputs.params }}
         ${{ inputs.postrun }}
 
     - name: Run Scan on Ubuntu
@@ -212,7 +212,7 @@ jobs:
         ALERT_TRIGGER: ${{ inputs.alertTrigger || 'N' }}
       run: |
         ${{ inputs.prerequisites }}
-        /home/runner/work/PKScreener/PKScreener/pkscreenercli_x64.bin ${{ inputs.params }} --maxdisplayresults 100
+        /home/runner/work/PKScreener/PKScreener/pkscreenercli_x64.bin ${{ inputs.params }}
         ${{ inputs.postrun }}
 
   # Delete_Workflow_Run:
