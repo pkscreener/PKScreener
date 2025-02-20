@@ -22,7 +22,7 @@
 #     SOFTWARE.
 
 # """
-name: 3. Production Telegram bot
+name: 3. PTB
 on:
   workflow_dispatch:
     inputs:
