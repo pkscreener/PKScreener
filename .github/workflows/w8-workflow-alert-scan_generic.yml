@@ -189,7 +189,7 @@ jobs:
   
     - name: Run Scan on Windows
       shell: cmd
-      timeout-minutes: 180
+      timeout-minutes: 390
       if: startsWith(runner.os, 'Windows')
       env:
         RUNNER : "GitHub_Actions"
@@ -203,7 +203,7 @@ jobs:
 
     - name: Run Scan on Ubuntu
       shell: bash
-      timeout-minutes: 180
+      timeout-minutes: 390
       if: startsWith(runner.os, 'Linux')
       env:
         RUNNER : "GitHub_Actions"
