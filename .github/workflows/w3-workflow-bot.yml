@@ -56,8 +56,8 @@ on:
         required: false
         type: string
         default: 'x64'
-  push:
-    branches: [ main ]
+  # push:
+  #   branches: [ main ]
     # workflow_run:
     #   workflows: ["0. New Features - Tests"]
     #   types:
