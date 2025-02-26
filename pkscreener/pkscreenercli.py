@@ -89,7 +89,6 @@ def decorator(func):
 
     return new_func
 
-
 # print = decorator(print) # current file
 def disableSysOut(input=True, disable=True):
     global printenabled,originalStdOut, original__stdout
@@ -312,7 +311,8 @@ argParser.add_argument(
     help="runs and tests all options",
     required=False,
 )
-
+from PKDevTools.classes.FunctionTimeouts import ping
+from pkscreener.classes.PKAnalytics import PKAnalyticsService
 def csv_split(s):
     return list(csv.reader([s], delimiter=' '))[0]
 
@@ -443,17 +443,21 @@ def warnAboutDependencies():
                 + colorText.END
             )
         sleep(1)
+        issueLink = "https://github.com/pkjmesra/PKScreener"
+        issueLink = f"\x1b[97m\x1b]8;;{issueLink}\x1b\\{issueLink}\x1b]8;;\x1b\\\x1b[0m"
         if Imports["pandas_ta"]:
+            taLink = "https://github.com/ta-lib/ta-lib-python"
+            taLink = f"\x1b[97m\x1b]8;;{taLink}\x1b\\{taLink}\x1b]8;;\x1b\\\x1b[0m"
             OutputControls().printOutput(
                 colorText.GREEN
-                + "  [+] Found and falling back on pandas_ta.\n  [+] For full coverage(candle patterns), you may wish to read the README file in PKScreener repo : https://github.com/pkjmesra/PKScreener \n  [+] or follow instructions from\n  [+] https://github.com/ta-lib/ta-lib-python"
+                + f"  [+] Found and falling back on pandas_ta.\n  [+] For full coverage(candle patterns), you may wish to read the README file in PKScreener repo :  {issueLink}\n  [+] or follow instructions from\n  [+] {taLink}"
                 + colorText.END
             )
             sleep(1)
         else:
             OutputControls().printOutput(
                 colorText.FAIL
-                + "  [+] Neither ta-lib nor pandas_ta was located. You need at least one of them to continue! \n  [+] Please follow instructions from README file under PKScreener repo: https://github.com/pkjmesra/PKScreener"
+                + f"  [+] Neither ta-lib nor pandas_ta was located. You need at least one of them to continue! \n  [+] Please follow instructions from README file under PKScreener repo: {issueLink}"
                 + colorText.END
             )
             OutputControls().takeUserInput("Press any key to try anyway...")
@@ -634,6 +638,15 @@ def runApplication():
                     MarketMonitor().refresh(screen_df=results,screenOptions=monitorOption_org, chosenMenu=chosenMenu[:120],dbTimestamp=f"{dbTimestamp} | CycleTime:{elapsed_time}s",telegram=args.telegram)
                     menuChoiceHierarchy = ""
                     args.pipedtitle = ""
+                # check to see if the monitor was launched before the market close hours.
+                # If so, close it.
+                if "RUNNER" in os.environ.keys() and args.triggertimestamp is not None:
+                    from datetime import timezone
+                    from PKDevTools.classes.MarketHours import MarketHours
+                    marketCloseTS = PKDateUtilities.currentDateTime(simulate=True,hour=MarketHours().closeHour,minute=MarketHours().closeMinute).replace(tzinfo=timezone.utc).timestamp()
+                    if int(args.triggertimestamp) < int(marketCloseTS) and int(PKDateUtilities.currentDateTimestamp()) >= marketCloseTS:
+                        OutputControls().printOutput("Exiting monitor now since market has closed!",enableMultipleLineOutput=True)
+                        sys.exit(0)
 
 def updateProgressStatus(args,monitorOptions=None):
     from pkscreener.classes.MenuOptions import PREDEFINED_SCAN_MENU_TEXTS,PREDEFINED_SCAN_MENU_VALUES
@@ -676,7 +689,7 @@ def generateIntradayAnalysisReports(args):
             runOptions.extend(otherMenus)
     import pandas as pd
     optionalFinalOutcome_df = pd.DataFrame()
-    import pkscreener.classes.Utility as Utility
+    from pkscreener.classes import Utility, ConsoleUtility
     # Delete any existing data from the previous run.
     configManager.deleteFileWithPattern(rootDir=Archiver.get_user_data_dir(),pattern="stock_data_*.pkl")
     analysis_index = 1
@@ -736,7 +749,7 @@ def generateIntradayAnalysisReports(args):
 
 def saveSendFinalOutcomeDataframe(optionalFinalOutcome_df):
     import pandas as pd
-    from pkscreener.classes import Utility
+    from pkscreener.classes import Utility, ConsoleUtility
     from pkscreener.globals import sendQuickScanResult,showBacktestResults
 
     if optionalFinalOutcome_df is not None and not optionalFinalOutcome_df.empty:
@@ -754,13 +767,13 @@ def saveSendFinalOutcomeDataframe(optionalFinalOutcome_df):
             pass
         if final_df is not None and not final_df.empty:
             with pd.option_context('mode.chained_assignment', None):
-                final_df = final_df[["Pattern","LTP@Alert","LTP","EoDDiff","SqrOffLTP","SqrOffDiff","DayHigh","DayHighDiff"]]
+                final_df = final_df[["Pattern","LTP@Alert","LTP","EoDDiff","DayHigh","DayHighDiff"]] # "SqrOffLTP","SqrOffDiff"
                 final_df.rename(
                         columns={
                             "Pattern": "Scan Name",
                             "LTP@Alert": "Basket Value@Alert",
                             "LTP": "Basket Value@EOD",
-                            "SqrOffLTP": "Basket Value@SqrOff",
+                            # "SqrOffLTP": "Basket Value@SqrOff",
                             "DayHigh": "Basket Value@DayHigh",
                             },
                             inplace=True,
@@ -778,7 +791,7 @@ def saveSendFinalOutcomeDataframe(optionalFinalOutcome_df):
             from PKDevTools.classes.Environment import PKEnvironment
             Channel_Id, _, _, _ = PKEnvironment().secrets
             if Channel_Id is not None and len(str(Channel_Id)) > 0:
-                sendQuickScanResult(menuChoiceHierarchy="IntradayAnalysis",
+                sendQuickScanResult(menuChoiceHierarchy="IntradayAnalysis (If you would have bought at alert time and sold at end of day or day high)",
                                         user=int(f"-{Channel_Id}"),
                                         tabulated_results=mark_down,
                                         markdown_results=mark_down,
@@ -906,6 +919,7 @@ def updateConfig(args):
             configManager.duration = "1d"
             configManager.setConfig(ConfigManager.parser,default=True, showFileCreatedText=False)
 
+@ping(interval=60,instance=PKAnalyticsService())
 def pkscreenercli():
     global originalStdOut, args
     if sys.platform.startswith("darwin"):
@@ -919,6 +933,14 @@ def pkscreenercli():
                 OutputControls().printOutput(e)
                 traceback.print_exc()
             pass
+        finally:
+            from PKDevTools.classes.PKBackupRestore import restore_backup
+            restore_backup()
+            sleep(3)
+        #     import threading
+        #     from pkscreener.globals import tryLoadDataOnBackgroundThread
+        #     ping_thread = threading.Thread(target=tryLoadDataOnBackgroundThread, daemon=True)
+        #     ping_thread.start()
     try:
         removeOldInstances()
         OutputControls(enableMultipleLineOutput=(args is None or args.monitor is None or args.runintradayanalysis),enableUserInput=(args is None or args.answerdefault is None)).printOutput("",end="\r")
@@ -997,13 +1019,13 @@ def pkscreenercli():
             del os.environ['simulation']
         # Import other dependency here because if we import them at the top
         # multiprocessing behaves in unpredictable ways
-        import pkscreener.classes.Utility as Utility
+        from pkscreener.classes import Utility, ConsoleUtility
 
         configManager.default_logger = default_logger()
         if originalStdOut is None:
             # Clear only if this is the first time it's being called from some
             # loop within workflowtriggers.
-            Utility.tools.clearScreen(userArgs=args, clearAlways=True)
+            ConsoleUtility.PKConsoleTools.clearScreen(userArgs=args, clearAlways=True)
         warnAboutDependencies()
         if args.prodbuild:
             if args.options and len(args.options.split(":")) > 0:
@@ -1028,6 +1050,14 @@ def pkscreenercli():
             configManager.setConfig(
                 ConfigManager.parser, default=True, showFileCreatedText=False
             )
+        from pkscreener.classes.PKUserRegistration import PKUserRegistration, ValidationResult
+        if args.systemlaunched and not PKUserRegistration.validateToken()[0]:
+            result = PKUserRegistration.login()
+            if result != ValidationResult.Success:
+                OutputControls().printOutput(f"\n[+] {colorText.FAIL}You MUST be a premium/paid user to use this feature!{colorText.END}\n")
+                input("Press any key to exit...")
+                sys.exit(0)
+
         if args.systemlaunched and args.options is not None:
             args.systemlaunched = args.options
             
@@ -1193,6 +1223,14 @@ def scheduleNextRun():
     cron_runs += 1
 
 if __name__ == "__main__":
+    if "RUNNER" in os.environ.keys():
+        try:
+            owner = os.popen('git ls-remote --get-url origin | cut -d/ -f4').read().replace("\n","")
+            repo = os.popen('git ls-remote --get-url origin | cut -d/ -f5').read().replace(".git","").replace("\n","")
+            if owner.lower() not in ["pkjmesra","pkscreener"]:
+                sys.exit(0)
+        except:
+            pass
     try:
         pkscreenercli()
     except KeyboardInterrupt: # pragma: no cover

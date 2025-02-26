@@ -66,13 +66,16 @@ from halo import Halo
 import pkscreener.classes.ConfigManager as ConfigManager
 import pkscreener.classes.Fetcher as Fetcher
 import pkscreener.classes.ScreeningStatistics as ScreeningStatistics
-import pkscreener.classes.Utility as Utility
+from pkscreener.classes import Utility,ConsoleUtility, ConsoleMenuUtility, ImageUtility
 from pkscreener.classes.Utility import STD_ENCODING
 from pkscreener.classes import VERSION, PortfolioXRay
 from pkscreener.classes.Backtest import backtest, backtestSummary
 from pkscreener.classes.PKSpreadsheets import PKSpreadsheets
 from PKDevTools.classes.OutputControls import OutputControls
 from PKDevTools.classes.Environment import PKEnvironment
+from pkscreener.classes.CandlePatterns import CandlePatterns
+from pkscreener.classes import AssetsManager
+from PKDevTools.classes.FunctionTimeouts import exit_after
 from pkscreener.classes.MenuOptions import (
     level0MenuDict,
     level1_X_MenuDict,
@@ -97,7 +100,8 @@ from pkscreener.classes.MenuOptions import (
     PIPED_SCANNERS,
     PREDEFINED_SCAN_MENU_KEYS,
     PREDEFINED_SCAN_MENU_TEXTS,
-    INDICES_MAP
+    INDICES_MAP,
+    CANDLESTICK_DICT
 )
 from pkscreener.classes.OtaUpdater import OTAUpdater
 from pkscreener.classes.Portfolio import PortfolioCollection
@@ -105,6 +109,9 @@ from pkscreener.classes.PKTask import PKTask
 from pkscreener.classes.PKScheduler import PKScheduler
 from pkscreener.classes.PKScanRunner import PKScanRunner
 from pkscreener.classes.PKMarketOpenCloseAnalyser import PKMarketOpenCloseAnalyser
+from pkscreener.classes.PKPremiumHandler import PKPremiumHandler
+from pkscreener.classes.AssetsManager import PKAssetsManager
+from pkscreener.classes.PKAnalytics import PKAnalyticsService
 
 if __name__ == '__main__':
     multiprocessing.freeze_support()
@@ -166,8 +173,9 @@ resultsContentsEncoded = None
 runCleanUp = False
 
 def startMarketMonitor(mp_dict,keyboardevent):
-    from PKDevTools.classes.NSEMarketStatus import NSEMarketStatus
-    NSEMarketStatus(mp_dict,keyboardevent).startMarketMonitor()
+    if not 'pytest' in sys.modules:
+        from PKDevTools.classes.NSEMarketStatus import NSEMarketStatus
+        NSEMarketStatus(mp_dict,keyboardevent).startMarketMonitor()
 
 def finishScreening(
     downloadOnly,
@@ -197,9 +205,9 @@ def getDownloadChoices(defaultAnswer=None):
     argsIntraday = userPassedArgs is not None and userPassedArgs.intraday is not None
     intradayConfig = configManager.isIntradayConfig()
     intraday = intradayConfig or argsIntraday
-    exists, cache_file = Utility.tools.afterMarketStockDataExists(intraday)
+    exists, cache_file = AssetsManager.PKAssetsManager.afterMarketStockDataExists(intraday)
     if exists:
-        shouldReplace = Utility.tools.promptFileExists(
+        shouldReplace = AssetsManager.PKAssetsManager.promptFileExists(
             cache_file=cache_file, defaultAnswer=defaultAnswer
         )
         if shouldReplace == "N":
@@ -208,6 +216,7 @@ def getDownloadChoices(defaultAnswer=None):
                 + colorText.END
                 + " already exists. Exiting as user chose not to replace it!"
             )
+            PKAnalyticsService().send_event("app_exit")
             sys.exit(0)
         else:
             pattern = f"{'intraday_' if intraday else ''}stock_data_*.pkl"
@@ -246,7 +255,7 @@ def getScannerMenuChoices(
             handleSecondaryMenuChoices(
                 menuOption, testBuild, defaultAnswer=defaultAnswer, user=user
             )
-            Utility.tools.clearScreen(forceTop=True)
+            ConsoleUtility.PKConsoleTools.clearScreen(forceTop=True)
         elif menuOption in ["X","C"]:
             indexOption, executeOption = initPostLevel0Execution(
                 menuOption=menuOption,
@@ -256,12 +265,13 @@ def getScannerMenuChoices(
             indexOption, executeOption = initPostLevel1Execution(
                 indexOption=indexOption, executeOption=executeOption
             )
-    except KeyboardInterrupt:
+    except KeyboardInterrupt: # pragma: no cover
         OutputControls().takeUserInput(
             colorText.FAIL
             + "  [+] Press <Enter> to Exit!"
             + colorText.END
         )
+        PKAnalyticsService().send_event("app_exit")
         sys.exit(0)
     except Exception as e:  # pragma: no cover
         default_logger().debug(e, exc_info=True)
@@ -294,7 +304,7 @@ def getSummaryCorrectnessOfStrategy(resultdf, summaryRequired=True):
             summarydf = df[df["Stock"] == "SUMMARY"]
             for col in summarydf.columns:
                 summarydf.loc[:, col] = summarydf.loc[:, col].apply(
-                    lambda x: Utility.tools.getFormattedBacktestSummary(
+                    lambda x: ConsoleUtility.PKConsoleTools.getFormattedBacktestSummary(
                         x, columnName=col
                     )
                 )
@@ -305,7 +315,7 @@ def getSummaryCorrectnessOfStrategy(resultdf, summaryRequired=True):
             detaildf = df[df["Stock"].isin(results["Stock"])]
             for col in detaildf.columns:
                 detaildf.loc[:, col] = detaildf.loc[:, col].apply(
-                    lambda x: Utility.tools.getFormattedBacktestSummary(
+                    lambda x: ConsoleUtility.PKConsoleTools.getFormattedBacktestSummary(
                         x, pnlStats=True, columnName=col
                     )
                 )
@@ -371,7 +381,7 @@ def getTopLevelMenuChoices(startupoptions, testBuild, downloadOnly, defaultAnswe
         )
         intraday = userPassedArgs.intraday or configManager.isIntradayConfig()
         filePrefix = "INTRADAY_" if intraday else ""
-        _, cache_file_name = Utility.tools.afterMarketStockDataExists(intraday)
+        _, cache_file_name = AssetsManager.PKAssetsManager.afterMarketStockDataExists(intraday)
         Utility.tools.set_github_output(f"{filePrefix}DOWNLOAD_CACHE_FILE_NAME",cache_file_name)
     indexOption = 0 if lastScanOutputStockCodes is not None else indexOption
     return options, menuOption, indexOption, executeOption
@@ -429,7 +439,7 @@ def handleSecondaryMenuChoices(
             OutputControls().printOutput(colorText.END, end="")
             if periodOption is None or periodOption.upper() not in ["L","S","B"]:
                 return
-            Utility.tools.clearScreen(forceTop=True)
+            ConsoleUtility.PKConsoleTools.clearScreen(forceTop=True)
             if periodOption.upper() in ["L","S"]:
                 selectedMenu = m1.find(periodOption)
                 m2.renderForMenu(selectedMenu=selectedMenu)
@@ -439,7 +449,7 @@ def handleSecondaryMenuChoices(
                 OutputControls().printOutput(colorText.END, end="")
                 if durationOption is None or durationOption.upper() not in ["1","2","3","4","5"]:
                     return
-                Utility.tools.clearScreen(forceTop=True)
+                ConsoleUtility.PKConsoleTools.clearScreen(forceTop=True)
                 if durationOption.upper() in ["1","2","3","4"]:
                     selectedMenu = m2.find(durationOption)
                     periodDurations = selectedMenu.menuText.split("(")[1].split(")")[0].split(", ")
@@ -482,14 +492,14 @@ def handleSecondaryMenuChoices(
                 OutputControls().printOutput(f"{colorText.GREEN}Launching PKScreener in quick backtest mode. If it does not launch, please try with the following:{colorText.END}\n{colorText.FAIL}{launcher} --backtestdaysago {int(backtestDaysAgo)}{requestingUser}{enableLog}{enableTelegramMode}{stockListParam}{slicewindowParam}{fnameParam}{colorText.END}\n{colorText.WARN}Press Ctrl + C to exit quick backtest mode.{colorText.END}")
                 sleep(2)
                 os.system(f"{launcher} --systemlaunched -a Y -e --backtestdaysago {int(backtestDaysAgo)}{requestingUser}{enableLog}{enableTelegramMode}{stockListParam}{slicewindowParam}{fnameParam}")
-                Utility.tools.clearScreen(clearAlways=True,forceTop=True)
+                ConsoleUtility.PKConsoleTools.clearScreen(clearAlways=True,forceTop=True)
                 return None, None
         elif userPassedArgs is not None and userPassedArgs.options is not None:
             options = userPassedArgs.options.split(":")
             selectedMenu = m0.find(options[0])
             m1.renderForMenu(selectedMenu=selectedMenu, asList=True)
             selectedMenu = m1.find(options[1])
-            m2.renderForMenu(selectedMenu=selectedMenu)
+            m2.renderForMenu(selectedMenu=selectedMenu,asList=True)
             if options[2] in ["1","2","3","4"]:
                 selectedMenu = m2.find(options[2])
                 periodDurations = selectedMenu.menuText.split("(")[1].split(")")[0].split(", ")
@@ -509,16 +519,33 @@ def handleSecondaryMenuChoices(
 def showSendConfigInfo(defaultAnswer=None, user=None):
     configData = configManager.showConfigFile(defaultAnswer=('Y' if user is not None else defaultAnswer))
     if user is not None:
-        sendMessageToTelegramChannel(message=Utility.tools.removeAllColorStyles(configData), user=user)
+        sendMessageToTelegramChannel(message=ImageUtility.PKImageTools.removeAllColorStyles(configData), user=user)
+    if defaultAnswer is None:
+        input("Press any key to continue...")
 
 def showSendHelpInfo(defaultAnswer=None, user=None):
-    helpData = Utility.tools.showDevInfo(defaultAnswer=('Y' if user is not None else defaultAnswer))
+    helpData = ConsoleUtility.PKConsoleTools.showDevInfo(defaultAnswer=('Y' if user is not None else defaultAnswer))
     if user is not None:
-        sendMessageToTelegramChannel(message=Utility.tools.removeAllColorStyles(helpData), user=user)
+        sendMessageToTelegramChannel(message=ImageUtility.PKImageTools.removeAllColorStyles(helpData), user=user)
+    if defaultAnswer is None:
+        input("Press any key to continue...")
+
+def ensureMenusLoaded(menuOption=None,indexOption=None,executeOption=None):
+    try:
+        if len(m0.menuDict.keys()) == 0:
+            m0.renderForMenu(asList=True)
+        if len(m1.menuDict.keys()) == 0:
+            m1.renderForMenu(selectedMenu=m0.find(menuOption),asList=True)
+        if len(m2.menuDict.keys()) == 0:
+            m2.renderForMenu(selectedMenu=m1.find(indexOption),asList=True)
+        if len(m3.menuDict.keys()) == 0:
+            m3.renderForMenu(selectedMenu=m2.find(executeOption),asList=True)
+    except:
+        pass
 
 def initExecution(menuOption=None):
     global selectedChoice, userPassedArgs
-    Utility.tools.clearScreen(forceTop=True)
+    ConsoleUtility.PKConsoleTools.clearScreen(forceTop=True)
     if (userPassedArgs is not None and userPassedArgs.pipedmenus is not None):
         OutputControls().printOutput(
         colorText.FAIL
@@ -526,7 +553,7 @@ def initExecution(menuOption=None):
         + f" (Piped Scan Mode) [{userPassedArgs.pipedmenus}]"
         + colorText.END
     )
-    m0.renderForMenu(selectedMenu=None)
+    m0.renderForMenu(selectedMenu=None,asList=(userPassedArgs is not None and userPassedArgs.options is not None))
     try:
         needsCalc = userPassedArgs is not None and userPassedArgs.backtestdaysago is not None
         pastDate = f"  [+] [ Running in Quick Backtest Mode for {colorText.WARN}{PKDateUtilities.nthPastTradingDateStringFromFutureDate(int(userPassedArgs.backtestdaysago) if needsCalc else 0)}{colorText.END} ]\n" if needsCalc else ""
@@ -550,14 +577,15 @@ def initExecution(menuOption=None):
                     + "  [+] Press <Enter> to Exit!"
                     + colorText.END
                 )
+                PKAnalyticsService().send_event("app_exit")
                 sys.exit(0)
             elif selectedMenu.menuKey in ["B", "C", "G", "H", "U", "T", "S", "E", "X", "Y", "M", "D", "I", "L","F"]:
-                Utility.tools.clearScreen(forceTop=True)
+                ConsoleUtility.PKConsoleTools.clearScreen(forceTop=True)
                 selectedChoice["0"] = selectedMenu.menuKey
                 return selectedMenu
             elif selectedMenu.menuKey in ["P"]:
                 return selectedMenu
-    except KeyboardInterrupt:
+    except KeyboardInterrupt: # pragma: no cover
         raise KeyboardInterrupt
     except Exception as e:  # pragma: no cover
         default_logger().debug(e, exc_info=True)
@@ -572,7 +600,7 @@ def initPostLevel0Execution(
     menuOption=None, indexOption=None, executeOption=None, skip=[], retrial=False
 ):
     global newlyListedOnly, selectedChoice, userPassedArgs
-    Utility.tools.clearScreen(forceTop=True)
+    ConsoleUtility.PKConsoleTools.clearScreen(forceTop=True)
     if menuOption is None:
         OutputControls().printOutput('You must choose an option from the previous menu! Defaulting to "X"...')
         menuOption = "X"
@@ -585,7 +613,7 @@ def initPostLevel0Execution(
     )
     if indexOption is None:
         selectedMenu = m0.find(menuOption)
-        m1.renderForMenu(selectedMenu=selectedMenu, skip=skip)
+        m1.renderForMenu(selectedMenu=selectedMenu, skip=skip,asList=(userPassedArgs is not None and userPassedArgs.options is not None))
     try:
         needsCalc = userPassedArgs is not None and userPassedArgs.backtestdaysago is not None
         pastDate = f"  [+] [ Running in Quick Backtest Mode for {colorText.WARN}{PKDateUtilities.nthPastTradingDateStringFromFutureDate(int(userPassedArgs.backtestdaysago) if needsCalc else 0)}{colorText.END} ]\n" if needsCalc else ""
@@ -594,6 +622,12 @@ def initPostLevel0Execution(
                 colorText.FAIL + f"{pastDate}  [+] Select option: "
             )
             OutputControls().printOutput(colorText.END, end="")
+        if (str(indexOption).isnumeric() and int(indexOption) > 1 and str(executeOption).isnumeric() and int(str(executeOption)) <= MAX_SUPPORTED_MENU_OPTION) or \
+            str(indexOption).upper() in ["S", "E", "W"]:
+            ensureMenusLoaded(menuOption,indexOption,executeOption)
+            if not PKPremiumHandler.hasPremium(m1.find(str(indexOption).upper())):
+                PKAnalyticsService().send_event(f"non_premium_user_{menuOption}_{indexOption}_{executeOption}")
+                return None, None
         if indexOption == "" or indexOption is None:
             indexOption = int(configManager.defaultIndex)
         # elif indexOption == 'W' or indexOption == 'w' or indexOption == 'N' or indexOption == 'n' or indexOption == 'E' or indexOption == 'e':
@@ -614,7 +648,7 @@ def initPostLevel0Execution(
             from pkscreener.classes.MarketStatus import MarketStatus
             MarketStatus().exchange = "^IXIC"
         selectedChoice["1"] = str(indexOption)
-    except KeyboardInterrupt:
+    except KeyboardInterrupt: # pragma: no cover
         raise KeyboardInterrupt
     except Exception as e:  # pragma: no cover
         default_logger().debug(e, exc_info=True)
@@ -625,7 +659,7 @@ def initPostLevel0Execution(
         )
         if not retrial:
             sleep(2)
-            Utility.tools.clearScreen(forceTop=True)
+            ConsoleUtility.PKConsoleTools.clearScreen(forceTop=True)
             return initPostLevel0Execution(retrial=True)
     return indexOption, executeOption
 
@@ -635,7 +669,7 @@ def initPostLevel1Execution(indexOption, executeOption=None, skip=[], retrial=Fa
     listStockCodes = [] if listStockCodes is None or len(listStockCodes) == 0 else listStockCodes
     if executeOption is None:
         if indexOption is not None and indexOption != "W":
-            Utility.tools.clearScreen(forceTop=True)
+            ConsoleUtility.PKConsoleTools.clearScreen(forceTop=True)
             OutputControls().printOutput(
                 colorText.FAIL
                 + "  [+] You chose: "
@@ -646,9 +680,14 @@ def initPostLevel1Execution(indexOption, executeOption=None, skip=[], retrial=Fa
                 + colorText.END
             )
             selectedMenu = m1.find(indexOption)
-            m2.renderForMenu(selectedMenu=selectedMenu, skip=skip)
-            stockIndexCode = "18"
+            m2.renderForMenu(selectedMenu=selectedMenu, skip=skip,asList=(userPassedArgs is not None and userPassedArgs.options is not None))
+            stockIndexCode = str(len(level1_index_options_sectoral.keys()))
             if indexOption == "S":
+                ensureMenusLoaded("X",indexOption,executeOption)
+                if not PKPremiumHandler.hasPremium(selectedMenu):
+                    PKAnalyticsService().send_event(f"non_premium_user_X_{indexOption}_{executeOption}")
+                    PKAnalyticsService().send_event("app_exit")
+                    sys.exit(0)
                 indexKeys = level1_index_options_sectoral.keys()
                 stockIndexCode = input(
                     colorText.FAIL + "  [+] Select option: "
@@ -662,8 +701,8 @@ def initPostLevel1Execution(indexOption, executeOption=None, skip=[], retrial=Fa
                 else:
                     listStockCodes = [level1_index_options_sectoral[str(stockIndexCode)].split("(")[1].split(")")[0]]
                 selectedMenu.menuKey = "0" # Reset because user must have selected specific index menu with single stock
-                Utility.tools.clearScreen(forceTop=True)
-                m2.renderForMenu(selectedMenu=selectedMenu, skip=skip)
+                ConsoleUtility.PKConsoleTools.clearScreen(forceTop=True)
+                m2.renderForMenu(selectedMenu=selectedMenu, skip=skip,asList=(userPassedArgs is not None and userPassedArgs.options is not None))
     try:
         needsCalc = userPassedArgs is not None and userPassedArgs.backtestdaysago is not None
         pastDate = f"  [+] [ Running in Quick Backtest Mode for {colorText.WARN}{PKDateUtilities.nthPastTradingDateStringFromFutureDate(int(userPassedArgs.backtestdaysago) if needsCalc else 0)}{colorText.END} ]\n" if needsCalc else ""
@@ -673,18 +712,22 @@ def initPostLevel1Execution(indexOption, executeOption=None, skip=[], retrial=Fa
                     colorText.FAIL + f"{pastDate}  [+] Select option: "
                 ) or "9"
                 OutputControls().printOutput(colorText.END, end="")
+            ensureMenusLoaded("X",indexOption,executeOption)
+            if not PKPremiumHandler.hasPremium(m2.find(str(executeOption))):
+                PKAnalyticsService().send_event(f"non_premium_user_X_{indexOption}_{executeOption}")
+                return None, None
             if executeOption == "":
                 executeOption = 1
             if not str(executeOption).isnumeric():
                 executeOption = executeOption.upper()
             else:
                 executeOption = int(executeOption)
-                if executeOption < 0 or executeOption > 44:
+                if executeOption < 0 or executeOption > MAX_MENU_OPTION: # or (executeOption > MAX_SUPPORTED_MENU_OPTION and executeOption < MAX_MENU_OPTION):
                     raise ValueError
         else:
             executeOption = 0
         selectedChoice["2"] = str(executeOption)
-    except KeyboardInterrupt:
+    except KeyboardInterrupt: # pragma: no cover
         raise KeyboardInterrupt
     except Exception as e:  # pragma: no cover
         default_logger().debug(e, exc_info=True)
@@ -695,7 +738,7 @@ def initPostLevel1Execution(indexOption, executeOption=None, skip=[], retrial=Fa
         )
         if not retrial:
             sleep(2)
-            Utility.tools.clearScreen(forceTop=True)
+            ConsoleUtility.PKConsoleTools.clearScreen(forceTop=True)
             return initPostLevel1Execution(indexOption, executeOption, retrial=True)
     return indexOption, executeOption
 
@@ -742,7 +785,7 @@ def labelDataForPrinting(screenResults, saveResults, configManager, volumeRatio,
             sortKey = ["ATR"] if "ATR" in screenResults.columns else ["Volume"]
             ascending = [False]
         elif executeOption == 31: # DEEL Momentum
-            sortKey = ["Volume"]
+            sortKey = ["%Chng"]
             ascending = [False]
         try:
             try:
@@ -784,7 +827,7 @@ def labelDataForPrinting(screenResults, saveResults, configManager, volumeRatio,
         screenResults['Volume'] = screenResults['Volume'].astype(str)
         saveResults['Volume'] = saveResults['Volume'].astype(str)
         screenResults.loc[:, "Volume"] = screenResults.loc[:, "Volume"].apply(
-            lambda x: Utility.tools.formatRatio(float(Utility.tools.removeAllColorStyles(x)), volumeRatio) if len(str(x).strip()) > 0 else ''
+            lambda x: Utility.tools.formatRatio(float(ImageUtility.PKImageTools.removeAllColorStyles(x)), volumeRatio) if len(str(x).strip()) > 0 else ''
         )
         saveResults.loc[:, "Volume"] = saveResults.loc[:, "Volume"].apply(
             lambda x: str(x) + "x"
@@ -885,7 +928,7 @@ def main(userArgs=None,optionalFinalOutcome_df=None):
         startMarketMonitor(mkt_monitor_dict,keyboardInterruptEvent)
         
     keyboardInterruptEventFired = False
-    if stockDictPrimary is None:
+    if stockDictPrimary is None or isinstance(stockDictPrimary,dict):
         stockDictPrimary = mp_manager.dict()
         stockDictSecondary = mp_manager.dict()
         loadCount = 0
@@ -910,33 +953,43 @@ def main(userArgs=None,optionalFinalOutcome_df=None):
     # Print Level 1 menu options
     selectedMenu = initExecution(menuOption=menuOption)
     menuOption = selectedMenu.menuKey
+    if menuOption in ["F", "M", "S", "B", "G", "C", "P", "D"] or selectedMenu.isPremium:
+        ensureMenusLoaded(menuOption,indexOption,executeOption)
+        if not PKPremiumHandler.hasPremium(selectedMenu):
+            PKAnalyticsService().send_event(f"non_premium_user_{menuOption}_{indexOption}_{executeOption}")
+            PKAnalyticsService().send_event("app_exit")
+            sys.exit(0)
     if menuOption in ["M", "D", "I", "L", "F"]:
         launcher = f'"{sys.argv[0]}"' if " " in sys.argv[0] else sys.argv[0]
         launcher = f"python3.12 {launcher}" if (launcher.endswith(".py\"") or launcher.endswith(".py")) else launcher
         if menuOption in ["M"]:
             OutputControls().printOutput(f"{colorText.GREEN}Launching PKScreener in monitoring mode. If it does not launch, please try with the following:{colorText.END}\n{colorText.FAIL}{launcher} --systemlaunched -a Y -m 'X'{colorText.END}\n{colorText.WARN}Press Ctrl + C to exit monitoring mode.{colorText.END}")
+            PKAnalyticsService().send_event(f"monitor_{menuOption}")
             sleep(2)
             os.system(f"{launcher} --systemlaunched -a Y -m 'X'")
         elif menuOption in ["D"]:
             selectedMenu = m0.find(menuOption)
-            Utility.tools.clearScreen(forceTop=True)
+            ConsoleUtility.PKConsoleTools.clearScreen(forceTop=True)
             m1.renderForMenu(selectedMenu)
             selDownloadOption = input(colorText.FAIL + "  [+] Select option: ") or "D"
             OutputControls().printOutput(colorText.END, end="")
             if selDownloadOption.upper() == "D":
                 OutputControls().printOutput(f"{colorText.GREEN}Launching PKScreener to Download daily OHLC data. If it does not launch, please try with the following:{colorText.END}\n{colorText.FAIL}{launcher} -a Y -e -d{colorText.END}\n{colorText.WARN}Press Ctrl + C to exit at any time.{colorText.END}")
+                PKAnalyticsService().send_event(f"{menuOption}_{selDownloadOption.upper()}")
                 sleep(2)
                 os.system(f"{launcher} -a Y -e -d")
                 return None, None
             elif selDownloadOption.upper() == "I":
                 OutputControls().printOutput(f"{colorText.GREEN}Launching PKScreener to Download intraday OHLC data. If it does not launch, please try with the following:{colorText.END}\n{colorText.FAIL}{launcher} -a Y -e -d -i 1m{colorText.END}\n{colorText.WARN}Press Ctrl + C to exit at any time.{colorText.END}")
+                PKAnalyticsService().send_event(f"{menuOption}_{selDownloadOption.upper()}")
                 sleep(2)
                 os.system(f"{launcher} -a Y -e -d -i 1m")
                 return None, None
             elif selDownloadOption.upper() == "N":
                 selectedMenu = m1.find(selDownloadOption.upper())
-                Utility.tools.clearScreen(forceTop=True)
+                ConsoleUtility.PKConsoleTools.clearScreen(forceTop=True)
                 m2.renderForMenu(selectedMenu)
+                PKAnalyticsService().send_event(f"{menuOption}_{selDownloadOption.upper()}")
                 selDownloadOption = input(colorText.FAIL + "  [+] Select option: ") or "12"
                 OutputControls().printOutput(colorText.END, end="")
                 filePrefix = "Download"
@@ -948,6 +1001,7 @@ def main(userArgs=None,optionalFinalOutcome_df=None):
                     + ".csv"
                 )
                 filePath = os.path.join(Archiver.get_user_indices_dir(), filename)
+                PKAnalyticsService().send_event(f"{menuOption}_{selDownloadOption.upper()}")
                 if selDownloadOption.upper() == "15":
                     nasdaq = PKNasdaqIndexFetcher(configManager)
                     _,nasdaq_df = nasdaq.fetchNasdaqIndexConstituents()
@@ -960,6 +1014,7 @@ def main(userArgs=None,optionalFinalOutcome_df=None):
                     input(f"{colorText.GREEN}Press any key to continue...{colorText.END}")
                     return None, None
                 elif selDownloadOption.upper() == "M":
+                    PKAnalyticsService().send_event(f"{menuOption}_{selDownloadOption.upper()}")
                     return None, None
                 else:
                     fileContents = fetcher.fetchFileFromHostServer(filePath=filePath,tickerOption=int(selDownloadOption),fileContents="")
@@ -972,7 +1027,7 @@ def main(userArgs=None,optionalFinalOutcome_df=None):
                 return None, None
             elif selDownloadOption.upper() == "S":
                 selectedMenu = m1.find(selDownloadOption.upper())
-                Utility.tools.clearScreen(forceTop=True)
+                ConsoleUtility.PKConsoleTools.clearScreen(forceTop=True)
                 m2.renderForMenu(selectedMenu,skip=["15"])
                 selDownloadOption = input(colorText.FAIL + "  [+] Select option: ") or "12"
                 OutputControls().printOutput(colorText.END, end="")
@@ -984,12 +1039,14 @@ def main(userArgs=None,optionalFinalOutcome_df=None):
                     + PKDateUtilities.currentDateTime().strftime("%d-%m-%y_%H.%M.%S")
                     + ".csv"
                 )
+                PKAnalyticsService().send_event(f"{menuOption}_{selDownloadOption.upper()}")
                 filePath = os.path.join(Archiver.get_user_reports_dir(), filename)
                 if selDownloadOption.upper() == "M":
                     return None, None
                 else:
                     indexOption = int(selDownloadOption)
                     if indexOption > 0 and indexOption <= 14:
+                        PKAnalyticsService().send_event(f"{menuOption}_{selDownloadOption.upper()}")
                         shouldSuppress = not OutputControls().enableMultipleLineOutput
                         with SuppressOutput(suppress_stderr=shouldSuppress, suppress_stdout=shouldSuppress):
                             listStockCodes = fetcher.fetchStockCodes(indexOption, stockCode=None)
@@ -1005,12 +1062,15 @@ def main(userArgs=None,optionalFinalOutcome_df=None):
                             OutputControls().printOutput(f"{colorText.FAIL}We encountered an error. Please try again!{colorText.END}")
                         input(f"{colorText.GREEN}Press any key to continue...{colorText.END}")
             elif selDownloadOption.upper() == "M":
+                PKAnalyticsService().send_event(f"{menuOption}_{selDownloadOption.upper()}")
                 return None, None
         elif menuOption in ["L"]:
+            PKAnalyticsService().send_event(f"{menuOption}")
             OutputControls().printOutput(f"{colorText.GREEN}Launching PKScreener to collect logs. If it does not launch, please try with the following:{colorText.END}\n{colorText.FAIL}{launcher} -a Y -l{colorText.END}\n{colorText.WARN}Press Ctrl + C to exit at any time.{colorText.END}")
             sleep(2)
             os.system(f"{launcher} -a Y -l")
         if menuOption in ["F"]:
+            PKAnalyticsService().send_event(f"{menuOption}")
             indexOption = 0
             selectedChoice["0"] = "F"
             selectedChoice["1"] = "0"
@@ -1023,23 +1083,23 @@ def main(userArgs=None,optionalFinalOutcome_df=None):
             if listStockCodes is None or len(listStockCodes) == 0:
                 with SuppressOutput(suppress_stderr=shouldSuppress, suppress_stdout=shouldSuppress):
                     listStockCodes = fetcher.fetchStockCodes(tickerOption=0, stockCode=None)
-            Utility.tools.clearScreen(clearAlways=True,forceTop=True)
+            ConsoleUtility.PKConsoleTools.clearScreen(clearAlways=True,forceTop=True)
         else:
-            Utility.tools.clearScreen(clearAlways=True,forceTop=True)
+            ConsoleUtility.PKConsoleTools.clearScreen(clearAlways=True,forceTop=True)
             return None, None
     if menuOption in ["P"]:
         predefinedOption = None
         selPredefinedOption = None
         selIndexOption = None
         if len(options) >= 3:
-            predefinedOption = str(options[1])
-            selPredefinedOption = str(options[2])
+            predefinedOption = str(options[1]) if str(options[1]).isnumeric() else '1'
+            selPredefinedOption = str(options[2]) if str(options[2]).isnumeric() else '1'
             if len(options) >= 4:
-                selIndexOption = str(options[3])
+                selIndexOption = str(options[3]) if str(options[3]).isnumeric() else '12'
         selectedChoice["0"] = "P"
         updateMenuChoiceHierarchy()
         selectedMenu = m0.find(menuOption)
-        m1.renderForMenu(selectedMenu)
+        m1.renderForMenu(selectedMenu,asList=(userPassedArgs is not None and userPassedArgs.options is not None))
         needsCalc = userPassedArgs is not None and userPassedArgs.backtestdaysago is not None
         pastDate = f"  [+] [ Running in Quick Backtest Mode for {colorText.WARN}{PKDateUtilities.nthPastTradingDateStringFromFutureDate(int(userPassedArgs.backtestdaysago) if needsCalc else 0)}{colorText.END} ]\n" if needsCalc else ""
         if predefinedOption is None:
@@ -1052,7 +1112,7 @@ def main(userArgs=None,optionalFinalOutcome_df=None):
 
         if predefinedOption in ["1", "4"]:
             selectedMenu = m1.find(predefinedOption)
-            m2.renderForMenu(selectedMenu=selectedMenu)
+            m2.renderForMenu(selectedMenu=selectedMenu,asList=(userPassedArgs is not None and userPassedArgs.options is not None))
             if selPredefinedOption is None:
                 selPredefinedOption = input(colorText.FAIL + f"{pastDate}  [+] Select option: ") or "1"
             OutputControls().printOutput(colorText.END, end="")
@@ -1064,7 +1124,7 @@ def main(userArgs=None,optionalFinalOutcome_df=None):
                     
                 elif predefinedOption == "1": # Predefined
                     if selIndexOption is None and (userPassedArgs is None or userPassedArgs.answerdefault is None):
-                        m1.renderForMenu(m0.find(key="X"),skip=["W","N","E","S","Z"])
+                        m1.renderForMenu(m0.find(key="X"),skip=["W","N","E","S","Z"],asList=(userPassedArgs is not None and userPassedArgs.options is not None))
                         selIndexOption = input(colorText.FAIL + f"{pastDate}  [+] Select option: ") or str(configManager.defaultIndex)
                         if str(selIndexOption).upper() in "M":
                             return None, None
@@ -1107,6 +1167,9 @@ def main(userArgs=None,optionalFinalOutcome_df=None):
                 stockListParam = f" --stocklist {userPassedArgs.stocklist}" if userPassedArgs.stocklist else ""
                 slicewindowParam = f" --slicewindow {userPassedArgs.slicewindow}" if userPassedArgs.slicewindow else ""
                 fnameParam = f" --fname {resultsContentsEncoded}" if resultsContentsEncoded else ""
+                if userPassedArgs.monitor and "-e -o" in scannerOptionQuoted:
+                    # We've been launched in monitor mode. Get rid of -e -o
+                    scannerOptionQuoted = scannerOptionQuoted.replace("-e -o","-m")
                 OutputControls().printOutput(f"{colorText.GREEN}Launching PKScreener with piped scanners. If it does not launch, please try with the following:{colorText.END}\n{colorText.FAIL}{launcher} {scannerOptionQuoted}{requestingUser}{enableLog}{backtestParam}{enableTelegramMode}{stockListParam}{slicewindowParam}{fnameParam}{colorText.END}")
                 sleep(2)
                 os.system(f"{launcher} {scannerOptionQuoted}{requestingUser}{enableLog}{backtestParam}{enableTelegramMode}{stockListParam}{slicewindowParam}{fnameParam}")
@@ -1117,7 +1180,7 @@ def main(userArgs=None,optionalFinalOutcome_df=None):
                     )
                 if defaultAnswer is None:
                     OutputControls().takeUserInput("Press <Enter> to continue...")
-                Utility.tools.clearScreen(clearAlways=True,forceTop=True)
+                ConsoleUtility.PKConsoleTools.clearScreen(clearAlways=True,forceTop=True)
                 return None, None
             else:
                 return None, None
@@ -1143,9 +1206,11 @@ def main(userArgs=None,optionalFinalOutcome_df=None):
             defaultAnswer=defaultAnswer,
             user=user,
         )
-
+        if indexOption is None:
+            return None, None
+        
         if menuOption in ["H", "U", "T", "E", "Y"]:
-            Utility.tools.clearScreen(forceTop=True)
+            ConsoleUtility.PKConsoleTools.clearScreen(forceTop=True)
             return None, None
     elif menuOption in ["B", "G"]:
         # Backtests
@@ -1193,7 +1258,7 @@ def main(userArgs=None,optionalFinalOutcome_df=None):
                 pass
         userOption = userOption.upper()
         if userOption == "M":
-            Utility.tools.clearScreen(forceTop=True)
+            ConsoleUtility.PKConsoleTools.clearScreen(forceTop=True)
             # Go back to the caller. It will show the console menu again.
             return None, None
         elif userOption == "Z":
@@ -1253,7 +1318,7 @@ def main(userArgs=None,optionalFinalOutcome_df=None):
 
     handleMenu_XBG(menuOption, indexOption, executeOption)
     if str(indexOption).upper() == "M" or str(executeOption).upper() == "M":
-        Utility.tools.clearScreen(forceTop=True)
+        ConsoleUtility.PKConsoleTools.clearScreen(forceTop=True)
         # Go back to the caller. It will show the console menu again.
         return None, None
     listStockCodes = handleRequestForSpecificStocks(options, indexOption)
@@ -1277,7 +1342,7 @@ def main(userArgs=None,optionalFinalOutcome_df=None):
                 minRSI = 60
                 maxRSI = 75
         else:
-            minRSI, maxRSI = Utility.tools.promptRSIValues()
+            minRSI, maxRSI = ConsoleMenuUtility.PKConsoleMenuTools.promptRSIValues()
         if not minRSI and not maxRSI:
             OutputControls().printOutput(
                 colorText.FAIL
@@ -1300,11 +1365,11 @@ def main(userArgs=None,optionalFinalOutcome_df=None):
                     # bot mode
                     maLength = 50 if reversalOption == 4 else (3 if reversalOption == 7 else 7)
                 else:
-                    reversalOption, maLength = Utility.tools.promptReversalScreening(
+                    reversalOption, maLength = ConsoleMenuUtility.PKConsoleMenuTools.promptReversalScreening(
                         selectedMenu
                     )
         else:
-            reversalOption, maLength = Utility.tools.promptReversalScreening(
+            reversalOption, maLength = ConsoleMenuUtility.PKConsoleMenuTools.promptReversalScreening(
                 selectedMenu
             )
         if reversalOption is None or reversalOption == 0 or maLength == 0:
@@ -1339,9 +1404,9 @@ def main(userArgs=None,optionalFinalOutcome_df=None):
                     (
                         respChartPattern,
                         insideBarToLookback,
-                    ) = Utility.tools.promptChartPatterns(selectedMenu)
+                    ) = ConsoleMenuUtility.PKConsoleMenuTools.promptChartPatterns(selectedMenu)
                 if maLength == 0:
-                    maLength = Utility.tools.promptChartPatternSubMenu(selectedMenu, respChartPattern)
+                    maLength = ConsoleMenuUtility.PKConsoleMenuTools.promptChartPatternSubMenu(selectedMenu, respChartPattern)
                 if respChartPattern == 3 and maLength == 4: # Super conf.
                     if insideBarToLookback >= 1:
                         insideBarToLookback = 0.008 # Set it to default .8%
@@ -1357,14 +1422,14 @@ def main(userArgs=None,optionalFinalOutcome_df=None):
                         # bot mode
                         maLength = 4 if respChartPattern == 6 else 6 # Bollinger Bands Squeeze- Any/All or MA-Support
                     else:
-                        maLength = Utility.tools.promptChartPatternSubMenu(selectedMenu,respChartPattern)
+                        maLength = ConsoleMenuUtility.PKConsoleMenuTools.promptChartPatternSubMenu(selectedMenu,respChartPattern)
             else:
                 (
                     respChartPattern,
                     insideBarToLookback,
-                ) = Utility.tools.promptChartPatterns(selectedMenu)
+                ) = ConsoleMenuUtility.PKConsoleMenuTools.promptChartPatterns(selectedMenu)
         else:
-            respChartPattern, insideBarToLookback = Utility.tools.promptChartPatterns(
+            respChartPattern, insideBarToLookback = ConsoleMenuUtility.PKConsoleMenuTools.promptChartPatterns(
                 selectedMenu
             )
             if respChartPattern in [4] and not userPassedArgs.systemlaunched:
@@ -1398,7 +1463,7 @@ def main(userArgs=None,optionalFinalOutcome_df=None):
                 configManager.setConfig(ConfigManager.parser,default=True,showFileCreatedText=False)
             if maLength == 0:
                 if respChartPattern in [3, 6, 9]:
-                    maLength = Utility.tools.promptChartPatternSubMenu(selectedMenu, respChartPattern)
+                    maLength = ConsoleMenuUtility.PKConsoleMenuTools.promptChartPatternSubMenu(selectedMenu, respChartPattern)
                 elif respChartPattern in [1, 2]:
                     maLength = 1
             if maLength == 4 and respChartPattern == 3: # Super-confluence setup
@@ -1431,10 +1496,14 @@ def main(userArgs=None,optionalFinalOutcome_df=None):
             if userPassedArgs is None or userPassedArgs.answerdefault is None:
                 m0.renderCandleStickPatterns()
                 filterOption = input(colorText.FAIL + "  [+] Select option: ") or "0"
-                if str(filterOption).upper() not in ["0","M"]:
+                cupnHandleIndex = str(CandlePatterns.reversalPatternsBullish.index("Cup and Handle") + 1)
+                if filterOption == cupnHandleIndex:
+                    maLength = str(input("[+] Default is to find dynamically using volatility. Press enter to use default.\n[+] Enter number of candles to consider for left cup side formation:")) or "0"
+                if str(filterOption).upper() not in ["0","M",cupnHandleIndex]:
                     maLength = str(filterOption)
                 elif str(filterOption).upper() in ["M"]:
                     return None, None
+                selectedChoice["4"] = filterOption
 
     if executeOption == 8:
         if len(options) >= 5:
@@ -1446,7 +1515,7 @@ def main(userArgs=None,optionalFinalOutcome_df=None):
                 minRSI = -150
                 maxRSI = 250
         else:
-            minRSI, maxRSI = Utility.tools.promptCCIValues()
+            minRSI, maxRSI = ConsoleMenuUtility.PKConsoleMenuTools.promptCCIValues()
         if not minRSI and not maxRSI:
             OutputControls().printOutput(
                 colorText.FAIL
@@ -1462,7 +1531,7 @@ def main(userArgs=None,optionalFinalOutcome_df=None):
             elif str(options[3]).upper() == "D":
                 volumeRatio = configManager.volumeRatio
         else:
-            volumeRatio = Utility.tools.promptVolumeMultiplier()
+            volumeRatio = ConsoleMenuUtility.PKConsoleMenuTools.promptVolumeMultiplier()
         if volumeRatio <= 0:
             OutputControls().printOutput(
                 colorText.FAIL
@@ -1485,7 +1554,7 @@ def main(userArgs=None,optionalFinalOutcome_df=None):
             if popOption >= 0 and popOption <= 9:
                 pass
         else:
-            popOption = Utility.tools.promptSubMenuOptions(selectedMenu)
+            popOption = ConsoleMenuUtility.PKConsoleMenuTools.promptSubMenuOptions(selectedMenu)
         if popOption is None or popOption == 0:
             return None, None
         else:
@@ -1520,7 +1589,7 @@ def main(userArgs=None,optionalFinalOutcome_df=None):
             if popOption >= 0 and popOption <= 3:
                 pass
         else:
-            popOption = Utility.tools.promptSubMenuOptions(selectedMenu)
+            popOption = ConsoleMenuUtility.PKConsoleMenuTools.promptSubMenuOptions(selectedMenu)
         if popOption is None or popOption == 0:
             return None, None
         else:
@@ -1577,7 +1646,7 @@ def main(userArgs=None,optionalFinalOutcome_df=None):
         elif len(options) >= 3:
             maLength = 1 # By default buy option
         else:
-            maLength = Utility.tools.promptSubMenuOptions(selectedMenu)
+            maLength = ConsoleMenuUtility.PKConsoleMenuTools.promptSubMenuOptions(selectedMenu)
         if maLength == 0:
             return None, None
         else:
@@ -1585,7 +1654,7 @@ def main(userArgs=None,optionalFinalOutcome_df=None):
 
     if executeOption == 30:
         if userPassedArgs.options is None:
-            Utility.tools.clearScreen(forceTop=True)
+            ConsoleUtility.PKConsoleTools.clearScreen(forceTop=True)
             atrSensitivity = input(colorText.WARN + f"Enter the ATR Trailing Stop Sensitivity (Multiplier) value ({colorText.GREEN}Optimal:1{colorText.END}, Current={configManager.atrTrailingStopSensitivity}):") or configManager.atrTrailingStopSensitivity
             configManager.atrTrailingStopSensitivity = atrSensitivity
             atrPeriod = input(colorText.WARN + f"Enter the ATR Period value ({colorText.GREEN}Optimal:10{colorText.END}, Current={configManager.atrTrailingStopPeriod}):") or configManager.atrTrailingStopPeriod
@@ -1596,7 +1665,12 @@ def main(userArgs=None,optionalFinalOutcome_df=None):
         # Ensure we have the template JSONs from vectorBt
         screener.shouldLog = userPassedArgs.log
         screener.computeBuySellSignals(None)
-
+    if executeOption == 31: # DEEL Momentum
+        maLength = 0
+        if userPassedArgs.options is None:
+            beStrict = input(colorText.WARN + f"Strictly show only high momentum stocks and ignore SMA enforcement? ({colorText.GREEN}Optimal:N{colorText.END}, Default=Y). Choose Y or N:") or "N"
+            if beStrict.lower().startswith("y"):
+                maLength = 1
     if executeOption == 33:
         selectedMenu = m2.find(str(executeOption))
         if len(options) >= 4:
@@ -1609,7 +1683,7 @@ def main(userArgs=None,optionalFinalOutcome_df=None):
         elif len(options) >= 3:
             maLength = 2 # By default Bullish PDO/PDC
         else:
-            maLength = Utility.tools.promptSubMenuOptions(selectedMenu, defaultOption="2")
+            maLength = ConsoleMenuUtility.PKConsoleMenuTools.promptSubMenuOptions(selectedMenu, defaultOption="2")
         if maLength == 0:
             return None, None
         else:
@@ -1622,9 +1696,9 @@ def main(userArgs=None,optionalFinalOutcome_df=None):
             configManager.anchoredAVWAPPercentage = input(colorText.WARN + f"Enter the anchored-VWAP percentage gap from close price ({colorText.GREEN}Optimal:1{colorText.END}, Current={configManager.anchoredAVWAPPercentage}):") or configManager.anchoredAVWAPPercentage
             configManager.setConfig(ConfigManager.parser,default=True,showFileCreatedText=False)
     if executeOption == 40:
-        Utility.tools.clearScreen(forceTop=True)
+        ConsoleUtility.PKConsoleTools.clearScreen(forceTop=True)
         selectedMenu = m2.find(str(executeOption))
-        m3.renderForMenu(selectedMenu=selectedMenu)
+        m3.renderForMenu(selectedMenu=selectedMenu,asList=(userPassedArgs is not None and userPassedArgs.options is not None))
         if userPassedArgs.options is not None:
             options = userPassedArgs.options.split(":")
         if len(options) >=4:
@@ -1637,8 +1711,8 @@ def main(userArgs=None,optionalFinalOutcome_df=None):
         selectedChoice["3"] = str(smaEMA)
         respChartPattern = (smaEMA == "2")
         selectedMenu = m3.find(str(smaEMA))
-        Utility.tools.clearScreen(forceTop=True)
-        m4.renderForMenu(selectedMenu=selectedMenu)
+        ConsoleUtility.PKConsoleTools.clearScreen(forceTop=True)
+        m4.renderForMenu(selectedMenu=selectedMenu,asList=(userPassedArgs is not None and userPassedArgs.options is not None))
         if len(options) >=5:
             smaDirection = options[4]
             smaDirection = "2" if smaDirection == "D" else smaDirection
@@ -1648,7 +1722,7 @@ def main(userArgs=None,optionalFinalOutcome_df=None):
             return None, None
         selectedChoice["4"] = str(smaDirection)
         reversalOption = (smaDirection == "2")
-        Utility.tools.clearScreen(forceTop=True)
+        ConsoleUtility.PKConsoleTools.clearScreen(forceTop=True)
         if len(options) >= 6:
             smas = options[5]
             smas = "200" if smas == "D" else smas
@@ -1657,9 +1731,9 @@ def main(userArgs=None,optionalFinalOutcome_df=None):
         insideBarToLookback = smas.split(",")
         selectedChoice["5"] = str(smas)
     if executeOption == 41:
-        Utility.tools.clearScreen(forceTop=True)
+        ConsoleUtility.PKConsoleTools.clearScreen(forceTop=True)
         selectedMenu = m2.find(str(executeOption))
-        m3.renderForMenu(selectedMenu=selectedMenu)
+        m3.renderForMenu(selectedMenu=selectedMenu,asList=(userPassedArgs is not None and userPassedArgs.options is not None))
         if userPassedArgs.options is not None:
             options = userPassedArgs.options.split(":")
         if len(options) >=4:
@@ -1672,8 +1746,8 @@ def main(userArgs=None,optionalFinalOutcome_df=None):
         selectedChoice["3"] = str(pivotPoint)
         respChartPattern = pivotPoint
         selectedMenu = m3.find(str(pivotPoint))
-        Utility.tools.clearScreen(forceTop=True)
-        m4.renderForMenu(selectedMenu=selectedMenu)
+        ConsoleUtility.PKConsoleTools.clearScreen(forceTop=True)
+        m4.renderForMenu(selectedMenu=selectedMenu,asList=(userPassedArgs is not None and userPassedArgs.options is not None))
         if len(options) >=5:
             priceDirection = options[4]
             priceDirection = "2" if priceDirection == "D" else priceDirection
@@ -1684,8 +1758,27 @@ def main(userArgs=None,optionalFinalOutcome_df=None):
         selectedChoice["4"] = str(priceDirection)
         reversalOption = (priceDirection == "2")
 
-    if executeOption == 42:
-        Utility.tools.getLastScreenedResults(defaultAnswer)
+    if executeOption == 42: # Super Gainer
+        maLength = 10
+        if userPassedArgs.options is None:
+            maLength = input(colorText.WARN + f"Minimum Percent change to select as super gainers? ({colorText.GREEN}Optimal:15{colorText.END}, Default=10). Enter a number:") or 10
+            if not str(maLength).isnumeric():
+                maLength = 10
+            else:
+                maLength = float(maLength)
+    if executeOption == 43: # Super Losers
+        maLength = -10
+        if userPassedArgs.options is None:
+            maLength = input(colorText.WARN + f"Minimum Percent change to select as super losers? ({colorText.GREEN}Optimal:-10{colorText.END}, Default=-10). Enter a negative number:") or -10
+            if not str(maLength).isnumeric():
+                maLength = -10
+            else:
+                maLength = float(maLength)
+                if maLength > 0:
+                    maLength = 0 - maLength
+    
+    if executeOption == MAX_MENU_OPTION:
+        ConsoleUtility.PKConsoleTools.getLastScreenedResults(defaultAnswer)
         return None, None
     if executeOption > MAX_SUPPORTED_MENU_OPTION and executeOption < MAX_MENU_OPTION:
         OutputControls().printOutput(
@@ -1695,6 +1788,13 @@ def main(userArgs=None,optionalFinalOutcome_df=None):
         )
         OutputControls().takeUserInput("Press <Enter> to continue...")
         return None, None
+    
+    if str(indexOption).isnumeric() and int(indexOption) > 1 and executeOption <= MAX_SUPPORTED_MENU_OPTION:
+        ensureMenusLoaded(menuOption,indexOption,executeOption)
+        if not PKPremiumHandler.hasPremium(m2.find(str(executeOption).upper())):
+            PKAnalyticsService().send_event(f"non_premium_user_{menuOption}_{indexOption}_{executeOption}")
+            PKAnalyticsService().send_event("app_exit")
+            sys.exit(0)
     if (
         not str(indexOption).isnumeric() and str(indexOption).upper() in ["W", "E", "M", "N", "Z", "S"]
     ) or (
@@ -1703,6 +1803,11 @@ def main(userArgs=None,optionalFinalOutcome_df=None):
     ):
         configManager.getConfig(ConfigManager.parser)
         try:
+            if str(indexOption).upper() in ["W", "E", "S"]:
+                if not PKPremiumHandler.hasPremium(m1.find(str(indexOption).upper())):
+                    PKAnalyticsService().send_event(f"non_premium_user_{menuOption}_{indexOption}_{executeOption}")
+                    PKAnalyticsService().send_event("app_exit")
+                    sys.exit(0)
             if indexOption == "W":
                 listStockCodes = fetcher.fetchWatchlist()
                 if listStockCodes is None:
@@ -1711,6 +1816,7 @@ def main(userArgs=None,optionalFinalOutcome_df=None):
                         + f"  [+] Please create the watchlist.xlsx file in {os.getcwd()} and Restart the Program!"
                         + colorText.END
                     )
+                    PKAnalyticsService().send_event("app_exit")
                     sys.exit(0)
             elif indexOption == "N":
                 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
@@ -1730,7 +1836,7 @@ def main(userArgs=None,optionalFinalOutcome_df=None):
                     pass
                 messageToUser = "Nifty AI prediction NOT available right now! Please try again later. Please let @itsonlypk know about this!"
                 if prediction != 0:
-                    messageToUser = f"{Utility.tools.removeAllColorStyles(Utility.marketStatus())}\nNifty AI prediction for the Next Day: {pText}. {sText}.{warningText}"
+                    messageToUser = f"{ImageUtility.PKImageTools.removeAllColorStyles(Utility.marketStatus())}\nNifty AI prediction for the Next Day: {pText}. {sText}.{warningText}"
                 else:
                     OutputControls().printOutput(messageToUser)
                 sendMessageToTelegramChannel(message=messageToUser,user=user)
@@ -1745,6 +1851,7 @@ def main(userArgs=None,optionalFinalOutcome_df=None):
                     + "  [+] Press <Enter> to Exit!"
                     + colorText.END
                 )
+                PKAnalyticsService().send_event("app_exit")
                 sys.exit(0)
             elif indexOption == "E":
                 return handleMonitorFiveEMA()
@@ -1767,7 +1874,7 @@ def main(userArgs=None,optionalFinalOutcome_df=None):
                     
                 if str(menuOption).upper() == "C":
                     stockDictPrimary,endOfdayCandles = PKMarketOpenCloseAnalyser.getStockDataForSimulation()
-                    if stockDictPrimary is None or endOfdayCandles is None:
+                    if stockDictPrimary is None or endOfdayCandles is None or len(stockDictPrimary) < 1 or len(endOfdayCandles) < 1:
                         OutputControls().printOutput(f"Cannot proceed! Stock data is unavailable. Please check the error logs/messages !")
                         return None, None
                     if indexOption > 0:
@@ -1782,7 +1889,7 @@ def main(userArgs=None,optionalFinalOutcome_df=None):
                 + colorText.END
             )
             OutputControls().takeUserInput("Press <Enter> to continue...")
-            Utility.tools.clearScreen(clearAlways=True,forceTop=True)
+            ConsoleUtility.PKConsoleTools.clearScreen(clearAlways=True,forceTop=True)
             return None, None
         if userPassedArgs.options is None or len(userPassedArgs.options) == 0:
             userPassedArgs.options = ""
@@ -1790,7 +1897,8 @@ def main(userArgs=None,optionalFinalOutcome_df=None):
                 userPassedArgs.options = (f"{userPassedArgs.options}:" if len(userPassedArgs.options) > 0  else '') + f"{selectedChoice[choice]}"
         if userPassedArgs.pipedmenus is not None:
             return addOrRunPipedMenus()
-
+        
+        loadedStockData = loadedStockData and stockDictPrimary is not None and len(stockDictPrimary) > 0
         if (menuOption in ["X", "B", "G", "S", "F"] and not loadedStockData) or (
             # not downloadOnly
             # and not PKDateUtilities.isTradingTime()
@@ -1806,9 +1914,12 @@ def main(userArgs=None,optionalFinalOutcome_df=None):
             except: # pragma: no cover
                 stockDictPrimary,stockDictSecondary = loadDatabaseOrFetch(downloadOnly, listStockCodes, menuOption, indexOption)
                 pass
-            
         loadCount = len(stockDictPrimary) if stockDictPrimary is not None else 0
-
+        # Let's use screening only for the stocks for which we could get the data.
+        savedOrDownloadedKeys = list(stockDictPrimary.keys())
+        missingStocks = set(listStockCodes) - set(savedOrDownloadedKeys)
+        OutputControls().printOutput(f"{colorText.GREEN}  [+] Adding {len(listStockCodes)-len(missingStocks)} stocks out of {len(listStockCodes)} to the queue...{colorText.END}")
+        listStockCodes = list(set(listStockCodes)-set(missingStocks)) if not downloadOnly else listStockCodes
         if downloadOnly:
             OutputControls().printOutput(
                 colorText.WARN
@@ -1836,13 +1947,13 @@ def main(userArgs=None,optionalFinalOutcome_df=None):
                 daysInPast = PKScanRunner.getBacktestDaysForScan(userPassedArgs, backtestPeriod, menuOption, actualHistoricalDuration)
                 try:
                     listStockCodes, savedStocksCount, pastDate = PKScanRunner.getStocksListForScan(userPassedArgs, menuOption, totalStocksInReview, downloadedRecently, daysInPast) if menuOption not in ["C"] else (listStockCodes, 0, "")
-                except KeyboardInterrupt:
+                except KeyboardInterrupt: # pragma: no cover
                     try:
                         keyboardInterruptEvent.set()
                         keyboardInterruptEventFired = True
                         actualHistoricalDuration = -1
                         break
-                    except KeyboardInterrupt:
+                    except KeyboardInterrupt: # pragma: no cover
                         pass
                     OutputControls().printOutput(
                         colorText.FAIL
@@ -1983,7 +2094,7 @@ def main(userArgs=None,optionalFinalOutcome_df=None):
                         shareable_strings.append(tab_results)
                         OutputControls().printOutput(tab_results)
                     if shouldSend:
-                        caption_results = Utility.tools.removeAllColorStyles(caption_results.replace("-E-----N-----E-----R","-E-----N----E---R").replace("=E=====N=====E=====R","=E=====N====E===R"))
+                        caption_results = ImageUtility.PKImageTools.removeAllColorStyles(caption_results.replace("-E-----N-----E-----R","-E-----N----E---R").replace("=E=====N=====E=====R","=E=====N====E===R"))
                         caption = f"Stocks with dividends/bonus/splits. Samples:<pre>{caption_results}</pre>" #<i>Author is <u><b>NOT</b> a SEBI registered financial advisor</u> and MUST NOT be deemed as one.</i>"
                         png_file = f"PKS_X_12_26_{PKDateUtilities.currentDateTime().strftime('%Y-%m-%d_%H:%M:%S')}"
                         png_ext = ".png"
@@ -1991,7 +2102,7 @@ def main(userArgs=None,optionalFinalOutcome_df=None):
                             menuChoiceHierarchy,
                             user,
                             shareable_strings[0],
-                            Utility.tools.removeAllColorStyles(shareable_strings[0]),
+                            ImageUtility.PKImageTools.removeAllColorStyles(shareable_strings[0]),
                             caption,
                             png_file,
                             png_ext,
@@ -2039,7 +2150,7 @@ def main(userArgs=None,optionalFinalOutcome_df=None):
 
         if menuOption == "B":
             if backtest_df is not None and len(backtest_df) > 0:
-                Utility.tools.clearScreen(forceTop=True)
+                ConsoleUtility.PKConsoleTools.clearScreen(forceTop=True)
                 # Let's do the portfolio calculation first
                 df_xray = prepareGroupedXRay(backtestPeriod, backtest_df)
                 summary_df, sorting, sortKeys = FinishBacktestDataCleanup(backtest_df, df_xray)
@@ -2094,6 +2205,11 @@ def main(userArgs=None,optionalFinalOutcome_df=None):
                     colorText.FAIL + "  [+] Select option: "
                 ) or 'M'
             OutputControls().printOutput(colorText.END, end="")
+            ensureMenusLoaded(menuOption,indexOption,executeOption)
+            if not PKPremiumHandler.hasPremium(m0.find(str(pinOption).upper())):
+                PKAnalyticsService().send_event(f"non_premium_user_pin_{menuOption}_{indexOption}_{executeOption}_{pinOption}")
+                PKAnalyticsService().send_event("app_exit")
+                sys.exit(0)
             if pinOption in ["1","2"]:
                 if pinOption in ["2"]:
                     monitorOption = "X:0:0"
@@ -2169,7 +2285,7 @@ def main(userArgs=None,optionalFinalOutcome_df=None):
                         userPassedArgs.backtestdaysago = None
                     elif tradingDaysInThePast == 0:
                         userPassedArgs.slicewindow = f"'{currentTime}'"
-                    Utility.tools.clearScreen(clearAlways=True,forceTop=True)
+                    ConsoleUtility.PKConsoleTools.clearScreen(clearAlways=True,forceTop=True)
                     OutputControls().printOutput(f"{colorText.WARN}Launching into the selected time-window!{colorText.END}{colorText.GREEN} Brace yourself for the time-travel!{colorText.END}")
                     sleep(5)
                     return main(userArgs=userPassedArgs, optionalFinalOutcome_df=optionalFinalOutcome_df)
@@ -2251,10 +2367,24 @@ def analysisFinalResults(screenResults,saveResults,optionalFinalOutcome_df,runOp
         analysis_dict[firstScanKey] = {"S1": screenResults, "S2": saveResults}
     return optionalFinalOutcome_df, saveResults
 
+@exit_after(10)
+def tryLoadDataOnBackgroundThread():
+    global stockDictPrimary,stockDictSecondary, configManager, defaultAnswer, userPassedArgs, loadedStockData
+    if stockDictPrimary is None:
+        stockDictPrimary = {}
+        stockDictSecondary = {}
+        loadedStockData = False
+    configManager.getConfig(parser=ConfigManager.parser)
+    defaultAnswer = "Y"
+    userPassedArgs = None
+    with SuppressOutput(suppress_stderr=True, suppress_stdout=True):
+        listStockCodes = fetcher.fetchStockCodes(int(configManager.defaultIndex), stockCode=None)
+    loadDatabaseOrFetch(downloadOnly=True,listStockCodes=listStockCodes,menuOption="X",indexOption=int(configManager.defaultIndex))            
+
 def loadDatabaseOrFetch(downloadOnly, listStockCodes, menuOption, indexOption): 
     global stockDictPrimary,stockDictSecondary, configManager, defaultAnswer, userPassedArgs, loadedStockData
     if menuOption not in ["C"]:
-        stockDictPrimary = Utility.tools.loadStockData(
+        stockDictPrimary = AssetsManager.PKAssetsManager.loadStockData(
                     stockDictPrimary,
                     configManager,
                     downloadOnly=downloadOnly,
@@ -2264,13 +2394,17 @@ def loadDatabaseOrFetch(downloadOnly, listStockCodes, menuOption, indexOption):
                     exchangeSuffix = "" if (indexOption == 15 or (configManager.defaultIndex == 15 and indexOption == 0)) else ".NS",
                     userDownloadOption = menuOption
             )
-    if menuOption not in ["C"] and (userPassedArgs.monitor is not None or "|" in userPassedArgs.options or (":33:3:" in userPassedArgs.options or ":32:" in userPassedArgs.options or ":38:" in userPassedArgs.options)) :#not configManager.isIntradayConfig() and configManager.calculatersiintraday:
+    if menuOption not in ["C"] and (userPassedArgs is not None and (userPassedArgs.monitor is not None or \
+                                    ("|" in userPassedArgs.options and ':i' in userPassedArgs.options) or \
+                                    (":33:3:" in userPassedArgs.options or \
+                                     ":32:" in userPassedArgs.options or \
+                                        ":38:" in userPassedArgs.options))) :#not configManager.isIntradayConfig() and configManager.calculatersiintraday:
         prevDuration = configManager.duration
         prevPeriod = configManager.period
         candleDuration = (userPassedArgs.intraday if (userPassedArgs is not None and userPassedArgs.intraday is not None) else ("1m" if configManager.duration.endswith("d") else configManager.duration))
         configManager.toggleConfig(candleDuration=candleDuration,clearCache=False)
-        if ":33:3:" in userPassedArgs.options:
-            exists, cache_file = Utility.tools.afterMarketStockDataExists(True, forceLoad=(menuOption in ["X", "B", "G", "S", "F"]))
+        if userPassedArgs is not None and ":33:3:" in userPassedArgs.options:
+            exists, cache_file = AssetsManager.PKAssetsManager.afterMarketStockDataExists(True, forceLoad=(menuOption in ["X", "B", "G", "S", "F"]))
             cache_file = os.path.join(Archiver.get_user_data_dir(),cache_file)
             cacheFileSize = os.stat(cache_file).st_size if os.path.exists(cache_file) else 0
             if cacheFileSize < 1024*1024*100: # 1m data for 5d is at least 450MB
@@ -2279,7 +2413,7 @@ def loadDatabaseOrFetch(downloadOnly, listStockCodes, menuOption, indexOption):
             configManager.period = "5d"
             configManager.setConfig(ConfigManager.parser,default=True,showFileCreatedText=False)
         # We also need to load the intraday data to be able to calculate intraday RSI
-        stockDictSecondary = Utility.tools.loadStockData(
+        stockDictSecondary = AssetsManager.PKAssetsManager.loadStockData(
                         stockDictSecondary,
                         configManager,
                         downloadOnly=downloadOnly,
@@ -2409,7 +2543,7 @@ def addOrRunPipedMenus():
             )
         if defaultAnswer is None:
             OutputControls().takeUserInput("Press <Enter> to continue...")
-        Utility.tools.clearScreen(clearAlways=True,forceTop=True)
+        ConsoleUtility.PKConsoleTools.clearScreen(clearAlways=True,forceTop=True)
         return None, None
     else:
         userPassedArgs.options = None
@@ -2418,7 +2552,6 @@ def addOrRunPipedMenus():
 def describeUser():
     if not configManager.enableUsageAnalytics:
         return
-    from pkscreener.classes.PKAnalytics import PKAnalyticsService
     service = PKAnalyticsService()
     func_args = None
     task = PKTask("Usage Analytics",
@@ -2494,7 +2627,7 @@ def showSortedBacktestData(backtest_df, summary_df, sortKeys):
                     )
         OutputControls().printOutput(colorText.END, end="")
         if choice.upper() in sortKeys.keys():
-            Utility.tools.clearScreen(forceTop=True)
+            ConsoleUtility.PKConsoleTools.clearScreen(forceTop=True)
             showBacktestResults(backtest_df, sortKeys[choice.upper()])
             showBacktestResults(summary_df, optionalName="Summary")
         else:
@@ -2573,7 +2706,7 @@ def handleMonitorFiveEMA():
                 )
     try:
         while True:
-            Utility.tools.clearScreen(forceTop=True)
+            ConsoleUtility.PKConsoleTools.clearScreen(forceTop=True)
             last_result_len = len(result_df)
             try:
                 result_df = screener.monitorFiveEma(
@@ -2616,7 +2749,7 @@ def handleMonitorFiveEMA():
                 Utility.tools.alertSound(beeps=5)
             sleep(60)
             first_scan = False
-    except KeyboardInterrupt:
+    except KeyboardInterrupt: # pragma: no cover
         input("\nPress <Enter> to Continue...\n")
         return
 
@@ -2646,6 +2779,7 @@ def handleExitRequest(executeOption):
             + "  [+] Press <Enter> to Exit!"
             + colorText.END
         )
+        PKAnalyticsService().send_event("app_exit")
         sys.exit(0)
 
 def handleMenu_XBG(menuOption, indexOption, executeOption):
@@ -2707,6 +2841,11 @@ def updateMenuChoiceHierarchy():
                     menuChoiceHierarchy
                     + f'>{level4_X_ChartPattern_MASignalMenuDict[selectedChoice["4"]].strip()}'
                 )
+                elif len(selectedChoice) >= 5 and selectedChoice["3"] == "7":
+                    menuChoiceHierarchy = (
+                        menuChoiceHierarchy
+                        + f'>{CANDLESTICK_DICT[selectedChoice["4"]].strip() if selectedChoice["4"] != 0 else "No Filter"}'
+                )
             elif selectedChoice["2"] == "21":
                 menuChoiceHierarchy = (
                     menuChoiceHierarchy
@@ -2742,7 +2881,7 @@ def updateMenuChoiceHierarchy():
         menuChoiceHierarchy = menuChoiceHierarchy.replace("N-",f"{nValueForMenu}-")
     except: # pragma: no cover
         pass
-    Utility.tools.clearScreen(forceTop=True)
+    ConsoleUtility.PKConsoleTools.clearScreen(forceTop=True)
     needsCalc = userPassedArgs is not None and userPassedArgs.backtestdaysago is not None
     pastDate = f"[ {PKDateUtilities.nthPastTradingDateStringFromFutureDate(int(userPassedArgs.backtestdaysago) if needsCalc else 0)} ]" if needsCalc else ""
     reportTitle = f"{userPassedArgs.pipedtitle}|" if userPassedArgs is not None and userPassedArgs.pipedtitle is not None else ""
@@ -2750,7 +2889,8 @@ def updateMenuChoiceHierarchy():
     if ((":0:" in runOptionName or "_0_" in runOptionName) and userPassedArgs.progressstatus is not None) or userPassedArgs.progressstatus is not None:
         runOptionName = userPassedArgs.progressstatus.split("=>")[0].split("  [+] ")[1].strip()
     reportTitle = f"{runOptionName} | {reportTitle}" if runOptionName is not None else reportTitle
-
+    if len(runOptionName) >= 5:
+        PKAnalyticsService().send_event(runOptionName)
     OutputControls().printOutput(
         colorText.FAIL
         + f"  [+] You chose: {reportTitle} "
@@ -2801,7 +2941,7 @@ def findPipedScannerOptionFromStdScanOptions(df_scr, df_sr,menuOption="X"):
         for item in list(df_group["MA-Signal"]):
             items.extend(item.replace("'","").replace("\"","").replace(" ","").split(","))
         maSignalsScr = sorted(list(filter(None,list(set(items)))))
-        stockName = Utility.tools.stockNameFromDecoratedName(stock_name)
+        stockName = ImageUtility.PKImageTools.stockNameFromDecoratedName(stock_name)
         signalDictScr[stockName] = maSignalsScr
         grp_scr[stockName] = df_group
 
@@ -2920,7 +3060,7 @@ def printNotifySaveScreenedResults(
     recordDate = PKDateUtilities.tradingDate().strftime('%Y-%m-%d') if (userPassedArgs.backtestdaysago is None) else (PKDateUtilities.nthPastTradingDateStringFromFutureDate(int(userPassedArgs.backtestdaysago)))
     if user is None and userPassedArgs.user is not None:
         user = userPassedArgs.user
-    Utility.tools.clearScreen(forceTop=True)
+    ConsoleUtility.PKConsoleTools.clearScreen(forceTop=True)
     if screenResults is not None and len(screenResults) > 0 and menuOption not in ["F"]:
         screenResults = screenResults[~screenResults.index.duplicated(keep='first')]
         saveResults = saveResults[~saveResults.index.duplicated(keep='first')]
@@ -3143,7 +3283,7 @@ def printNotifySaveScreenedResults(
                         tablefmt=colorText.No_Pad_GridFormat,
                         maxcolwidths=[None,None,4,3]
                     ).encode("utf-8").decode(STD_ENCODING).replace("-K-----S-----C-----R","-K-----S----C---R").replace("%  ","% ").replace("=K=====S=====C=====R","=K=====S====C===R").replace("Vol  |","Vol|").replace("Hgh  |","Hgh|").replace("EoD  |","EoD|").replace("x  ","x")
-                    caption_results = Utility.tools.removeAllColorStyles(caption_results.replace("-E-----N-----E-----R","-E-----N----E---R").replace("=E=====N=====E=====R","=E=====N====E===R"))
+                    caption_results = ImageUtility.PKImageTools.removeAllColorStyles(caption_results.replace("-E-----N-----E-----R","-E-----N----E---R").replace("=E=====N=====E=====R","=E=====N====E===R"))
                     suggestion_text = "Try @nse_pkscreener_bot for more scans! <i><b><u>You agree that you have read</u></b>:https://pkjmesra.github.io/PKScreener/Disclaimer.txt</i> <b>and accept TOS</b>: https://pkjmesra.github.io/PKScreener/tos.txt <b>STOP using and exit from channel/group, if you do not</b>"
                     finalCaption = f"{caption}.Feel free to share on social media.Open attached image for more. Samples:<pre>{caption_results}</pre>{elapsed_text} {suggestion_text}"
                 if not testing:
@@ -3179,7 +3319,7 @@ def printNotifySaveScreenedResults(
                         try:
                             # import traceback
                             if tabulated_backtest_summary is not None:
-                                Utility.tools.tableToImage(
+                                ImageUtility.PKImageTools.tableToImage(
                                     "",
                                     "",
                                     pngName + backtestExtension,
@@ -3222,7 +3362,7 @@ def printNotifySaveScreenedResults(
         runOptionName = PKScanRunner.getFormattedChoices(userPassedArgs,selectedChoice)
         if ((":0:" in runOptionName or "_0_" in runOptionName) and userPassedArgs.progressstatus is not None) or userPassedArgs.progressstatus is not None:
             runOptionName = userPassedArgs.progressstatus.split("=>")[0].split("  [+] ")[1].strip()
-        Utility.tools.setLastScreenedResults(screenResults, saveResults, f"{runOptionName}_{recordDate if recordDate is not None else ''}")
+        ConsoleUtility.PKConsoleTools.setLastScreenedResults(screenResults, saveResults, f"{runOptionName}_{recordDate if recordDate is not None else ''}")
     scanCycleRunning = False
 
 def sendKiteBasketOrderReviewDetails(saveResultsTrimmed,runOptionName,caption,user):
@@ -3290,7 +3430,7 @@ def prepareGrowthOf10kResults(saveResults, selectedChoice, menuChoiceHierarchy, 
                 if configManager.showPastStrategyData:
                     OutputControls().printOutput(f"\n\n{titleLabelG10k}\n")
                     OutputControls().printOutput(g10kStyledTable)
-                g10kUnStyledTable = Utility.tools.removeAllColorStyles(g10kStyledTable)
+                g10kUnStyledTable = ImageUtility.PKImageTools.removeAllColorStyles(g10kStyledTable)
                 if not testing and eligible:
                     sendQuickScanResult(
                         menuChoiceHierarchy,
@@ -3412,7 +3552,7 @@ def sendQuickScanResult(
     try:
         if not is_token_telegram_configured():
             return
-        Utility.tools.tableToImage(
+        ImageUtility.PKImageTools.tableToImage(
             markdown_results,
             tabulated_results,
             pngName + pngExtension,
@@ -3598,7 +3738,7 @@ def runScanners(
             screenResults = pd.DataFrame(lstscreen)
             saveResults = pd.DataFrame(lstsave)
 
-    except KeyboardInterrupt:
+    except KeyboardInterrupt: # pragma: no cover
         try:
             global keyboardInterruptEventFired
             keyboardInterruptEvent.set()
@@ -3610,7 +3750,7 @@ def runScanners(
             )
             PKScanRunner.terminateAllWorkers(userPassedArgs=userPassedArgs,consumers=consumers, tasks_queue=tasks_queue,testing=testing)
             logging.shutdown()
-        except KeyboardInterrupt:
+        except KeyboardInterrupt: # pragma: no cover
             pass
     except Exception as e: # pragma: no cover
         default_logger().debug(e, exc_info=True)
@@ -3723,9 +3863,9 @@ def saveDownloadedData(downloadOnly, testing, stockDictPrimary, configManager, l
             + colorText.END,
             end="",
         )
-        Utility.tools.saveStockData(stockDictPrimary, configManager, loadCount, intraday)
+        AssetsManager.PKAssetsManager.saveStockData(stockDictPrimary, configManager, loadCount, intraday)
         if downloadOnly:
-            cache_file = Utility.tools.saveStockData(stockDictPrimary, configManager, loadCount, intraday, downloadOnly=downloadOnly)
+            cache_file = AssetsManager.PKAssetsManager.saveStockData(stockDictPrimary, configManager, loadCount, intraday, downloadOnly=downloadOnly)
             cacheFileSize = os.stat(cache_file).st_size if os.path.exists(cache_file) else 0
             if cacheFileSize < 1024*1024*40:
                 try:
@@ -3745,6 +3885,7 @@ def saveDownloadedData(downloadOnly, testing, stockDictPrimary, configManager, l
                     os.system(f"{launcher} -a Y -e -l -d {'-i 1m' if configManager.isIntradayConfig() else ''}")
                 else:
                     del os.environ['PKDevTools_Default_Log_Level']
+                    PKAnalyticsService().send_event("app_exit")
                     sys.exit(0)
     else:
         OutputControls().printOutput(colorText.GREEN + "  [+] Skipped Saving!" + colorText.END)
@@ -3768,7 +3909,7 @@ def saveNotifyResultsFile(
         choices = f'{choices.strip()}{"_IA" if userPassedArgs is not None and userPassedArgs.runintradayanalysis else ""}'
         needsCalc = userPassedArgs is not None and userPassedArgs.backtestdaysago is not None
         pastDate = PKDateUtilities.nthPastTradingDateStringFromFutureDate(int(userPassedArgs.backtestdaysago) if needsCalc else 0) if needsCalc else None
-        filename = Utility.tools.promptSaveResults(choices,
+        filename = PKAssetsManager.promptSaveResults(choices,
             saveResults, defaultAnswer=defaultAnswer,pastDate=pastDate,screenResults=screenResults)
         # User triggered telegram bot request
         # Group user Ids are < 0, individual ones are > 0
@@ -3820,6 +3961,7 @@ def sendGlobalMarketBarometer(userArgs=None):
             )
             os.remove(gmbPath)
         else:
+            PKAnalyticsService().send_event("app_exit")
             sys.exit(0)
     except Exception as e: # pragma: no cover
         default_logger().debug(e,exc_info=True)
@@ -3828,7 +3970,8 @@ def sendGlobalMarketBarometer(userArgs=None):
 def sendMessageToTelegramChannel(
     message=None, photo_filePath=None, document_filePath=None, caption=None, user=None, mediagroup=False
 ):
-    global userPassedArgs, test_messages_queue, media_group_dict
+    global userPassedArgs, test_messages_queue, media_group_dict, menuChoiceHierarchy
+    default_logger().debug(f"Received message:{message}, caption:{caption}, for user : {user} with mediagroup:{mediagroup}")
     if ("RUNNER" not in os.environ.keys() and (userPassedArgs is not None and not userPassedArgs.log)) or (userPassedArgs is not None and userPassedArgs.telegram):
         return
     
@@ -3867,7 +4010,7 @@ def sendMessageToTelegramChannel(
                 sleep(2)
             except Exception as e:  # pragma: no cover
                 default_logger().debug(e, exc_info=True)
-    else:
+    else: # Media group message
         file_paths = []
         file_captions = []
         if "ATTACHMENTS" in media_group_dict.keys():
@@ -3895,6 +4038,9 @@ def sendMessageToTelegramChannel(
                     default_logger().debug(resp.text, exc_info=True)
             caption = f"{str(len(file_captions))} files sent!"
             message = media_group_dict["CAPTION"].replace('&','n').replace("<","*")[:1024] if "CAPTION" in media_group_dict.keys() else "-"
+            default_logger().debug(f"Received updated message:{message}, caption:{caption}, for user : {user} with mediagroup:{mediagroup}")
+        else:
+            default_logger().debug(f"No ATTACHMENTS in media_group_dict: {media_group_dict.keys(),}\nReceived updated message:{message}, caption:{caption}, for user : {user} with mediagroup:{mediagroup}")
         for f in file_paths:
             try:
                 if "RUNNER" in os.environ.keys():
@@ -3903,6 +4049,10 @@ def sendMessageToTelegramChannel(
                     os.remove(f)
             except: # pragma: no cover
                 pass
+        # if message is None and mediagroup:
+        #     sendMessageToTelegramChannel(message=f"No scan results found for {menuChoiceHierarchy}", user=user)
+        #     return
+        handleAlertSubscriptions(user,message)
     if user is not None:
         if str(user) != str(DEV_CHANNEL_ID) and userPassedArgs is not None and not userPassedArgs.monitor:
             # Send an update to dev channel
@@ -3910,7 +4060,37 @@ def sendMessageToTelegramChannel(
                 f"Responded back to userId:{user} with {caption}.{message} [{userPassedArgs.options.replace(':D','')}]",
                 userID=DEV_CHANNEL_ID,
             )
-
+def handleAlertSubscriptions(user,message):
+    """
+    Handles user subscriptions to automated alerts for a given Scan type/category/menu/submenu.
+    # Case 1
+    If user is not subscribed, user is given a prompt to subscribe only to that specific scan.
+    # Case 2
+    If user is already subscribed, user is informed about the same along with all other subscriptions he may have.
+    """
+    if user is not None and message is not None and "|" in str(message):
+        if int(user) > 0:
+            # Individual user
+            scanId = message.split("|")[0].replace("*b>","").strip()
+            from PKDevTools.classes.DBManager import DBManager
+            dbManager = DBManager()
+            if dbManager.url is not None and dbManager.token is not None:
+                alertUser = dbManager.alertsForUser(int(user))
+                # Case 1
+                if alertUser is None or len(alertUser.scannerJobs) == 0 or str(scanId) not in alertUser.scannerJobs:
+                    reply_markup = {
+                        "inline_keyboard": [
+                            [{"text": f"Yes! Subscribe", "callback_data": f"SUB_{scanId}"}]
+                        ],
+                    }
+                    send_message(message=f"🔴 <b>Please check your current alerts, balance and subscriptions using /OTP before subscribing for alerts</b>.🔴 If you are not already subscribed to this alert, would you like to subscribe to this ({scanId}) automated scan alert for a day during market hours (NSE - IST timezone)? You will need to pay ₹ {'40' if str(scanId).upper().startswith('P') else '31'} (One time) for automated alerts to {scanId} all day on the day of subscription. 🔴 If you say <b>Yes</b>, the corresponding charges will be deducted from your alerts balance!🔴",
+                        userID=int(user),
+                        reply_markup=reply_markup)
+                elif alertUser is not None and len(alertUser.scannerJobs) > 0 and str(scanId) in alertUser.scannerJobs:
+                    # Case 2
+                    send_message(message=f"Thank you for subscribing to (<b>{scanId}</b>) automated scan alert! We truly hope you are enjoying the alerts! You will continue to receive alerts for the duration of NSE Market hours for today. For any feedback, drop a note to @ItsOnlyPK.",
+                        userID=int(user),)
+            
 def sendTestStatus(screenResults, label, user=None):
     msg = "<b>SUCCESS</b>" if (screenResults is not None and len(screenResults) >= 1) else "<b>FAIL</b>"
     sendMessageToTelegramChannel(
@@ -3993,7 +4173,7 @@ def showBacktestResults(backtest_df:pd.DataFrame, sortKey="Stock", optionalName=
         # Save in excel file as well if the config is set to do so
         if configManager.alwaysExportToExcel:
             excelSheetname = filename.split(os.sep)[-1].replace("PKScreener_","").replace(".html","")
-            Utility.tools.promptSaveResults(sheetName=excelSheetname,df_save=backtest_df,defaultAnswer=userPassedArgs.answerdefault,pastDate=None)
+            PKAssetsManager.promptSaveResults(sheetName=excelSheetname,df_save=backtest_df,defaultAnswer=userPassedArgs.answerdefault,pastDate=None)
     except: # pragma: no cover
         pass
     if lastSummaryRow is not None:
@@ -4038,7 +4218,7 @@ def showOptionErrorMessage():
         + colorText.END
     )
     sleep(2)
-    Utility.tools.clearScreen(forceTop=True)
+    ConsoleUtility.PKConsoleTools.clearScreen(forceTop=True)
 
 def takeBacktestInputs(
     menuOption=None, indexOption=None, executeOption=None, backtestPeriod=0
@@ -4127,4 +4307,4 @@ def cleanupLocalResults():
         response = input(f"\n  [+] {colorText.WARN}Clean up local user generated reports as well?{colorText.END} {colorText.FAIL}[Default: N]{colorText.END} :") or "n"
         if "y" in response.lower():
             configManager.deleteFileWithPattern(rootDir=Archiver.get_user_reports_dir(), pattern="*.*")
-    Utility.tools.clearScreen(forceTop=True)
+    ConsoleUtility.PKConsoleTools.clearScreen(forceTop=True)

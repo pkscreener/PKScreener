@@ -54,6 +54,7 @@ class MarketMonitor(SingletonMixin, metaclass=SingletonType):
             self.alertOptions = alertOptions
             self.hiddenColumns = ""
             self.alertStocks = []
+            self.alertedStocks = {}
             self.pinnedIntervalWaitSeconds = pinnedIntervalWaitSeconds
             # self.monitorNames = {}
             # We are going to present the dataframes in a 3x3 matrix with limited set of columns
@@ -65,7 +66,10 @@ class MarketMonitor(SingletonMixin, metaclass=SingletonType):
             self.maxNumResultsPerRow = maxNumResultsPerRow
             maxColIndex = self.maxNumColsInEachResult * self.maxNumResultsPerRow - 1
             self.lines = 0
+            monIndex = 0
             for monitorKey in self.monitors:
+                self.alertedStocks[str(monIndex)] = []
+                monIndex += 1
                 self.monitorPositions[monitorKey] = [rowIndex,colIndex]
                 # self.monitorNames[monitorKey] = ""
                 colIndex += self.maxNumColsInEachResult
@@ -94,56 +98,86 @@ class MarketMonitor(SingletonMixin, metaclass=SingletonType):
         return option
 
     def saveMonitorResultStocks(self, results_df):
+        try:
+            if len(self.alertedStocks.keys()) < self.monitorIndex+1: # for pytests
+                self.alertedStocks[str(self.monitorIndex)] = []
+            self.alertStocks = []
+            lastSavedResults = self.monitorResultStocks[str(self.monitorIndex)]
+            lastSavedResults = lastSavedResults.split(",")
+        except:
+            lastSavedResults = []
+            pass
+        prevOutput_results = ""
         if results_df is None or results_df.empty:
             prevOutput_results = "NONE"
         else:
             prevOutput_results = results_df[~results_df.index.duplicated(keep='first')]
             prevOutput_results = prevOutput_results.index
-            # # Maybe the index is an int ?
-            # prevOutput_results = [str(stock) for stock in prevOutput_results]
-            try:
-                lastSavedResults = self.monitorResultStocks[str(self.monitorIndex)]
-                if lastSavedResults is not None and len(lastSavedResults) > 0:
-                    lastSavedResults = lastSavedResults.split(",")
-                    s = set(lastSavedResults)
-                    self.alertStocks = [x for x in prevOutput_results if x not in s]
-                else:
-                    self.alertStocks = []
-            except: # pragma: no cover
-                pass
             prevOutput_results = ",".join(prevOutput_results)
-        self.monitorResultStocks[str(self.monitorIndex)] = prevOutput_results
+        if len(self.monitorResultStocks.keys()) > self.monitorIndex and str(self.monitorIndex) in self.monitorResultStocks.keys() and len(self.monitorResultStocks[str(self.monitorIndex)]) > 0 and prevOutput_results == "NONE":
+            prevOutput_results = self.monitorResultStocks[str(self.monitorIndex)]
+        addedStocks = list(set(prevOutput_results.split(',')) - set(lastSavedResults))  # Elements in new df but not in the saved df
+        if len(self.alertStocks) != len(addedStocks) and len(addedStocks) > 0:
+            self.alertStocks = addedStocks
+        diffAlerts = list(set(self.alertStocks) - set(self.alertedStocks[str(self.monitorIndex)]))
+        if len(diffAlerts) > 0:
+            self.alertStocks = diffAlerts
+            self.alertedStocks[str(self.monitorIndex)].extend(diffAlerts)
+        else:
+            self.alertStocks = []
+        if len(addedStocks) > 0:
+            self.monitorResultStocks[str(self.monitorIndex)] = prevOutput_results
 
     def refresh(self, screen_df:pd.DataFrame=None, screenOptions=None, chosenMenu="", dbTimestamp="", telegram=False):
         highlightRows = []
         highlightCols = []
+        telegram_df = None
         if screen_df is None or screen_df.empty or screenOptions is None:
             return
         screen_monitor_df = screen_df.copy()
         monitorPosition = self.monitorPositions.get(screenOptions)
 
-        from pkscreener.classes import Utility
+        from pkscreener.classes import Utility, ImageUtility
 
         if self.isPinnedSingleMonitorMode:
             screen_monitor_df = screen_monitor_df[screen_monitor_df.columns[:14]]
             self.monitor_df = screen_monitor_df
-        else:
-            screen_monitor_df.reset_index(inplace=True)
-            screen_monitor_df = screen_monitor_df[["Stock", "LTP", "%Chng","52Wk-H","RSI/i" if "RSI/i" in screen_monitor_df.columns else "RSI","Volume"]].head(self.maxNumRowsInEachResult-1)
-            # Import Utility here since Utility has dependency on PKScheduler which in turn has dependency on 
-            # multiprocessing, which behaves erratically if imported at the top.
-            screen_monitor_df.loc[:, "%Chng"] = screen_monitor_df.loc[:, "%Chng"].astype(str).apply(
-                        lambda x: Utility.tools.roundOff(str(x).split("% (")[0] + colorText.END,0)
+            if "RUNNER" in os.environ.keys():
+                self.monitor_df.reset_index(inplace=True)
+                with pd.option_context('mode.chained_assignment', None):
+                    self.monitor_df = self.monitor_df[["Stock", "LTP", "%Chng","52Wk-H","RSI/i" if "RSI/i" in self.monitor_df.columns else "RSI","Volume"]]
+                    # Import Utility here since Utility has dependency on PKScheduler which in turn has dependency on 
+                    # multiprocessing, which behaves erratically if imported at the top.
+                    self.monitor_df.loc[:, "%Chng"] = self.monitor_df.loc[:, "%Chng"].astype(str).apply(
+                                lambda x: ImageUtility.PKImageTools.roundOff(str(x).split("% (")[0] + colorText.END,0)
+                            )
+                    self.monitor_df.loc[:, "52Wk-H"] = self.monitor_df.loc[:, "52Wk-H"].astype(str).apply(
+                        lambda x: ImageUtility.PKImageTools.roundOff(x,0)
                     )
-            screen_monitor_df.loc[:, "52Wk-H"] = screen_monitor_df.loc[:, "52Wk-H"].astype(str).apply(
-                lambda x: Utility.tools.roundOff(x,0)
-            )
-            screen_monitor_df.loc[:, "Volume"] = screen_monitor_df.loc[:, "Volume"].astype(str).apply(
-                lambda x: Utility.tools.roundOff(x,0)
-            )
-            screen_monitor_df.rename(columns={"%Chng": "Ch%","Volume":"Vol","52Wk-H":"52WkH", "RSI":"RSI/i"}, inplace=True)
-            telegram_df = self.updateDataFrameForTelegramMode(telegram, screen_monitor_df)
-        
+                    self.monitor_df.loc[:, "Volume"] = self.monitor_df.loc[:, "Volume"].astype(str).apply(
+                        lambda x: ImageUtility.PKImageTools.roundOff(x,0)
+                    )
+                    self.monitor_df.rename(columns={"%Chng": "Ch%","Volume":"Vol","52Wk-H":"52WkH", "RSI":"RSI/i"}, inplace=True)
+                    telegram_df = self.updateDataFrameForTelegramMode(telegram or "RUNNER" in os.environ.keys(), self.monitor_df)
+                    self.monitor_df.set_index("Stock",inplace=True)
+            
+        if not self.isPinnedSingleMonitorMode:
+            screen_monitor_df.reset_index(inplace=True)
+            with pd.option_context('mode.chained_assignment', None):
+                screen_monitor_df = screen_monitor_df[["Stock", "LTP", "%Chng","52Wk-H","RSI/i" if "RSI/i" in screen_monitor_df.columns else "RSI","Volume"]].head(self.maxNumRowsInEachResult-1)
+                # Import Utility here since Utility has dependency on PKScheduler which in turn has dependency on 
+                # multiprocessing, which behaves erratically if imported at the top.
+                screen_monitor_df.loc[:, "%Chng"] = screen_monitor_df.loc[:, "%Chng"].astype(str).apply(
+                            lambda x: ImageUtility.PKImageTools.roundOff(str(x).split("% (")[0] + colorText.END,0)
+                        )
+                screen_monitor_df.loc[:, "52Wk-H"] = screen_monitor_df.loc[:, "52Wk-H"].astype(str).apply(
+                    lambda x: ImageUtility.PKImageTools.roundOff(x,0)
+                )
+                screen_monitor_df.loc[:, "Volume"] = screen_monitor_df.loc[:, "Volume"].astype(str).apply(
+                    lambda x: ImageUtility.PKImageTools.roundOff(x,0)
+                )
+                screen_monitor_df.rename(columns={"%Chng": "Ch%","Volume":"Vol","52Wk-H":"52WkH", "RSI":"RSI/i"}, inplace=True)
+            telegram_df = self.updateDataFrameForTelegramMode(telegram or "RUNNER" in os.environ.keys(), screen_monitor_df)
         
         if monitorPosition is not None:
             startRowIndex, startColIndex = monitorPosition
@@ -177,7 +211,7 @@ class MarketMonitor(SingletonMixin, metaclass=SingletonType):
                         else:
                             if colIndex == 0:
                                 stockNameDecorated = screen_monitor_df.iloc[rowIndex-1,colIndex]
-                                stockName = Utility.tools.stockNameFromDecoratedName(stockNameDecorated)
+                                stockName = ImageUtility.PKImageTools.stockNameFromDecoratedName(stockNameDecorated)
                                 stockName = (f"{colorText.BOLD}{colorText.WHITE_FG_BRED_BG}{stockNameDecorated}{colorText.END}") if stockName in self.alertStocks else stockNameDecorated
                                 self.monitor_df.loc[startRowIndex, [f"A{startColIndex+1}"]] = stockName
                             else:
@@ -193,11 +227,12 @@ class MarketMonitor(SingletonMixin, metaclass=SingletonType):
                 stocks = list(self.monitor_df.index)
                 updatedStocks = []
                 for stock in stocks:
-                    stockName = Utility.tools.stockNameFromDecoratedName(stock)
+                    stockName = ImageUtility.PKImageTools.stockNameFromDecoratedName(stock)
                     stockName = (f"{colorText.BOLD}{colorText.WHITE_FG_BRED_BG}{stock}{colorText.END}") if stockName in self.alertStocks else stock
                     updatedStocks.append(stockName)
                 self.monitor_df.reset_index(inplace=True)
-                self.monitor_df["Stock"] = updatedStocks
+                with pd.option_context('mode.chained_assignment', None):
+                    self.monitor_df["Stock"] = updatedStocks
                 self.monitor_df.set_index("Stock",inplace=True)
 
         self.monitor_df = self.monitor_df.replace(np.nan, "-", regex=True)
@@ -241,6 +276,20 @@ class MarketMonitor(SingletonMixin, metaclass=SingletonType):
             if telegram:
                 self.updateIfRunningInTelegramBotMode(screenOptions, chosenMenu, dbTimestamp, telegram, telegram_df)
         else:
+            if ((screenOptions in self.alertOptions and numRecords > 3) or len(self.alertStocks) > 0): # Alert conditions met? Sound alert!
+                # numRecords is actually new lines. Top 3 lines are only headers
+                if telegram_df is not None:
+                    telegram_df.reset_index(inplace=True)
+                    notify_df = telegram_df[telegram_df["Stock"].isin(self.alertStocks)]
+                    notify_df = notify_df[["Stock","LTP","Ch%","Vol"]].head(50)
+                    if len(notify_df) > 0:
+                        notify_output = self.updateIfRunningInTelegramBotMode(screenOptions, chosenMenu, dbTimestamp, False, notify_df,maxcolwidths=None)
+                        if len(notify_output) > 0:
+                            from PKDevTools.classes.pubsub.publisher import PKUserService
+                            from PKDevTools.classes.pubsub.subscriber import notification_service
+                            PKUserService().notify_user(scannerID=self.getScanOptionName(screenOptions),notification=notify_output)
+                    # notify_df = self.monitor_df.reindex(self.alertStocks)  # Includes missing stocks, if any. Returns NaN for such cases
+                Utility.tools.alertSound(beeps=5)
             sleep(self.pinnedIntervalWaitSeconds)
 
     def updateDataFrameForTelegramMode(self, telegram, screen_monitor_df):
@@ -272,41 +321,52 @@ class MarketMonitor(SingletonMixin, metaclass=SingletonType):
                 pass
         return telegram_df
 
-    def updateIfRunningInTelegramBotMode(self, screenOptions, chosenMenu, dbTimestamp, telegram, telegram_df):
-        if telegram and telegram_df is not None:
+    def updateIfRunningInTelegramBotMode(self, screenOptions, chosenMenu, dbTimestamp, telegram, telegram_df,maxcolwidths=[None,None,4,3]):
+        result_output = ""
+        telegram_df_tabulated = ""
+        if telegram_df is not None:
             STD_ENCODING=sys.stdout.encoding if sys.stdout is not None else 'utf-8'
-            
-            telegram_df_tabulated = colorText.miniTabulator().tabulate(
-                            telegram_df,
-                            headers="keys",
-                            tablefmt=colorText.No_Pad_GridFormat,
-                            showindex=False,
-                            maxcolwidths=[None,None,4,3]
-                        ).encode("utf-8").decode(STD_ENCODING).replace("-K-----S-----C-----R","-K-----S----C---R").replace("%  ","% ").replace("=K=====S=====C=====R","=K=====S====C===R").replace("Vol  |","Vol|").replace("x  ","x")
+            try:
+                telegram_df_tabulated = colorText.miniTabulator().tabulate(
+                                telegram_df,
+                                headers="keys",
+                                tablefmt=colorText.No_Pad_GridFormat,
+                                showindex=False,
+                                maxcolwidths=maxcolwidths if maxcolwidths is not None else None
+                            ).encode("utf-8").decode(STD_ENCODING).replace("-K-----S-----C-----R","-K-----S----C---R").replace("%  ","% ").replace("=K=====S=====C=====R","=K=====S====C===R").replace("Vol  |","Vol|").replace("x  ","x")
+            except Exception as e:
+                default_logger().debug(e,exc_info=True)
+                pass
             telegram_df_tabulated = telegram_df_tabulated.replace("-E-----N-----E-----R","-E-----N----E---R").replace("=E=====N=====E=====R","=E=====N====E===R")
             choiceSegments = chosenMenu.split(">")
             optionName = self.getScanOptionName(screenOptions)
             chosenMenu = f"{choiceSegments[-2]}>{choiceSegments[-1]}" if (len(choiceSegments)>=4 or len(choiceSegments[-1]) <= 10) else f"{choiceSegments[-1]}"
-            result_output = f"Latest data as of:{dbTimestamp}\n<b>{optionName}{chosenMenu}</b> [{screenOptions}]\n<pre>{telegram_df_tabulated}</pre>"
+            result_output = f"Latest data as of {dbTimestamp}\n<b>[{optionName}] {chosenMenu}</b> [{screenOptions}]\n<pre>{telegram_df_tabulated}</pre>"
             try:
-                filePath = os.path.join(Archiver.get_user_data_dir(), f"monitor_outputs_{self.monitorIndex}.txt")
-                f = open(filePath, "w")
-                f.write(result_output)
-                f.close()
+                if telegram:
+                    filePath = os.path.join(Archiver.get_user_data_dir(), f"monitor_outputs_{self.monitorIndex}.txt")
+                    f = open(filePath, "w")
+                    f.write(result_output)
+                    f.close()
             except: # pragma: no cover
                 pass
+        return result_output
 
     def getScanOptionName(self, screenOptions):
         from pkscreener.classes.MenuOptions import PREDEFINED_SCAN_MENU_VALUES
         if screenOptions is None:
             return ""
-        choices = f"--systemlaunched -a y -e -o '{screenOptions.replace('C:','X:').replace('D:','')}'"
+        baseIndex = 12
+        baseIndices = str(screenOptions).split(":")
+        if len(baseIndices) > 1:
+            baseIndex = baseIndices[1]
+        choices = f"--systemlaunched -a y -e -o '{str(screenOptions).replace('C:','X:').replace('D:','')}'"
         indexNum = -1
         try:
             indexNum = PREDEFINED_SCAN_MENU_VALUES.index(choices)
         except: # pragma: no cover
             pass
-        optionName = ""
+        optionName = str(screenOptions).replace(':D','').replace(':','_')
         if indexNum >= 0:
-            optionName = f"{('P_1_'+str(indexNum +1)+':') if '>|' in choices else optionName}"
+            optionName = f"{('P_1_'+str(indexNum +1)+'_'+str(baseIndex)) if '>|' in choices else str(screenOptions).replace(':D','').replace(':','_')}"
         return optionName

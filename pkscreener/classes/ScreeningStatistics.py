@@ -114,6 +114,8 @@ class ScreeningStatistics:
     #Calculating signals
     def computeBuySellSignals(self,df,ema_period=200,retry=True):
         try:
+            df["Above"] = False
+            df["Below"] = False
             if Imports["vectorbt"]:
                 from vectorbt.indicators import MA as vbt
                 if df is not None:
@@ -127,7 +129,11 @@ class ScreeningStatistics:
                     df["Above"] = ema > df["ATRTrailingStop"]
                     df["Below"] = ema < df["ATRTrailingStop"]
         except (OSError,FileNotFoundError) as e: # pragma: no cover
-            OutputControls().printOutput(f"{colorText.FAIL}Some dependencies are missing. Try and run this option again.{colorText.END}")
+            msg = f"{colorText.FAIL}Some dependencies are missing. Try and run this option again.{colorText.END}"
+            if 'unittest' in sys.modules or any("pytest" in arg for arg in sys.argv):
+                print(msg)
+            else:
+                OutputControls().printOutput(msg)
             # OSError:RALLIS: [Errno 2] No such file or directory: '/tmp/_MEIzoTV6A/vectorbt/templates/light.json'
             # if "No such file or directory" in str(e):
             try:
@@ -135,8 +141,12 @@ class ScreeningStatistics:
                 outputFolder = None
                 try:
                     outputFolder = os.sep.join(e.filename.split(os.sep)[:-1])
+                except KeyboardInterrupt: # pragma: no cover
+                    raise KeyboardInterrupt
                 except Exception as e: # pragma: no cover
                     outputFolder = os.sep.join(str(e).split("\n")[0].split(": ")[1].replace("'","").split(os.sep)[:-1])
+            except KeyboardInterrupt: # pragma: no cover
+                raise KeyboardInterrupt
             except Exception as e: # pragma: no cover
                 pass
             self.downloadSaveTemplateJsons(outputFolder)
@@ -144,11 +154,17 @@ class ScreeningStatistics:
                 return self.computeBuySellSignals(df,ema_period=ema_period,retry=False)
             return None
         except ImportError as e: # pragma: no cover
-            OutputControls().printOutput(f"{colorText.FAIL}The main module needed for best Buy/Sell result calculation is missing. Falling back on an alternative, but it is not very reliable.{colorText.END}")
+            msg = f"{colorText.FAIL}The main module needed for best Buy/Sell result calculation is missing. Falling back on an alternative, but it is not very reliable.{colorText.END}"
+            if 'unittest' in sys.modules or any("pytest" in arg for arg in sys.argv):
+                print(msg)
+            else:
+                OutputControls().printOutput(msg)
             if df is not None:
                 ema = pktalib.EMA(df["Close"], ema_period) if ema_period > 1 else df["Close"]#short_name='EMA', ewm=True)        
                 df["Above"] = ema > df["ATRTrailingStop"]
                 df["Below"] = ema < df["ATRTrailingStop"]
+        except KeyboardInterrupt: # pragma: no cover
+            raise KeyboardInterrupt
         except Exception as e: # pragma: no cover
             pass
                 
@@ -201,6 +217,8 @@ class ScreeningStatistics:
                 # else:
                 #     if self.shouldLog:
                 #         self.default_logger.debug(f"Already exists: {path}")
+            except KeyboardInterrupt: # pragma: no cover
+                raise KeyboardInterrupt
             except Exception as e: # pragma: no cover
                 # if self.shouldLog:
                 #     self.default_logger.debug(e, exc_info=True)
@@ -1044,6 +1062,8 @@ class ScreeningStatistics:
         lowRow = reversedData[reversedData["Low"] == majorLow]
         anchored_date = lowRow.index[0]
         avwap = pktalib.AVWAP(df=reversedData,anchored_date=anchored_date)
+        if 'anchored_VWAP' not in reversedData.keys():
+            reversedData.loc[:,'anchored_VWAP'] =avwap
         recentOpen = reversedData["Open"].tail(1).head(1).iloc[0]
         recentClose = reversedData["Close"].tail(1).head(1).iloc[0]
         recentLow = reversedData["Low"].tail(1).head(1).iloc[0]
@@ -1312,6 +1332,18 @@ class ScreeningStatistics:
 
         return True
 
+    def get_dynamic_order(self,df):
+        """Dynamically calculate 'order' parameter for local extrema detection based on volatility."""
+        avg_volatility = df['Volatility'].mean()
+        
+        # If volatility is high, require more data points to confirm a cup
+        if avg_volatility > df['Close'].mean() * 0.02:  
+            return int(df['Close'].mean() * 0.2) + 1  # Higher volatility → require more confirmation
+        elif avg_volatility < df['Close'].mean() * 0.005:  
+            return int(df['Close'].mean() * 0.05) + 1  # Lower volatility → allow faster pattern detection
+        else:
+            return 15  # Default case
+        
     def validate_volume(self,df, cup_start, cup_end, handle_end):
         """Ensure decreasing volume in the cup and increasing volume at breakout."""
         avg_cup_volume = df['Volume'].iloc[cup_start:cup_end].mean()
@@ -1320,11 +1352,17 @@ class ScreeningStatistics:
 
         return avg_cup_volume > avg_handle_volume and breakout_volume > avg_handle_volume
 
-    def find_cup_and_handle(self,df,saveDict,screenDict):
+    def find_cup_and_handle(self,df,saveDict=None,screenDict=None,order=0):
         """Detect Cup and Handle pattern with volume and breakout confirmation."""
+        try:
+            from scipy.signal import argrelextrema
+        except:
+            return False, None
         close_prices = df['Close'].values
-        local_min_idx = pktalib.argrelextrema(close_prices, np.less, order=15)[0]  # Local minima (potential cup bottoms)
-        local_max_idx = pktalib.argrelextrema(close_prices, np.greater, order=15)[0]  # Local maxima (potential resistance)
+        if order <=0:
+            order = self.get_dynamic_order(df)  # Set order dynamically
+        local_min_idx = argrelextrema(close_prices, np.less, order=order)[0]  # Local minima (potential cup bottoms)
+        local_max_idx = argrelextrema(close_prices, np.greater, order=order)[0]  # Local maxima (potential resistance)
 
         if len(local_min_idx) < 3 or len(local_max_idx) < 2:
             return False,None  
@@ -1357,14 +1395,15 @@ class ScreeningStatistics:
         if not self.validate_volume(df, cup_start, cup_end, handle_end):
             return False,None  
         
-        # saved = self.findCurrentSavedValue(screenDict,saveDict, "Pattern")
-        # screenDict["Pattern"] = (
-        #     saved[0] 
-        #     + colorText.GREEN
-        #     + f"Cup and Handle ({cup_start},{cup_bottom},{cup_end},{handle_start},{handle_end})"
-        #     + colorText.END
-        # )
-        # saveDict["Pattern"] = saved[1] + f"Cup and Handle ({cup_start},{cup_bottom},{cup_end},{handle_start},{handle_end})"
+        if saveDict is not None and screenDict is not None:
+            saved = self.findCurrentSavedValue(screenDict,saveDict, "Pattern")
+            screenDict["Pattern"] = (
+                saved[0] 
+                + colorText.GREEN
+                + f"Cup and Handle ({cup_start},{cup_bottom},{cup_end},{handle_start},{handle_end})"
+                + colorText.END
+            )
+            saveDict["Pattern"] = saved[1] + f"Cup and Handle ({cup_start},{cup_bottom},{cup_end},{handle_start},{handle_end})"
 
         return True,(cup_start, cup_bottom, cup_end, handle_start, handle_end)
     
@@ -1399,7 +1438,7 @@ class ScreeningStatistics:
         return recent["Open"].iloc[0] > recent["Close"].iloc[1]
 
     # Find DEEL Momentum
-    def findHighMomentum(self, df):
+    def findHighMomentum(self, df, strict=False):
         #https://chartink.com/screener/deel-momentum-rsi-14-mfi-14-cci-14
         if df is None or len(df) < 2:
             return False
@@ -1416,7 +1455,25 @@ class ScreeningStatistics:
         rsi = recent["RSI"].iloc[1]
         mfi = mfis.tail(1).iloc[0]
         cci = ccis.tail(1).iloc[0]
-        hasDeelMomentum = percentChange >= 1 and ((rsi>= 68 and mfi >= 68 and cci >= 110) or (rsi>= 50 and mfi >= 50 and recent["Close"].iloc[1] >= sma7.iloc[1] and recent["Close"].iloc[1] >= sma20.iloc[1]))
+        # Percent Change >= 1%
+        # The filter checks if the current daily closing price is greater than the 
+        # closing price from one day ago, increased by 1%. This means the current 
+        # price should be at least 1% higher than the price from the previous day.
+        # CCI > 110
+        # A CCI value above 100 suggests that the stock's price is at least 10% 
+        # higher than its average price over the past 14 days, reflecting strong 
+        # upward momentum.
+        # MFI > 68
+        # MFI value above 68 suggests that the stock is experiencing strong buying 
+        # pressure, indicating a potential overbought condition.
+        # RSI > 68
+        # RSI above 68 indicates that the stock is overbought, suggesting that it 
+        # has increased by more than 68% from its average price over the last 14 days.
+        deelMomentum1 = percentChange >= 1 and (rsi>= 68 and mfi >= 68 and cci >= 110)
+        deelMomentum2 = (rsi>= 50 and mfi >= 50 and recent["Close"].iloc[1] >= sma7.iloc[1] and 
+                          recent["Close"].iloc[1] >= sma20.iloc[1]) and not strict
+        hasDeelMomentum = deelMomentum1 or deelMomentum2
+                         
         # if self.shouldLog:
         #     self.default_logger.debug(data.head(10))
         return hasDeelMomentum
@@ -1766,6 +1823,8 @@ class ScreeningStatistics:
                 maRev = pktalib.MA(dataCopy["Close"], timeperiod=maLength)
             try:
                 dataCopy.drop("maRev", axis=1, inplace=True, errors="ignore")
+            except KeyboardInterrupt: # pragma: no cover
+                raise KeyboardInterrupt
             except Exception:# pragma: no cover
                 pass
             dataCopy.insert(len(dataCopy.columns), "maRev", maRev)
@@ -1875,6 +1934,17 @@ class ScreeningStatistics:
         cond5 = cond4 and (recent["Volume"].iloc[0] > recent["SMAV10"].iloc[0] * 0.75)
         return cond5
     
+    def findSuperGainersLosers(self, df, percentChangeRequired=15, gainer=True):
+        if df is None or len(df) < 2:
+            return False
+        data = df.copy()
+        data = data.fillna(0)
+        data = data.replace([np.inf, -np.inf], 0)
+        data = data[::-1]  # Reverse the dataframe so that its the oldest date first
+        recent = data.tail(2)
+        percentChange = round((recent["Close"].iloc[1] - recent["Close"].iloc[0]) *100/recent["Close"].iloc[0],1)
+        return percentChange >= percentChangeRequired if gainer else percentChange <= percentChangeRequired
+
     #@measure_time
     # Find out trend for days to lookback
     def findTrend(self, df, screenDict, saveDict, daysToLookback=None, stockName=""):
@@ -1919,6 +1989,8 @@ class ScreeningStatistics:
                 )
                 saveDict["Trend"] = saved[1] + "Unknown"
                 return saveDict["Trend"]
+            except KeyboardInterrupt: # pragma: no cover
+                raise KeyboardInterrupt
             except Exception as e:  # pragma: no cover
                 self.default_logger.debug(e, exc_info=True)
                 slope, _ = 0, 0
@@ -1985,6 +2057,8 @@ class ScreeningStatistics:
                 slope, intercept, r_value, p_value, std_err = linregress(
                     x=data_low["Number"], y=data_low["Low"]
                 )
+            except KeyboardInterrupt: # pragma: no cover
+                raise KeyboardInterrupt
             except Exception as e:  # pragma: no cover
                 self.default_logger.debug(e, exc_info=True)
                 continue
@@ -2064,6 +2138,8 @@ class ScreeningStatistics:
                 isDowntrend = (today_lma < lma_minus20) and (today_lma < lma_minus80) and (today_lma < lma_minus100)
                 is50DMAUptrend = (today_sma > sma_minus9) or (today_sma > sma_minus14) or (today_sma > sma_minus20)
                 is50DMADowntrend = (today_sma < sma_minus9) and (today_sma < sma_minus14) and (today_sma < sma_minus20)
+            except KeyboardInterrupt: # pragma: no cover
+                raise KeyboardInterrupt
             except Exception:  # pragma: no cover
                 # self.default_logger.debug(e, exc_info=True)
                 pass
@@ -2084,6 +2160,8 @@ class ScreeningStatistics:
                     roundOff +=1
                     millions = round(mf_inst_ownershipChange/1000000,roundOff)
                 change_millions = f"({millions}M)"
+            except KeyboardInterrupt: # pragma: no cover
+                raise KeyboardInterrupt
             except Exception as e:  # pragma: no cover
                 self.default_logger.debug(e, exc_info=True)
                 pass
@@ -2097,6 +2175,8 @@ class ScreeningStatistics:
                     saveDict["FVDiff"] = fairValueDiff
                     screenDict["FVDiff"] = fairValueDiff
                     screenDict["FairValue"] = (colorText.GREEN if fairValue >= ltp else colorText.FAIL) + saveDict["FairValue"] + colorText.END
+            except KeyboardInterrupt: # pragma: no cover
+                raise KeyboardInterrupt
             except Exception as e:  # pragma: no cover
                 self.default_logger.debug(e, exc_info=True)
                 pass
@@ -2180,6 +2260,8 @@ class ScreeningStatistics:
                 except (TimeoutError, ConnectionError) as e:
                     self.default_logger.debug(e, exc_info=True)
                     pass
+                except KeyboardInterrupt: # pragma: no cover
+                    raise KeyboardInterrupt
                 except Exception as e: # pragma: no cover
                     self.default_logger.debug(e, exc_info=True)
                     pass
@@ -2191,7 +2273,7 @@ class ScreeningStatistics:
                             fvResponseValue = fv["latestFairValue"]
                             if fvResponseValue is not None:
                                 fairValue = float(fvResponseValue)
-                        except: # pragma: no cover # pragma: no cover
+                        except: # pragma: no cover
                             pass
                             # self.default_logger.debug(f"{e}\nResponse:fv:\n{fv}", exc_info=True)
                     fairValue = round(float(fairValue),1)
@@ -2218,6 +2300,8 @@ class ScreeningStatistics:
         except (TimeoutError, ConnectionError) as e:
             self.default_logger.debug(e, exc_info=True)
             pass
+        except KeyboardInterrupt: # pragma: no cover
+            raise KeyboardInterrupt
         except Exception as e: # pragma: no cover
             self.default_logger.debug(e, exc_info=True)
             pass
@@ -2228,6 +2312,8 @@ class ScreeningStatistics:
                     changeStatusRowsInst = security.institutionOwnership(top=5)
                     changeStatusDataMF = security.mutualFundFIIChangeData(changeStatusRowsMF)
                     changeStatusDataInst = security.mutualFundFIIChangeData(changeStatusRowsInst)
+            except KeyboardInterrupt: # pragma: no cover
+                raise KeyboardInterrupt
             except Exception as e: # pragma: no cover
                 self.default_logger.debug(e, exc_info=True)
                 # TypeError or ConnectionError because we could not find the stock or MFI data isn't available?
@@ -2540,6 +2626,8 @@ class ScreeningStatistics:
                             axis=0,
                         )
                         result_df.reset_index(drop=True, inplace=True)
+                    except KeyboardInterrupt: # pragma: no cover
+                        raise KeyboardInterrupt
                     except Exception as e:  # pragma: no cover
                         self.default_logger.debug(e, exc_info=True)
                         pass
@@ -2656,9 +2744,12 @@ class ScreeningStatistics:
         data = df.copy()
         try:
             data = data.replace(np.inf, np.nan).replace(-np.inf, np.nan).dropna(how="all")
+            if data.empty:
+                return (data,data)
             # self.default_logger.info(f"Preprocessing data:\n{data.head(1)}\n")
             if daysToLookback is None:
                 daysToLookback = self.configManager.daysToLookback
+            volatility = df['Close'].rolling(window=20).std()
             if self.configManager.useEMA:
                 sma = pktalib.EMA(data["Close"], timeperiod=50)
                 lma = pktalib.EMA(data["Close"], timeperiod=200)
@@ -2668,6 +2759,7 @@ class ScreeningStatistics:
                 data.insert(len(data.columns), "LMA", lma)
                 data.insert(len(data.columns), "SSMA", ssma)
                 data.insert(len(data.columns), "SSMA20", ssma20)
+                data.insert(len(data.columns), "Volatility", volatility)
             else:
                 sma = pktalib.SMA(data["Close"], timeperiod=50)
                 lma = pktalib.SMA(data["Close"], timeperiod=200)
@@ -2677,6 +2769,7 @@ class ScreeningStatistics:
                 data.insert(len(data.columns), "LMA", lma)
                 data.insert(len(data.columns), "SSMA", ssma)
                 data.insert(len(data.columns), "SSMA20", ssma20)
+                data.insert(len(data.columns), "Volatility", volatility)
             vol = pktalib.SMA(data["Volume"], timeperiod=20)
             rsi = pktalib.RSI(data["Close"], timeperiod=14)
             data.insert(len(data.columns), "VolMA", vol)
@@ -2689,9 +2782,13 @@ class ScreeningStatistics:
                 )
                 data.insert(len(data.columns), "FASTK", fastk)
                 data.insert(len(data.columns), "FASTD", fastd)
+            except KeyboardInterrupt: # pragma: no cover
+                raise KeyboardInterrupt
             except Exception as e: # pragma: no cover
                 self.default_logger.debug(e, exc_info=True)
                 pass
+        except KeyboardInterrupt: # pragma: no cover
+            raise KeyboardInterrupt
         except Exception as e: # pragma: no cover
                 self.default_logger.debug(e, exc_info=True)
                 pass
@@ -3280,7 +3377,7 @@ class ScreeningStatistics:
     #@measure_time
     # Validate Lorentzian Classification signal
     def validateLorentzian(self, df, screenDict, saveDict, lookFor=3,stock=None):
-        if df is None or len(df) == 0:
+        if df is None or len(df) < 20:
             return False
         data = df.copy()
         # lookFor: 1-Buy, 2-Sell, 3-Any
@@ -3343,6 +3440,8 @@ class ScreeningStatistics:
                 saveDict["Pattern"] = saved[1] + "Lorentzian-Sell"
                 if lookFor != 1: # Not Buy
                     return True
+        except KeyboardInterrupt: # pragma: no cover
+            raise KeyboardInterrupt
         except Exception as e:  # pragma: no cover
             # ValueError: operands could not be broadcast together with shapes (20,) (26,)
             # File "/opt/homebrew/lib/python3.11/site-packages/advanced_ta/LorentzianClassification/Classifier.py", line 186, in __init__
@@ -3458,6 +3557,8 @@ class ScreeningStatistics:
                     dayDate = f"{indexDate.day}/{indexDate.month} {indexDate.hour}:{indexDate.minute}" if indexDate.hour > 0 else f"{indexDate.day}/{indexDate.month} {today.hour}:{today.minute}"
                     screenDict["Time"] = f"{colorText.WHITE}{dayDate}{colorText.END}"
                     saveDict["Time"] = str(dayDate)
+            except KeyboardInterrupt: # pragma: no cover
+                raise KeyboardInterrupt
             except Exception as e: # pragma: no cover
                 self.default_logger.debug(e, exc_info=True)
                 pass
@@ -3587,6 +3688,8 @@ class ScreeningStatistics:
                 # self.default_logger.debug(data)
                 pass
             return False
+        except KeyboardInterrupt: # pragma: no cover
+            raise KeyboardInterrupt
         except Exception as e:  # pragma: no cover
             self.default_logger.debug(e, exc_info=True)
             return False
@@ -3887,6 +3990,8 @@ class ScreeningStatistics:
             df_new = df_new.head(1)
             df_new["cloud_green"] = df_new["ISA_9"].iloc[0] > df_new["ISB_26"].iloc[0]
             df_new["cloud_red"] = df_new["ISB_26"].iloc[0] > df_new["ISA_9"].iloc[0]
+        except KeyboardInterrupt: # pragma: no cover
+            raise KeyboardInterrupt
         except Exception as e:  # pragma: no cover
             self.default_logger.debug(e, exc_info=True)
             pass
@@ -3994,6 +4099,8 @@ class ScreeningStatistics:
                         saveDict["deviationScore"] = deviationScore
                         return True
                     return False
+        except KeyboardInterrupt: # pragma: no cover
+            raise KeyboardInterrupt
         except Exception as e:  # pragma: no cover
             self.default_logger.debug(e, exc_info=True)
         return False
@@ -4146,10 +4253,14 @@ class ScreeningStatistics:
                         )
                         saveDict["Pattern"] = saved[1] + "Demand Rise"
                         return True
+            except KeyboardInterrupt: # pragma: no cover
+                raise KeyboardInterrupt
             except IndexError as e: # pragma: no cover
                 # self.default_logger.debug(e, exc_info=True)
                 pass
             return False
+        except KeyboardInterrupt: # pragma: no cover
+            raise KeyboardInterrupt
         except Exception as e:  # pragma: no cover
             self.default_logger.debug(e, exc_info=True)
             return False

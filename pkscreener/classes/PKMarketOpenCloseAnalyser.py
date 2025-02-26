@@ -33,6 +33,8 @@ import pandas as pd
 import pkscreener.classes.Utility as Utility
 from pkscreener.classes.ConfigManager import parser, tools
 from pkscreener.classes.ScreeningStatistics import ScreeningStatistics
+from pkscreener.classes import AssetsManager
+
 from PKDevTools.classes.ColorText import colorText
 from PKDevTools.classes import Archiver
 from PKDevTools.classes.Singleton import SingletonType, SingletonMixin
@@ -85,13 +87,17 @@ class PKMarketOpenCloseAnalyser:
         daily_exists, daily_cache_file, stockDict = PKMarketOpenCloseAnalyser.ensureDailyStockDataExists(listStockCodes=listStockCodes)
         updatedCandleData = PKMarketOpenCloseAnalyser.updatedCandleData
         allDailyCandles = PKMarketOpenCloseAnalyser.allDailyCandles
+        if updatedCandleData is not None and len(updatedCandleData) < 1:
+            updatedCandleData = None
+        if allDailyCandles is not None and len(allDailyCandles) < 1:
+            allDailyCandles = None
         if  ((int_exists or len(stockDictInt) > 0) and (daily_exists or len(stockDict) > 0)) and (updatedCandleData is None or allDailyCandles is None):
             allDailyCandles = PKMarketOpenCloseAnalyser.getLatestDailyCandleData(daily_cache_file,stockDict)
             morningIntradayCandle = PKMarketOpenCloseAnalyser.getIntradayCandleFromMorning(int_cache_file,sliceWindowDatetime=sliceWindowDatetime,stockDictInt=stockDictInt)
             updatedCandleData = PKMarketOpenCloseAnalyser.combineDailyStockDataWithMorningSimulation(allDailyCandles,morningIntradayCandle)
-            # PKMarketOpenCloseAnalyser.updatedCandleData = updatedCandleData
-            # PKMarketOpenCloseAnalyser.allDailyCandles = allDailyCandles
-            Utility.tools.saveStockData(updatedCandleData,PKMarketOpenCloseAnalyser.configManager,1,False,False, True)
+            PKMarketOpenCloseAnalyser.updatedCandleData = updatedCandleData
+            PKMarketOpenCloseAnalyser.allDailyCandles = allDailyCandles
+            AssetsManager.PKAssetsManager.saveStockData(updatedCandleData,PKMarketOpenCloseAnalyser.configManager,1,False,False, True)
         return updatedCandleData, allDailyCandles
 
     @Halo(text='  [+] Running final analysis...', spinner='dots')
@@ -104,13 +110,13 @@ class PKMarketOpenCloseAnalyser:
                 save_df, screen_df = PKMarketOpenCloseAnalyser.diffMorningCandleDataWithLatestDailyCandleData(screen_df,save_df, updatedCandleData, allDailyCandles,runOptionName=runOptionName,filteredListOfStocks=filteredListOfStocks)
         except: # pragma: no cover
             pass
-        Utility.tools.saveStockData(allDailyCandles,PKMarketOpenCloseAnalyser.configManager,1,False,False, True)
+        AssetsManager.PKAssetsManager.saveStockData(allDailyCandles,PKMarketOpenCloseAnalyser.configManager,1,False,False, True)
         return save_df, screen_df
 
     @Halo(text='  [+] Getting intraday data...', spinner='dots')
     def ensureIntradayStockDataExists(listStockCodes=[]):
         # Ensure that the intraday_stock_data_<date>.pkl file exists
-        exists, cache_file = Utility.tools.afterMarketStockDataExists(intraday=True)
+        exists, cache_file = AssetsManager.PKAssetsManager.afterMarketStockDataExists(intraday=True)
         copyFilePath = os.path.join(Archiver.get_user_data_dir(), f"copy_{cache_file}")
         srcFilePath = os.path.join(Archiver.get_user_data_dir(), cache_file)
         srcFileSize = os.stat(srcFilePath).st_size if os.path.exists(srcFilePath) else 0
@@ -139,8 +145,8 @@ class PKMarketOpenCloseAnalyser:
                     PKMarketOpenCloseAnalyser.configManager.duration = savedDuration
                     PKMarketOpenCloseAnalyser.configManager.setConfig(parser, default=True, showFileCreatedText=False)
                     return True, cache_file, stockDict
-            stockDict = Utility.tools.loadStockData(stockDict={},configManager=PKMarketOpenCloseAnalyser.configManager,downloadOnly=False,defaultAnswer='Y',retrial=False,forceLoad=False,stockCodes=listStockCodes,isIntraday=True)
-            exists, cache_file = Utility.tools.afterMarketStockDataExists(intraday=True)
+            stockDict = AssetsManager.PKAssetsManager.loadStockData(stockDict={},configManager=PKMarketOpenCloseAnalyser.configManager,downloadOnly=False,defaultAnswer='Y',retrial=False,forceLoad=False,stockCodes=listStockCodes,isIntraday=True)
+            exists, cache_file = AssetsManager.PKAssetsManager.afterMarketStockDataExists(intraday=True)
             PKMarketOpenCloseAnalyser.configManager.period = savedPeriod
             PKMarketOpenCloseAnalyser.configManager.duration = savedDuration
             PKMarketOpenCloseAnalyser.configManager.setConfig(parser, default=True, showFileCreatedText=False)
@@ -160,7 +166,7 @@ class PKMarketOpenCloseAnalyser:
     @Halo(text='  [+] Getting daily data...', spinner='dots')
     def ensureDailyStockDataExists(listStockCodes=[]):
         # Ensure that the stock_data_<date>.pkl file exists
-        exists, cache_file = Utility.tools.afterMarketStockDataExists(intraday=False)
+        exists, cache_file = AssetsManager.PKAssetsManager.afterMarketStockDataExists(intraday=False)
         copyFilePath = os.path.join(Archiver.get_user_data_dir(), f"copy_{cache_file}")
         srcFilePath = os.path.join(Archiver.get_user_data_dir(), cache_file)
         srcFileSize = os.stat(srcFilePath).st_size if os.path.exists(srcFilePath) else 0
@@ -191,8 +197,8 @@ class PKMarketOpenCloseAnalyser:
                     PKMarketOpenCloseAnalyser.configManager.duration = savedDuration
                     PKMarketOpenCloseAnalyser.configManager.setConfig(parser, default=True, showFileCreatedText=False)
                     return True, cache_file, stockDict
-            stockDict = Utility.tools.loadStockData(stockDict={},configManager=PKMarketOpenCloseAnalyser.configManager,downloadOnly=False,defaultAnswer='Y',retrial=False,forceLoad=False,stockCodes=listStockCodes,isIntraday=False,forceRedownload=True)
-            exists, cache_file = Utility.tools.afterMarketStockDataExists(intraday=False)
+            stockDict = AssetsManager.PKAssetsManager.loadStockData(stockDict={},configManager=PKMarketOpenCloseAnalyser.configManager,downloadOnly=False,defaultAnswer='Y',retrial=False,forceLoad=False,stockCodes=listStockCodes,isIntraday=False,forceRedownload=True)
+            exists, cache_file = AssetsManager.PKAssetsManager.afterMarketStockDataExists(intraday=False)
             PKMarketOpenCloseAnalyser.configManager.period = savedPeriod
             PKMarketOpenCloseAnalyser.configManager.duration = savedDuration
             PKMarketOpenCloseAnalyser.configManager.setConfig(parser, default=True, showFileCreatedText=False)
@@ -280,13 +286,17 @@ class PKMarketOpenCloseAnalyser:
                 with pd.option_context('mode.chained_assignment', None):
                     df.dropna(axis=0, how="all", inplace=True)
                 if df is not None and len(df) > 0:
+                    close = PKMarketOpenCloseAnalyser.getMorningClose(df)
+                    adjClose = df["Adj Close"][-1] if "Adj Close" in df.columns else close
                     combinedCandle = {"Open":PKMarketOpenCloseAnalyser.getMorningOpen(df), "High":max(df["High"]), 
-                                    "Low":min(df["Low"]),"Close":PKMarketOpenCloseAnalyser.getMorningClose(df),
-                                    "Adj Close":df["Adj Close"][-1],"Volume":sum(df["Volume"])}
+                                    "Low":min(df["Low"]),"Close":close,
+                                    "Adj Close":adjClose,"Volume":sum(df["Volume"])}
                     tradingDate = df.index[-1] #PKDateUtilities.tradingDate()
                     timestamp = datetime.datetime.strptime(tradingDate.strftime("%Y-%m-%d %H:%M:%S"),"%Y-%m-%d %H:%M:%S")
                     df = pd.DataFrame([combinedCandle], columns=df.columns, index=[timestamp])
                     morningIntradayCandle[stock] = df.to_dict("split")
+            except KeyboardInterrupt: # pragma: no cover
+                raise KeyboardInterrupt
             except Exception as e: # pragma: no cover
                 OutputControls().printOutput(f"{stock}:    {e}")
                 continue

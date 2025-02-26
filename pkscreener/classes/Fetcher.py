@@ -26,17 +26,28 @@
 import os
 import sys
 import warnings
-
+import logging
+from time import sleep
 warnings.simplefilter("ignore", DeprecationWarning)
 warnings.simplefilter("ignore", FutureWarning)
 import pandas as pd
 import yfinance as yf
 from yfinance import shared
-# from yfinance.exceptions import YFPricesMissingError, YFInvalidPeriodError
-class YFPricesMissingError(Exception):
-    pass
-class YFInvalidPeriodError(Exception):
-    pass
+# from yfinance.const import USER_AGENTS
+from PKDevTools.classes.Utils import USER_AGENTS
+import random
+from yfinance.version import version as yfVersion
+if yfVersion == "0.2.28":
+    from yfinance.data import TickerData as YfData
+    class YFPricesMissingError(Exception):
+        pass
+    class YFInvalidPeriodError(Exception):
+        pass
+    class YFRateLimitError(Exception):
+        pass
+else:
+    from yfinance.data import YfData
+    from yfinance.exceptions import YFPricesMissingError, YFInvalidPeriodError, YFRateLimitError
 from concurrent.futures import ThreadPoolExecutor
 from PKDevTools.classes.PKDateUtilities import PKDateUtilities
 from PKDevTools.classes.ColorText import colorText
@@ -46,9 +57,29 @@ from PKDevTools.classes.SuppressOutput import SuppressOutput
 from PKNSETools.PKNSEStockDataFetcher import nseStockDataFetcher
 from pkscreener.classes.PKTask import PKTask
 from PKDevTools.classes.OutputControls import OutputControls
+from PKDevTools.classes import Archiver
 # This Class Handles Fetching of Stock Data over the internet
 
+from requests import Session
+from requests_cache import CacheMixin, SQLiteCache
+from requests_ratelimiter import LimiterMixin, MemoryQueueBucket
+from pyrate_limiter import Duration, RequestRate, Limiter
+class CachedLimiterSession(CacheMixin, LimiterMixin, Session):
+   pass
 
+# https://help.yahooinc.com/dsp-api/docs/rate-limits
+# Define multiple rate limits
+TRY_FACTOR = 50
+yf_limiter = Limiter(
+    RequestRate(60*TRY_FACTOR, Duration.MINUTE),      # Max 60 requests per minute
+    RequestRate(360*TRY_FACTOR, Duration.HOUR),       # Max 360 requests per hour
+    RequestRate(8000*TRY_FACTOR, Duration.DAY)        # Max 8000 requests per day
+)
+yf_session = CachedLimiterSession(
+   limiter=yf_limiter,
+   bucket_class=MemoryQueueBucket,
+   backend=SQLiteCache(db_path=os.path.join(Archiver.get_user_data_dir(),"yfinance.cache")),
+)
 class screenerStockDataFetcher(nseStockDataFetcher):
     _tickersInfoDict={}
     def fetchStockDataWithArgs(self, *args):
@@ -94,7 +125,8 @@ class screenerStockDataFetcher(nseStockDataFetcher):
         printCounter=False,
         start=None, 
         end=None,
-        exchangeSuffix=".NS"
+        exchangeSuffix=".NS",
+        attempt = 0
     ):
         if isinstance(stockCode,list):
             if len(exchangeSuffix) > 0:
@@ -117,6 +149,13 @@ class screenerStockDataFetcher(nseStockDataFetcher):
         data = None
         with SuppressOutput(suppress_stdout=(not printCounter), suppress_stderr=(not printCounter)):
             try:
+                if yfVersion == "0.2.28":
+                    YfData.user_agent_headers = {
+                        'User-Agent': random.choice(USER_AGENTS)}
+                if "PKDevTools_Default_Log_Level" in os.environ.keys():
+                    from yfinance import utils
+                    yflogger = utils.get_yf_logger()
+                    yflogger.setLevel(int(os.environ.get("PKDevTools_Default_Log_Level"),logging.DEBUG))
                 data = yf.download(
                     tickers=stockCode,
                     period=period,
@@ -127,7 +166,10 @@ class screenerStockDataFetcher(nseStockDataFetcher):
                     group_by='ticker',
                     timeout=self.configManager.generalTimeout/4,
                     start=start,
-                    end=end
+                    end=end,
+                    auto_adjust=True,
+                    threads=len(stockCode) if not isinstance(stockCode,str) else True,
+                    session=yf_session
                 )
                 if isinstance(stockCode,str):
                     if (data is None or data.empty):
@@ -142,8 +184,13 @@ class screenerStockDataFetcher(nseStockDataFetcher):
                                     recommendedPeriod = str(err).split("[")[1].split("]")[0].split(",")[-1].strip()
                                 recommendedPeriod = recommendedPeriod.replace("'","").replace("\"","")
                                 # default_logger().debug(f"Sending request again for {ticker} with period:{recommendedPeriod}")
-                                data = self.fetchStockData(stockCode=ticker,period=recommendedPeriod,duration=duration,printCounter=printCounter, start=start,end=end)
+                                data = self.fetchStockData(stockCode=ticker,period=period,duration=duration,printCounter=printCounter, start=start,end=end,proxyServer=proxyServer,)
                                 return data
+                            elif "YFRateLimitError" in err:
+                                if attempt <= 2:
+                                    default_logger().debug(f"YFRateLimitError Hit! Going for attempt : {attempt+1}")
+                                    # sleep(attempt*1) # Exponential backoff
+                                    # return self.fetchStockData(stockCode=stockCode,period=period,duration=duration,printCounter=printCounter, start=start,end=end,screenResultsCounter=screenResultsCounter,screenCounter=screenCounter,totalSymbols=totalSymbols,exchangeSuffix=exchangeSuffix,attempt=attempt+1)
                     else:
                         multiIndex = data.keys()
                         if isinstance(multiIndex, pd.MultiIndex):
@@ -151,8 +198,26 @@ class screenerStockDataFetcher(nseStockDataFetcher):
                             # we'd have received a multiindex dataframe
                             listStockCodes = multiIndex.get_level_values(0)
                             data = data.get(listStockCodes[0])
+                # else:
+                #     if (data is None or data.empty):
+                #         if len(shared._ERRORS) > 0:
+                #             default_logger().debug(shared._ERRORS)
+                #         for ticker in shared._ERRORS:
+                #             err = shared._ERRORS.get(ticker)
+                #             if "YFRateLimitError" in err:
+                #                 if attempt <= 2:
+                #                     default_logger().debug(f"YFRateLimitError Hit! Going for attempt : {attempt+1}")
+                                    # sleep(attempt*2) # Exponential backoff
+                                    # return self.fetchStockData(stockCode=stockCode,period=period,duration=duration,printCounter=printCounter, start=start,end=end,screenResultsCounter=screenResultsCounter,screenCounter=screenCounter,totalSymbols=totalSymbols,exchangeSuffix=exchangeSuffix,attempt=attempt+1)
             except (KeyError,YFPricesMissingError) as e: # pragma: no cover
                 default_logger().debug(e,exc_info=True)
+                pass
+            except YFRateLimitError as e:
+                default_logger().debug(f"YFRateLimitError Hit! \n{e}")
+                # if attempt <= 2:
+                #     default_logger().debug(f"YFRateLimitError Hit! Going for attempt : {attempt+1}")
+                    # sleep(attempt*2) # Exponential backoff
+                    # return self.fetchStockData(stockCode=stockCode,period=period,duration=duration,printCounter=printCounter, start=start,end=end,screenResultsCounter=screenResultsCounter,screenCounter=screenCounter,totalSymbols=totalSymbols,exchangeSuffix=exchangeSuffix,attempt=attempt+1)
                 pass
             except (YFInvalidPeriodError,Exception) as e: # pragma: no cover
                 default_logger().debug(e,exc_info=True)                    
@@ -176,18 +241,21 @@ class screenerStockDataFetcher(nseStockDataFetcher):
             except ZeroDivisionError as e: # pragma: no cover
                 default_logger().debug(e, exc_info=True)
                 pass
+            except KeyboardInterrupt: # pragma: no cover
+                raise KeyboardInterrupt
             except Exception as e:  # pragma: no cover
                 default_logger().debug(e, exc_info=True)
                 pass
-            if len(data) == 0:
-                OutputControls().printOutput(
-                    colorText.FAIL
-                    + "=> Failed to fetch!"
-                    + colorText.END,
-                    end="\r",
-                    flush=True,
-                )
-                raise StockDataEmptyException
+        if (data is None or len(data) == 0) and printCounter:
+            OutputControls().printOutput(
+                colorText.FAIL
+                + "=> Failed to fetch!"
+                + colorText.END,
+                end="\r",
+                flush=True,
+            )
+            raise StockDataEmptyException
+        if printCounter:
             OutputControls().printOutput(
                 colorText.GREEN + "=> Done!" + colorText.END,
                 end="\r",

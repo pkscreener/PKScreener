@@ -447,7 +447,7 @@ class StockScreener:
                         except: # pragma: no cover
                             pass
                         if "Cup and Handle" in filterPattern:
-                            isCandlePattern,_ = screener.find_cup_and_handle(fullData,saveDictionary,screeningDictionary)
+                            isCandlePattern,_ = screener.find_cup_and_handle(fullData,saveDictionary,screeningDictionary,int(maLength))
                         else:
                             isCandlePattern = candlePatterns.findPattern(
                                 processedData, screeningDictionary, saveDictionary,filterPattern)
@@ -488,6 +488,8 @@ class StockScreener:
                         isCandlePattern = candlePatterns.findPattern(
                             processedData, screeningDictionary, saveDictionary
                         )
+                except KeyboardInterrupt: # pragma: no cover
+                    raise KeyboardInterrupt
                 except Exception as e:  # pragma: no cover
                     hostRef.default_logger.debug(e, exc_info=True)
                     screeningDictionary["Pattern"] = ""
@@ -632,7 +634,7 @@ class StockScreener:
                         or (executeOption == 9 and hasMinVolumeRatio)
                         or (executeOption == 10 and isPriceRisingByAtLeast2Percent)
                         or (executeOption == 11 and isShortTermBullish)
-                        or (executeOption in [12,13,14,15,16,17,18,19,20,23,24,25,27,28,30,31,32,33,34,35,36,37,38,39] and isValidityCheckMet)
+                        or (executeOption in [12,13,14,15,16,17,18,19,20,23,24,25,27,28,30,31,32,33,34,35,36,37,38,39,42,43] and isValidityCheckMet)
                         or (executeOption == 21 and (mfiStake > 0 and reversalOption in [3,5]))
                         or (executeOption == 21 and (mfiStake < 0 and reversalOption in [6,7]))
                         or (executeOption == 21 and (fairValueDiff > 0 and reversalOption in [8]))
@@ -745,12 +747,16 @@ class StockScreener:
                     data = pd.DataFrame(data["data"], columns=data["columns"], index=data["index"])
                     screener.getMutualFundStatus(stock, hostData=data, force=True, exchangeName=exchangeName)
                     hostRef.objectDictionaryPrimary[stock] = data.to_dict("split")
+            except KeyboardInterrupt: # pragma: no cover
+                raise KeyboardInterrupt
             except Exception as ex:
                 # hostRef.default_logger.debug(f"MFIStatus: {stock}:\n{ex}", exc_info=True)
                 pass
             try:
                 screener.getFairValue(stock,hostData=data, force=True,exchangeName=exchangeName)
                 hostRef.objectDictionaryPrimary[stock] = data.to_dict("split")
+            except KeyboardInterrupt: # pragma: no cover
+                raise KeyboardInterrupt
             except Exception as ex:
                 # hostRef.default_logger.debug(f"FairValue: {stock}:\n{ex}", exc_info=True)
                 pass
@@ -786,7 +792,7 @@ class StockScreener:
 
     def performValidityCheckForExecuteOptions(self,executeOption,screener,fullData,screeningDictionary,saveDictionary,processedData,configManager,subMenuOption=3,intraday_data=None):
         isValid = True
-        if executeOption not in [11,12,13,14,15,16,17,18,19,20,23,24,25,27,28,30,31,32,33,34,35,36,37,38,39]:
+        if executeOption not in [11,12,13,14,15,16,17,18,19,20,23,24,25,27,28,30,31,32,33,34,35,36,37,38,39,42,43]:
             return True
         if executeOption == 11:
             isValid = screener.validateShortTermBullish(
@@ -829,7 +835,7 @@ class StockScreener:
         elif executeOption == 30: # findBuySellSignalsFromATRTrailing # findATRTrailingStops
             isValid = screener.findATRTrailingStops(fullData,sensitivity=configManager.atrTrailingStopSensitivity, atr_period=configManager.atrTrailingStopPeriod,ema_period=configManager.atrTrailingStopEMAPeriod,buySellAll=subMenuOption,saveDict=saveDictionary,screenDict=screeningDictionary)
         elif executeOption == 31: # findBuySellSignalsFromATRTrailing # findATRTrailingStops
-            isValid = screener.findHighMomentum(processedData)
+            isValid = screener.findHighMomentum(processedData,strict=(subMenuOption==1))
         elif executeOption == 32: # findIntradayOpenSetup
             isValid = screener.findIntradayOpenSetup(processedData,intraday_data,saveDictionary,screeningDictionary,buySellAll=subMenuOption)
         elif executeOption == 33:
@@ -851,7 +857,10 @@ class StockScreener:
             isValid = screener.findIntradayShortSellWithPSARVolumeSMA(fullData,intraday_data)
         elif executeOption == 39: # findIPOLifetimeFirstDayBullishBreak
             isValid = screener.findIPOLifetimeFirstDayBullishBreak(fullData)
-
+        elif executeOption == 42:
+            isValid = screener.findSuperGainersLosers(fullData,subMenuOption)
+        elif executeOption == 43:
+            isValid = screener.findSuperGainersLosers(fullData,subMenuOption,gainer=False)
         return isValid        
                     
     def performBasicVolumeChecks(self, executeOption, volumeRatio, screeningDictionary, saveDictionary, processedData, configManager, screener):
@@ -972,19 +981,23 @@ class StockScreener:
                 data.set_index("Date", inplace=True)
                 data.drop("index",axis=1,inplace=True)
             else:
-                data = fetcher.fetchStockData(
-                        stock,
-                        period,
-                        configManager.duration if duration is None else duration,
-                        hostRef.proxyServer,
-                        hostRef.processingResultsCounter,
-                        hostRef.processingCounter,
-                        totalSymbols,
-                        start=start,
-                        end=start,
-                        exchangeSuffix=".NS" if exchangeName == "INDIA" else "",
-                        printCounter=printCounter
-                    )
+                # The following code tries to re-fetch the missing stock data
+                # It has been commented because it's less likely to fetch the data again
+                # within seconds of the first try when we must have tried to fetch data
+                # in batches.
+                # data = fetcher.fetchStockData(
+                #         stock,
+                #         period,
+                #         configManager.duration if duration is None else duration,
+                #         hostRef.proxyServer,
+                #         hostRef.processingResultsCounter,
+                #         hostRef.processingCounter,
+                #         totalSymbols,
+                #         start=start,
+                #         end=start,
+                #         exchangeSuffix=".NS" if exchangeName == "INDIA" else "",
+                #         printCounter=printCounter
+                #     )
                 if hostData is not None and data is not None:
                     # During the market trading hours, we don't want to go for MFI/FV value fetching
                     # So let's copy the old saved ones.

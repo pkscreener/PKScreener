@@ -39,22 +39,26 @@ if Imports["talib"]:
     try:
         import talib
     except Exception as e: # pragma: no cover
+        issueLink = "https://github.com/pkjmesra/PKScreener"
+        issueLink = f"\x1b[97m\x1b]8;;{issueLink}\x1b\\{issueLink}\x1b]8;;\x1b\\\x1b[0m"
+        taLink = "https://github.com/ta-lib/ta-lib-python"
+        taLink = f"\x1b[97m\x1b]8;;{taLink}\x1b\\{taLink}\x1b]8;;\x1b\\\x1b[0m"
         OutputControls().printOutput(
                 colorText.FAIL
-                + "  [+] 'TA-Lib' library is not installed. For best results, please install 'TA-Lib'! You may wish to follow instructions from\n  [+] https://github.com/pkjmesra/PKScreener/"
+                + f"  [+] 'TA-Lib' library is not installed. For best results, please install 'TA-Lib'! You may wish to follow instructions from\n  [+] {issueLink}"
                 + colorText.END
             )
         try:
             import pandas_ta as talib
             OutputControls().printOutput(
                 colorText.FAIL
-                + "  [+] TA-Lib is not installed. Falling back on pandas_ta.\n  [+] For full coverage(candle patterns), you may wish to follow instructions from\n  [+] https://github.com/ta-lib/ta-lib-python"
+                + f"  [+] TA-Lib is not installed. Falling back on pandas_ta.\n  [+] For full coverage(candle patterns), you may wish to follow instructions from\n  [+] {taLink}"
                 + colorText.END
             )
         except: # pragma: no cover
             OutputControls().printOutput(
                 colorText.FAIL
-                + "  [+] pandas_ta is not installed. Falling back on pandas_ta also failed.\n  [+] For full coverage(candle patterns), you may wish to follow instructions from\n  [+] https://github.com/ta-lib/ta-lib-python"
+                + f"  [+] pandas_ta is not installed. Falling back on pandas_ta also failed.\n  [+] For full coverage(candle patterns), you may wish to follow instructions from\n  [+] {taLink}"
                 + colorText.END
             )
             pass
@@ -74,6 +78,18 @@ else:
 
 
 class pktalib:
+
+    @classmethod
+    def align_series(*series_list, fill_value=0):
+        """
+        Aligns multiple Pandas Series to have the same index and returns them.
+        Missing values are filled with the given fill_value.
+        """
+        if all(isinstance(s, pd.Series) for s in series_list):
+            aligned_series = pd.concat(series_list, axis=1).fillna(fill_value)
+            return [aligned_series[col] for col in aligned_series.columns]
+        return series_list
+
     @classmethod
     def AVWAP(self,df,anchored_date:pd.Timestamp):
         # anchored_date = pd.to_datetime('2022-01-30')
@@ -117,6 +133,8 @@ class pktalib:
     def VWAP(self, high, low, close, volume,anchor=None):
         try:
             import pandas_ta as talib
+            # Aligning the series
+            # high,low,close = pktalib.align_series(high, low, close, fill_value=0)
             return talib.vwap(high, low, close, volume,anchor=anchor)
         except Exception:  # pragma: no cover
             # default_logger().debug(e, exc_info=True)
@@ -127,6 +145,8 @@ class pktalib:
         try:
             low_kel = None
             upp_kel = None
+            # Aligning the series
+            # high,low,close = pktalib.align_series(high, low, close, fill_value=0)
             tr = pktalib.TRUERANGE(high, low, close)
             atr = pktalib.ATR(high, low, close, timeperiod=timeperiod)
             sma = pktalib.SMA(close=close, timeperiod=timeperiod)
@@ -156,6 +176,8 @@ class pktalib:
     @classmethod
     def ATR(self, high, low, close, timeperiod=14):
         try:
+            # Aligning the series
+            # high,low,close = pktalib.align_series(high, low, close, fill_value=0)
             return talib.atr(high, low, close, length= timeperiod)
         except Exception:  # pragma: no cover
             # default_logger().debug(e, exc_info=True)
@@ -164,6 +186,8 @@ class pktalib:
     @classmethod
     def TRUERANGE(self, high, low, close):
         try:
+            # Aligning the series
+            # high,low,close = pktalib.align_series(high, low, close, fill_value=0)
             return talib.true_range(high, low, close)
         except Exception:  # pragma: no cover
             # default_logger().debug(e, exc_info=True)
@@ -198,6 +222,8 @@ class pktalib:
     @classmethod
     def MFI(self, high, low, close,volume, timeperiod=14):
         try:
+            # Aligning the series
+            # high,low,close,volume = pktalib.align_series(high, low, close,volume, fill_value=0)
             return talib.mfi(high, low, close,volume, length= timeperiod)
         except Exception:  # pragma: no cover
             # default_logger().debug(e, exc_info=True)
@@ -214,6 +240,8 @@ class pktalib:
     @classmethod
     def CCI(self, high, low, close, timeperiod):
         try:
+            # Aligning the series
+            # high,low,close = pktalib.align_series(high, low, close, fill_value=0)
             return talib.cci(high, low, close, timeperiod)
         except Exception:  # pragma: no cover
             # default_logger().debug(e, exc_info=True)
@@ -222,6 +250,8 @@ class pktalib:
     @classmethod
     def Aroon(self, high, low, timeperiod):
         try:
+            # Aligning the series
+            # high,low = pktalib.align_series(high, low, fill_value=0)
             return talib.aroon(high, low, timeperiod)
         except Exception:  # pragma: no cover
             # default_logger().debug(e, exc_info=True)
@@ -236,6 +266,8 @@ class pktalib:
 
     @classmethod
     def STOCHF(self, high, low, close, fastk_period, fastd_period, fastd_matype):
+        # Aligning the series
+        # high,low,close = pktalib.align_series(high, low, close, fill_value=0)
         fastk, fastd = talib.STOCHF(high,
                             low,
                             close,
@@ -276,6 +308,8 @@ class pktalib:
     
     @classmethod
     def RVM(self, high, low, close, timeperiod):
+        # Aligning the series
+        # high,low,close = pktalib.align_series(high, low, close, fill_value=0)
         # Relative Volatality Measure
         #Short-term ATRs
         short1    = pktalib.ATR(high, low, close,3)
@@ -332,6 +366,8 @@ class pktalib:
 
     @classmethod
     def psar(self, high, low, acceleration=0.02, maximum=0.2):
+        # Aligning the series
+        # high,low = pktalib.align_series(high, low, fill_value=0)
         psar = talib.SAR(high, low, acceleration=acceleration, maximum=maximum)
         return psar
 
@@ -445,6 +481,8 @@ class pktalib:
     @classmethod
     def get_ppsr_df(self, high, low, close,pivotPoint=None):
         try:
+            # Aligning the series
+            # high,low,close = pktalib.align_series(high, low, close, fill_value=0)
             PSR = None
             if pivotPoint is None:
                 return PSR
@@ -476,6 +514,8 @@ class pktalib:
     @classmethod
     def CDLMORNINGSTAR(self, open, high, low, close):
         try:
+            # Aligning the series
+            # open,high,low,close = pktalib.align_series(open,high, low, close, fill_value=0)
             return talib.cdl_pattern(open, high, low, close, "morningstar")
         except Exception:  # pragma: no cover
             # default_logger().debug(e, exc_info=True)
@@ -495,6 +535,8 @@ class pktalib:
     @classmethod
     def CDLMORNINGDOJISTAR(self, open, high, low, close):
         try:
+            # Aligning the series
+            # open,high,low,close = pktalib.align_series(open,high, low, close, fill_value=0)
             return talib.cdl_pattern(open, high, low, close, "morningdojistar")
         except Exception:  # pragma: no cover
             # default_logger().debug(e, exc_info=True)
@@ -503,6 +545,8 @@ class pktalib:
     @classmethod
     def CDLEVENINGSTAR(self, open, high, low, close):
         try:
+            # Aligning the series
+            # open,high,low,close = pktalib.align_series(open,high, low, close, fill_value=0)
             return talib.cdl_pattern(open, high, low, close, "eveningstar")
         except Exception:  # pragma: no cover
             # default_logger().debug(e, exc_info=True)
@@ -511,6 +555,8 @@ class pktalib:
     @classmethod
     def CDLEVENINGDOJISTAR(self, open, high, low, close):
         try:
+            # Aligning the series
+            # open,high,low,close = pktalib.align_series(open,high, low, close, fill_value=0)
             return talib.cdl_pattern(open, high, low, close, "eveningdojistar")
         except Exception:  # pragma: no cover
             # default_logger().debug(e, exc_info=True)
@@ -519,6 +565,8 @@ class pktalib:
     @classmethod
     def CDLLADDERBOTTOM(self, open, high, low, close):
         try:
+            # Aligning the series
+            # open,high,low,close = pktalib.align_series(open,high, low, close, fill_value=0)
             return talib.cdl_pattern(open, high, low, close, "ladderbottom")
         except Exception:  # pragma: no cover
             # default_logger().debug(e, exc_info=True)
@@ -527,6 +575,8 @@ class pktalib:
     @classmethod
     def CDL3LINESTRIKE(self, open, high, low, close):
         try:
+            # Aligning the series
+            # open,high,low,close = pktalib.align_series(open,high, low, close, fill_value=0)
             return talib.cdl_pattern(open, high, low, close, "3linestrike")
         except Exception:  # pragma: no cover
             # default_logger().debug(e, exc_info=True)
@@ -535,6 +585,8 @@ class pktalib:
     @classmethod
     def CDL3BLACKCROWS(self, open, high, low, close):
         try:
+            # Aligning the series
+            # open,high,low,close = pktalib.align_series(open,high, low, close, fill_value=0)
             return talib.cdl_pattern(open, high, low, close, "3blackcrows")
         except Exception:  # pragma: no cover
             # default_logger().debug(e, exc_info=True)
@@ -543,6 +595,8 @@ class pktalib:
     @classmethod
     def CDL3INSIDE(self, open, high, low, close):
         try:
+            # Aligning the series
+            # open,high,low,close = pktalib.align_series(open,high, low, close, fill_value=0)
             return talib.cdl_pattern(open, high, low, close, "3inside")
         except Exception:  # pragma: no cover
             # default_logger().debug(e, exc_info=True)
@@ -551,6 +605,8 @@ class pktalib:
     @classmethod
     def CDL3OUTSIDE(self, open, high, low, close):
         try:
+            # Aligning the series
+            # open,high,low,close = pktalib.align_series(open,high, low, close, fill_value=0)
             return talib.cdl_pattern(open, high, low, close, "3outside")
         except Exception:  # pragma: no cover
             # default_logger().debug(e, exc_info=True)
@@ -559,6 +615,8 @@ class pktalib:
     @classmethod
     def CDL3WHITESOLDIERS(self, open, high, low, close):
         try:
+            # Aligning the series
+            # open,high,low,close = pktalib.align_series(open,high, low, close, fill_value=0)
             return talib.cdl_pattern(open, high, low, close, "3whitesoldiers")
         except Exception:  # pragma: no cover
             # default_logger().debug(e, exc_info=True)
@@ -567,6 +625,8 @@ class pktalib:
     @classmethod
     def CDLHARAMI(self, open, high, low, close):
         try:
+            # Aligning the series
+            # open,high,low,close = pktalib.align_series(open,high, low, close, fill_value=0)
             return talib.cdl_pattern(open, high, low, close, "harami")
         except Exception:  # pragma: no cover
             # default_logger().debug(e, exc_info=True)
@@ -575,6 +635,8 @@ class pktalib:
     @classmethod
     def CDLHARAMICROSS(self, open, high, low, close):
         try:
+            # Aligning the series
+            # open,high,low,close = pktalib.align_series(open,high, low, close, fill_value=0)
             return talib.cdl_pattern(open, high, low, close, "haramicross")
         except Exception:  # pragma: no cover
             # default_logger().debug(e, exc_info=True)
@@ -583,6 +645,8 @@ class pktalib:
     @classmethod
     def CDLMARUBOZU(self, open, high, low, close):
         try:
+            # Aligning the series
+            # open,high,low,close = pktalib.align_series(open,high, low, close, fill_value=0)
             return talib.cdl_pattern(open, high, low, close, "marubozu")
         except Exception:  # pragma: no cover
             # default_logger().debug(e, exc_info=True)
@@ -591,6 +655,8 @@ class pktalib:
     @classmethod
     def CDLHANGINGMAN(self, open, high, low, close):
         try:
+            # Aligning the series
+            # open,high,low,close = pktalib.align_series(open,high, low, close, fill_value=0)
             return talib.cdl_pattern(open, high, low, close, "hangingman")
         except Exception:  # pragma: no cover
             # default_logger().debug(e, exc_info=True)
@@ -599,6 +665,8 @@ class pktalib:
     @classmethod
     def CDLHAMMER(self, open, high, low, close):
         try:
+            # Aligning the series
+            # open,high,low,close = pktalib.align_series(open,high, low, close, fill_value=0)
             return talib.cdl_pattern(open, high, low, close, "hammer")
         except Exception:  # pragma: no cover
             # default_logger().debug(e, exc_info=True)
@@ -607,6 +675,8 @@ class pktalib:
     @classmethod
     def CDLINVERTEDHAMMER(self, open, high, low, close):
         try:
+            # Aligning the series
+            # open,high,low,close = pktalib.align_series(open,high, low, close, fill_value=0)
             return talib.cdl_pattern(open, high, low, close, "invertedhammer")
         except Exception:  # pragma: no cover
             # default_logger().debug(e, exc_info=True)
@@ -615,6 +685,8 @@ class pktalib:
     @classmethod
     def CDLSHOOTINGSTAR(self, open, high, low, close):
         try:
+            # Aligning the series
+            # open,high,low,close = pktalib.align_series(open,high, low, close, fill_value=0)
             return talib.cdl_pattern(open, high, low, close, "shootingstar")
         except Exception:  # pragma: no cover
             # default_logger().debug(e, exc_info=True)
@@ -623,6 +695,8 @@ class pktalib:
     @classmethod
     def CDLDRAGONFLYDOJI(self, open, high, low, close):
         try:
+            # Aligning the series
+            # open,high,low,close = pktalib.align_series(open,high, low, close, fill_value=0)
             return talib.cdl_pattern(open, high, low, close, "dragonflydoji")
         except Exception:  # pragma: no cover
             # default_logger().debug(e, exc_info=True)
@@ -631,6 +705,8 @@ class pktalib:
     @classmethod
     def CDLGRAVESTONEDOJI(self, open, high, low, close):
         try:
+            # Aligning the series
+            # open,high,low,close = pktalib.align_series(open,high, low, close, fill_value=0)
             return talib.cdl_pattern(open, high, low, close, "gravestonedoji")
         except Exception:  # pragma: no cover
             # default_logger().debug(e, exc_info=True)
@@ -639,6 +715,8 @@ class pktalib:
     @classmethod
     def CDLDOJI(self, open, high, low, close):
         try:
+            # Aligning the series
+            # open,high,low,close = pktalib.align_series(open,high, low, close, fill_value=0)
             return talib.cdl_pattern(open, high, low, close, "doji")
         except Exception:  # pragma: no cover
             # default_logger().debug(e, exc_info=True)
@@ -647,6 +725,8 @@ class pktalib:
     @classmethod
     def CDLENGULFING(self, open, high, low, close):
         try:
+            # Aligning the series
+            # open,high,low,close = pktalib.align_series(open,high, low, close, fill_value=0)
             return talib.cdl_pattern(open, high, low, close, "engulfing")
         except Exception:  # pragma: no cover
             # default_logger().debug(e, exc_info=True)
